@@ -18,15 +18,7 @@ const googleAuth = new google.auth.GoogleAuth({
   scopes: ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 });
 
-const PORT = process.env.PORT || 3000;
 
-app.get("/health", (req, res) => {
-  res.json({ ok: true });
-});
-
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Open http://localhost:${PORT}`);
-});
 
 if (!process.env.TBA_AUTH_KEY) {
   throw new Error("Missing TBA_AUTH_KEY in .env");
@@ -249,4 +241,12 @@ app.get("/api/statbotics/team-event/:team/:event", async (req, res) => {
   }
 });
 app.use(express.static("public"));
-app.listen(3000, () => console.log("Open http://localhost:3000"));
+const PORT = process.env.PORT || 3000;
+
+app.get("/health", (req, res) => {
+  res.json({ ok: true });
+});
+
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Open http://localhost:${PORT}`);
+});
