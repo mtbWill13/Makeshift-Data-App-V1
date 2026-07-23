@@ -1,0 +1,1623 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>MakeShift Scouting Data Hub</title>
+
+  <style>
+    :root {
+      --red: #FF3C32;
+      --orange: #F2B305;
+      --yellow: #FFE11C;
+      --green: #4CDB54;
+      --cyan: #34AADC;
+
+      --black: #000000;
+      --white: #FFFFFF;
+      --light-gray: #F4F4F4;
+      --mid-gray: #D9D9D9;
+      --text-gray: #555555;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      background: var(--light-gray);
+      color: var(--black);
+    }
+
+    /* =========================
+       HEADER
+    ========================= */
+
+    .top-bar {
+      height: 10px;
+      background: linear-gradient(
+        to right,
+        var(--red) 0%,
+        var(--red) 20%,
+        var(--orange) 20%,
+        var(--orange) 40%,
+        var(--yellow) 40%,
+        var(--yellow) 60%,
+        var(--green) 60%,
+        var(--green) 80%,
+        var(--cyan) 80%,
+        var(--cyan) 100%
+      );
+    }
+
+    header {
+      background: var(--black);
+      color: var(--white);
+      padding: 42px 7vw 48px;
+    }
+
+    .header-content {
+      max-width: 1300px;
+      margin: auto;
+    }
+
+    .eyebrow {
+      font-size: 0.85rem;
+      font-weight: bold;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--cyan);
+      margin-bottom: 12px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(2.5rem, 6vw, 5.5rem);
+      line-height: 0.95;
+      letter-spacing: -0.06em;
+      max-width: 850px;
+    }
+
+    .header-description {
+      margin-top: 22px;
+      color: #cfcfcf;
+      font-size: 1.05rem;
+      max-width: 600px;
+      line-height: 1.6;
+    }
+
+    /* =========================
+       MAIN
+    ========================= */
+
+    main {
+      max-width: 1300px;
+      margin: 0 auto;
+      padding: 38px 7vw 80px;
+    }
+
+    /* =========================
+       CONTROLS
+    ========================= */
+
+    .controls {
+      background: var(--white);
+      border: 2px solid var(--black);
+      padding: 24px;
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      gap: 18px;
+      align-items: end;
+      box-shadow: 8px 8px 0 var(--black);
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    label {
+      font-size: 0.78rem;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    select,
+    input {
+      width: 100%;
+      height: 48px;
+      border: 2px solid var(--black);
+      background: var(--white);
+      padding: 0 14px;
+      font-size: 1rem;
+      font-family: inherit;
+      outline: none;
+    }
+
+    select:focus,
+    input:focus {
+      border-color: var(--cyan);
+      box-shadow: 4px 4px 0 var(--cyan);
+    }
+
+    button {
+      height: 48px;
+      border: 2px solid var(--black);
+      background: var(--red);
+      color: var(--black);
+      padding: 0 28px;
+      font-weight: bold;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: 0.15s ease;
+    }
+
+    button:hover {
+      transform: translate(-3px, -3px);
+      box-shadow: 5px 5px 0 var(--black);
+    }
+
+    /* =========================
+       RESULTS
+    ========================= */
+
+    #results {
+      margin-top: 52px;
+    }
+
+    .loading {
+      font-size: 1.2rem;
+      font-weight: bold;
+    }
+
+    .team-heading {
+      display: flex;
+      align-items: baseline;
+      gap: 18px;
+      flex-wrap: wrap;
+      margin-bottom: 26px;
+    }
+
+    .team-heading h2 {
+      font-size: clamp(2rem, 4vw, 3.5rem);
+      margin: 0;
+      letter-spacing: -0.05em;
+    }
+
+    .team-heading span {
+      color: var(--text-gray);
+      font-weight: bold;
+    }
+
+    /* =========================
+       TOP STAT CARDS
+    ========================= */
+
+    .top-stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 18px;
+      margin-bottom: 34px;
+    }
+
+    .stat-card {
+      min-height: 190px;
+      padding: 26px;
+      border: 2px solid var(--black);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      box-shadow: 7px 7px 0 var(--black);
+    }
+
+    .stat-card:nth-child(1) {
+      background: var(--cyan);
+    }
+
+    .stat-card:nth-child(2) {
+      background: var(--yellow);
+    }
+
+    .stat-card:nth-child(3) {
+      background: var(--green);
+    }
+
+    .stat-label {
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      font-weight: bold;
+      letter-spacing: 0.1em;
+    }
+
+    .stat-value {
+      font-size: clamp(2.7rem, 5vw, 4.5rem);
+      font-weight: 900;
+      letter-spacing: -0.07em;
+      line-height: 1;
+    }
+
+    .stat-description {
+      font-size: 0.85rem;
+      font-weight: bold;
+      opacity: 0.75;
+    }
+
+    /* =========================
+       SECONDARY DATA
+    ========================= */
+
+    .section-title {
+      margin: 48px 0 16px;
+      font-size: 1.4rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-bottom: 3px solid var(--black);
+      padding-bottom: 10px;
+    }
+
+    .data-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+    }
+
+    .data-item {
+      background: var(--white);
+      border: 2px solid var(--black);
+      padding: 18px;
+    }
+
+    .data-item-label {
+      color: var(--text-gray);
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      font-weight: bold;
+      letter-spacing: 0.06em;
+      margin-bottom: 8px;
+    }
+
+    .data-item-value {
+      font-size: 1.6rem;
+      font-weight: 900;
+    }
+
+    /* =========================
+       SCOUTING MATCH CARDS
+    ========================= */
+
+    .scouting-list {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 18px;
+    }
+
+    .scouting-card {
+      background: var(--white);
+      border: 2px solid var(--black);
+      padding: 22px;
+    }
+
+    .scouting-card-header {
+      font-size: 1.1rem;
+      font-weight: bold;
+      margin-bottom: 16px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid var(--black);
+    }
+
+    .scouting-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 15px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--mid-gray);
+      font-size: 0.9rem;
+    }
+
+    .scouting-row:last-child {
+      border-bottom: none;
+    }
+
+    .scouting-row strong {
+      text-align: right;
+    }
+
+    .empty-state {
+      background: var(--white);
+      border: 2px solid var(--black);
+      padding: 30px;
+      text-align: center;
+      font-weight: bold;
+    }
+
+    /* =========================
+       RESPONSIVE
+    ========================= */
+
+    @media (max-width: 900px) {
+      .controls {
+        grid-template-columns: 1fr;
+      }
+
+      .top-stats {
+        grid-template-columns: 1fr;
+      }
+
+      .data-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .scouting-list {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 550px) {
+      header {
+        padding: 32px 6vw 38px;
+      }
+
+      main {
+        padding: 28px 6vw 60px;
+      }
+
+      .data-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .controls {
+        padding: 18px;
+      }
+
+      .stat-card {
+        min-height: 160px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="top-bar"></div>
+
+  <header>
+    <div class="header-content">
+      <div class="eyebrow">MakeShift Robotics • FRC 4039 • Powered  By <a href="https://www.thebluealliance.com/">thebluealliance</a> & <a href="https://www.statbotics.io/">Statbotics</a></div>
+
+      <h1>Scouting<br>Data Hub</h1>
+
+      <p class="header-description">
+        Competition data, scouting averages, and performance metrics
+        for making alliance decisions.
+      </p>
+    </div>
+  </header>
+
+  <main>
+
+    <section class="controls">
+
+      <div class="control-group">
+        <label for="EventKeys">Choose an Event</label>
+
+        <select name="EventKeys" id="EventKeys">
+          <option value="2026onham">McMaster</option>
+          <option value="2026onosh">Durham College</option>
+          <option value="2026onwat">Waterloo</option>
+          <option value="2026oncmp2" selected>Provincials Technology Division</option>
+          <option value="2026oncmp1">Provincials Science Division</option>
+          <option value="2026ontor">Humber</option>
+          <option value="2026onwin">Windsor</option>
+
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label for="teamInput">Enter a Team Number</label>
+
+        <input
+          id="teamInput"
+          type="number"
+          placeholder="e.g. 4039"
+        >
+      </div>
+
+      <button id="button">
+        View Team
+      </button>
+
+    </section>
+
+    <div id="results">
+      <div class="loading">Loading…</div>
+    </div>
+
+  </main>
+
+  <script>
+
+    /* =================================
+       DOM ELEMENTS
+    ================================= */
+
+    const eventKeySelect =
+      document.getElementById("EventKeys");
+
+    const teamNumberInput =
+      document.getElementById("teamInput");
+
+    const results =
+      document.getElementById("results");
+
+    const button =
+      document.getElementById("button");
+
+
+    /* =================================
+       GLOBAL DATA
+    ================================= */
+
+    let eventKey = eventKeySelect.value;
+
+    const teamData = {};
+
+    let scoutingData = [];
+
+    let pitScoutingData = [];
+
+
+    /* =================================
+       DATA HELPERS
+    ================================= */
+
+    function resetTeamData() {
+      for (const teamKey of Object.keys(teamData)) {
+        delete teamData[teamKey];
+      }
+    }
+
+
+    function getTeam(teamKey) {
+
+      if (!teamData[teamKey]) {
+
+        teamData[teamKey] = {
+          teamKey,
+          opr: null,
+          dpr: null,
+          ccwm: null,
+          rank: null,
+          record: null,
+          matches: []
+        };
+
+      }
+
+      return teamData[teamKey];
+
+    }
+
+
+    function averageColumn(rows, columnName) {
+
+      const values = rows
+
+        .filter(row =>
+          String(row["No Show"])
+            .toUpperCase() !== "TRUE"
+        )
+
+        .map(row =>
+          String(row[columnName] ?? "").trim()
+        )
+
+        .filter(value => value !== "")
+
+        .map(Number)
+
+        .filter(Number.isFinite);
+
+
+      if (values.length === 0) {
+        return null;
+      }
+
+
+      return values.reduce(
+        (sum, value) => sum + value,
+        0
+      ) / values.length;
+
+    }
+
+
+    function truePercentage(rows, columnName) {
+
+      const answers = rows
+
+        .map(row =>
+          String(row[columnName] ?? "")
+            .trim()
+            .toUpperCase()
+        )
+
+        .filter(value =>
+          value === "TRUE" ||
+          value === "FALSE"
+        );
+
+
+      if (answers.length === 0) {
+        return null;
+      }
+
+
+      const trueCount =
+        answers.filter(value => value === "TRUE").length;
+
+
+      return (trueCount / answers.length) * 100;
+
+    }
+
+
+    function formatAverage(value) {
+
+      return value === null
+        ? "Not available"
+        : value.toFixed(1);
+
+    }
+
+
+    function consistencyScore(
+      rows,
+      columnName,
+      minScore = 1,
+      maxScore = 5
+    ) {
+
+      const scores = rows
+
+        .filter(row =>
+          String(row["No Show"])
+            .toUpperCase() !== "TRUE"
+        )
+
+        .map(row =>
+          Number(row[columnName])
+        )
+
+        .filter(Number.isFinite);
+
+
+      if (scores.length < 2) {
+        return null;
+      }
+
+
+      const average =
+        scores.reduce(
+          (sum, score) => sum + score,
+          0
+        ) / scores.length;
+
+
+      const variance =
+        scores.reduce(
+          (sum, score) =>
+            sum + (score - average) ** 2,
+          0
+        ) / scores.length;
+
+
+      const standardDeviation =
+        Math.sqrt(variance);
+
+
+      const maximumDeviation =
+        (maxScore - minScore) / 2;
+
+
+      return Math.max(
+        0,
+        Math.min(
+          100,
+          100 *
+          (1 - standardDeviation / maximumDeviation)
+        )
+      );
+
+    }
+
+    function defenceMatchesPlayed(rows, columnName) {
+
+      const scores = rows
+
+        .filter(row =>
+          String(row["No Show"])
+            .toUpperCase() !== "TRUE"
+        )
+
+        .map(row =>
+          Number(row[columnName])
+        )
+
+        .filter(Number.isFinite);
+
+
+        return scores.length;
+      
+
+    }
+
+
+    /* =================================
+       LOAD SCOUTING DATA
+    ================================= */
+
+    async function loadScoutingData() {
+  const url = `/api/scouting/${eventKey}`;
+  const response = await fetch(url);
+  const text = await response.text();
+
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(
+      `${url} returned HTML instead of JSON (HTTP ${response.status}). ` +
+      "Open the site at http://localhost:3000."
+    );
+  }
+
+  if (!response.ok) {
+    throw new Error(data.error || "Could not load scouting data");
+  }
+
+  if (!Array.isArray(data)) {
+    throw new Error("Scouting API did not return an array");
+  }
+
+  scoutingData = data;
+}
+
+async function loadPitScoutingData() {
+  const url = `/api/pitscouting/${eventKey}`;
+  const response = await fetch(url);
+  const text = await response.text();
+
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(
+      `${url} returned HTML instead of JSON (HTTP ${response.status}). ` +
+      "Open the site at http://localhost:3000."
+    );
+  }
+
+  if (!response.ok) {
+    throw new Error(data.error || "Could not load scouting data");
+  }
+
+  if (!Array.isArray(data)) {
+    throw new Error("Scouting API did not return an array");
+  }
+
+  pitScoutingData = data;
+}
+    /* =================================
+       LOAD EVENT DATA
+    ================================= */
+
+    async function loadEventData() {
+
+      const [
+        matchesResponse,
+        rankingsResponse,
+        oprsResponse
+      ] = await Promise.all([
+
+        fetch(
+          `/api/events/${eventKey}/matches`
+        ),
+
+        fetch(
+          `/api/events/${eventKey}/rankings`
+        ),
+
+        fetch(
+          `/api/events/${eventKey}/oprs`
+        )
+
+      ]);
+
+
+      const matches =
+        await matchesResponse.json();
+
+      const rankings =
+        await rankingsResponse.json();
+
+      const stats =
+        await oprsResponse.json();
+
+
+      /* OPR / DPR / CCWM */
+
+      for (
+        const [teamKey, opr]
+        of Object.entries(stats.oprs || {})
+      ) {
+
+        const team =
+          getTeam(teamKey);
+
+
+        team.opr =
+          opr;
+
+        team.dpr =
+          stats.dprs?.[teamKey];
+
+        team.ccwm =
+          stats.ccwms?.[teamKey];
+
+      }
+
+
+      /* Rankings */
+
+      if (Array.isArray(rankings)) {
+
+        for (const ranking of rankings) {
+
+          const team =
+            getTeam(ranking.team_key);
+
+
+          team.rank =
+            ranking.rank;
+
+          team.record =
+            ranking.record;
+
+        }
+
+      }
+
+
+      /* Matches */
+
+      for (const match of matches) {
+
+        const teamsInMatch = [
+
+          ...match.red.team_keys,
+          ...match.blue.team_keys
+
+        ];
+
+
+        for (const teamKey of teamsInMatch) {
+
+          getTeam(teamKey)
+            .matches
+            .push(match);
+
+        }
+
+      }
+
+    }
+
+
+    /* =================================
+       STATBOTICS
+    ================================= */
+
+    async function loadStatboticsEPA(
+      teamNumber,
+      eventKey
+    ) {
+
+      const response =
+        await fetch(
+          `/api/statbotics/team-event/${teamNumber}/${eventKey}`
+        );
+
+
+      const data =
+        await response.json();
+
+
+      if (!response.ok) {
+
+        throw new Error(
+          data.error ||
+          "Statbotics EPA is unavailable"
+        );
+
+      }
+
+
+      return data;
+
+    }
+
+
+    /* =================================
+       RENDER TEAM
+    ================================= */
+
+    async function printTeamData() {
+
+      const teamNumber =
+        teamNumberInput.value.trim();
+
+
+      if (!teamNumber) {
+
+        results.innerHTML = `
+          <div class="empty-state">
+            Enter a team number, then press "View Team".
+          </div>
+        `;
+
+        return;
+
+      }
+
+
+      const teamKey =
+        `frc${teamNumber}`;
+
+
+      const team =
+        teamData[teamKey];
+
+
+      const scoutingRows =
+        scoutingData.filter(row =>
+          String(row["Team Number"] ?? "").trim()
+          === teamNumber
+        );
+
+      const pitScoutingRows =
+        pitScoutingData.filter(row =>
+          String(row["Team Number of Team Being Scouted"] ?? "").trim()
+          === teamNumber
+        );
+
+
+      if (!team && scoutingRows.length === 0 && pitScoutingRows.length === 0) {
+  results.innerHTML = `
+    <div class="empty-state">
+      No TBA, match-scouting, or pit-scouting data found for team ${teamNumber}.
+    </div>
+  `;
+  return;
+}
+
+      function firstTextValue(rows, columnName) {
+  return rows
+    .map(row => String(row[columnName] ?? "").trim())
+    .find(value => value !== "") ?? null;
+}
+
+      /* Scouting calculations */
+
+      const averageAuto =
+        averageColumn(
+          scoutingRows,
+          "Auto Scoring Points"
+        );
+
+
+      const averageTeleop =
+        averageColumn(
+          scoutingRows,
+          "Teleop Scoring Points"
+        );
+
+
+      const averageTotalPoints =
+
+        averageAuto !== null &&
+        averageTeleop !== null
+
+          ? averageAuto + averageTeleop
+
+          : null;
+
+
+      const averageDefenseScore =
+        averageColumn(
+          scoutingRows,
+          "Defense Rating from 1 (incredible) to 5 (poor)"
+        );
+
+
+      const defenseConsistency =
+        consistencyScore(
+          scoutingRows,
+          "Defense Rating from 1 (incredible) to 5 (poor)"
+        );
+
+
+      const defendedPercentage =
+        truePercentage(
+          scoutingRows,
+          "Robot was defended"
+        );
+
+      const driveType = firstTextValue(
+  pitScoutingRows,
+  "What type of drive base does your robot have?"
+);
+      const coolestThing = firstTextValue(
+        pitScoutingRows, 
+        "What is the coolest thing about your robot or robot cart?"
+      )
+
+      const preferredStart = firstTextValue(
+        pitScoutingRows,
+        "Preferred Starting Location"
+      )
+
+      const matchesPlayingDefence = defenceMatchesPlayed(
+        scoutingRows,
+        "Defense Rating from 1 (incredible) to 5 (poor)"
+      )
+
+      const trench = firstTextValue(
+        pitScoutingRows,
+        "Can your robot drive under the trench?"
+      )
+
+      const bump = firstTextValue(
+        pitScoutingRows,
+        "Can your robot drive over the bump?"
+      )
+
+      const okPlayingDefence = firstTextValue(
+        pitScoutingRows,
+        "If strategy required; would you be open to playing defense?"
+      )
+
+      const programmingLanguage = firstTextValue(
+        pitScoutingRows,
+        "What language is your robot programmed in?"
+      )
+
+
+      /* EPA */
+
+      let statbotics = null;
+
+
+      try {
+
+        statbotics =
+          await loadStatboticsEPA(
+            teamNumber,
+            eventKey
+          );
+
+      } catch (error) {
+
+        console.log(
+          "Statbotics error:",
+          error.message
+        );
+
+      }
+
+
+      const opr =
+        team?.opr ?? null;
+
+
+      const epa =
+        statbotics
+          ?.epa
+          ?.total_points
+          ?.mean ?? null;
+
+
+      /* RENDER */
+
+      results.innerHTML = `
+
+        <div class="team-heading">
+
+          <h2>Team ${teamNumber}</h2>
+
+          <span>
+            ${scoutingRows.length}
+            scouting matches recorded
+          </span>
+
+        </div>
+
+
+        <!-- TOP STATISTICS -->
+
+        <section class="top-stats">
+
+          <div class="stat-card">
+
+            <div class="stat-label">
+              OPR
+            </div>
+
+            <div class="stat-value">
+              ${
+                opr !== null
+                  ? opr.toFixed(2)
+                  : "—"
+              }
+            </div>
+
+            <div class="stat-description">
+              Official event offensive power rating
+            </div>
+
+          </div>
+
+
+          <div class="stat-card">
+
+            <div class="stat-label">
+              Average Points
+            </div>
+
+            <div class="stat-value">
+              ${
+                averageTotalPoints !== null
+                  ? averageTotalPoints.toFixed(1)
+                  : "—"
+              }
+            </div>
+
+            <div class="stat-description">
+              Average auto + teleop points from scouting
+            </div>
+
+          </div>
+
+
+          <div class="stat-card">
+
+            <div class="stat-label">
+              EPA
+            </div>
+
+            <div class="stat-value">
+              ${
+                epa !== null
+                  ? epa.toFixed(1)
+                  : "—"
+              }
+            </div>
+
+            <div class="stat-description">
+              Statbotics event EPA
+            </div>
+
+          </div>
+
+        </section>
+
+
+        <!-- EVENT DATA -->
+
+        <h3 class="section-title">
+          Event Statistics
+        </h3>
+
+
+        <section class="data-grid">
+
+           <div class="data-item">
+
+            <div class="data-item-label">
+              Matches Played
+            </div>
+
+            <div class="data-item-value">
+              ${
+                team?.matches?.length ?? 0
+              }
+            </div>
+
+          </div>
+
+          <div class="data-item">
+
+            <div class="data-item-label">
+              Defensive Power Rating
+            </div>
+
+            <div class="data-item-value">
+              ${
+                team?.dpr !== null &&
+                team?.dpr !== undefined
+                  ? team.dpr.toFixed(2)
+                  : "—"
+              }
+            </div>
+
+          </div>
+
+
+          <div class="data-item">
+
+            <div class="data-item-label">
+              Calculated Contribution to Winning Margin
+            </div>
+
+            <div class="data-item-value">
+              ${
+                team?.ccwm !== null &&
+                team?.ccwm !== undefined
+                  ? team.ccwm.toFixed(2)
+                  : "—"
+              }
+            </div>
+
+          </div>
+
+          <div class="data-item">
+
+            <div class="data-item-label">
+              EPA Uncertainty
+            </div>
+
+            <div class="data-item-value">
+              ${
+                statbotics
+                  ?.epa
+                  ?.total_points
+                  ?.sd !== undefined
+
+                  ? statbotics.epa.total_points.sd
+                      .toFixed(1)
+
+                  : "—"
+              }
+            </div>
+
+          </div>
+
+
+          <div class="data-item">
+
+            <div class="data-item-label">
+              Estimated Auto EPA
+            </div>
+
+            <div class="data-item-value">
+              ${
+                statbotics
+                  ?.epa
+                  ?.breakdown
+                  ?.auto_points !== undefined
+
+                  ? statbotics.epa.breakdown.auto_points
+                      .toFixed(1)
+
+                  : "—"
+              }
+            </div>
+
+          </div>
+
+
+          <div class="data-item">
+
+            <div class="data-item-label">
+              Estimated Teleop EPA
+            </div>
+
+            <div class="data-item-value">
+              ${
+                statbotics
+                  ?.epa
+                  ?.breakdown
+                  ?.teleop_points !== undefined
+
+                  ? statbotics.epa.breakdown.teleop_points
+                      .toFixed(1)
+
+                  : "—"
+              }
+            </div>
+
+          </div>
+
+
+          
+
+
+         
+
+        </section>
+
+
+        <!-- SCOUTING AVERAGES -->
+
+        <h3 class="section-title">
+          Scouting Averages
+        </h3>
+
+        
+
+        <section class="data-grid">
+
+          
+          <div class="data-item">
+
+            <div class="data-item-label">
+              Auto Points
+            </div>
+
+            <div class="data-item-value">
+              ${formatAverage(averageAuto)}
+            </div>
+
+          </div>
+
+
+          <div class="data-item">
+
+            <div class="data-item-label">
+              Teleop Points
+            </div>
+
+            <div class="data-item-value">
+              ${formatAverage(averageTeleop)}
+            </div>
+
+          </div>
+
+
+          <div class="data-item">
+
+            <div class="data-item-label">
+              Defence Score
+            </div>
+
+            <div class="data-item-value">
+              ${formatAverage(averageDefenseScore)}
+            </div>
+
+          </div>
+
+    
+
+
+          <div class="data-item">
+
+            <div class="data-item-label">
+              Defence Consistency
+            </div>
+
+            <div class="data-item-value">
+              ${
+                defenseConsistency === null
+                  ? "Not enough matches"
+                  : `${defenseConsistency.toFixed(0)}%` + " over " + matchesPlayingDefence + " matches" 
+              }
+            </div>
+
+          </div>
+          <div class="data-item">
+
+            <div class="data-item-label">
+              Was Defended
+            </div>
+
+            <div class="data-item-value">
+              ${
+                defendedPercentage === null
+                  ? "—"
+                  : `${defendedPercentage.toFixed(0)}%`
+              }
+            </div>
+
+          </div>
+
+
+          
+
+
+          
+
+        </section>
+
+        <!-- PIT SCOUTING -->
+        <h3 class="section-title">
+          Pit Scouting
+        </h3>
+
+        
+
+        <section class="data-grid">
+          
+        <div class="data-item">
+
+            <div class="data-item-label">
+              Drive Type
+            </div>
+
+            <div class="data-item-value">
+              ${driveType === null ? "—" : driveType}
+            </div>
+
+          </div>
+
+          <div class="data-item">
+
+            <div class="data-item-label">
+              Can drive under trench
+            </div>
+
+            <div class="data-item-value">
+              ${trench === null ? "—" : trench}
+            </div>
+
+          </div>
+
+          <div class="data-item">
+
+            <div class="data-item-label">
+              Can drive over bump
+            </div>
+
+            <div class="data-item-value">
+              ${bump === null ? "—" : bump}
+            </div>
+
+          </div>
+
+          <div class="data-item">
+
+            <div class="data-item-label">
+              preferred start location
+            </div>
+
+            <div class="data-item-value">
+              ${preferredStart === null ? "—" : preferredStart}
+            </div>
+
+          </div>
+
+          <div class="data-item">
+
+            <div class="data-item-label">
+              Would be ok playing defence
+            </div>
+
+            <div class="data-item-value">
+              ${okPlayingDefence === null ? "—" : okPlayingDefence}
+            </div>
+
+          </div>
+
+          <div class="data-item">
+
+            <div class="data-item-label">
+              Programming LAnguage
+            </div>
+
+            <div class="data-item-value">
+              ${programmingLanguage === null ? "—" : programmingLanguage}
+            </div>
+
+          </div>
+
+          <div class="data-item">
+
+            <div class="data-item-label">
+              Coolest thing about robot or robot cart
+            </div>
+
+            <div class="data-item-value">
+              ${coolestThing === null ? "—" : coolestThing}
+            </div>
+
+          </div>
+        
+          </section>
+
+        <!-- INDIVIDUAL SCOUTING -->
+
+        <h3 class="section-title">
+          Individual Scouting Reports
+        </h3>
+
+
+        ${
+          scoutingRows.length
+
+            ? `
+
+              <section class="scouting-list">
+
+                ${scoutingRows.map((row, index) => `
+
+                  <article class="scouting-card">
+
+                    <div class="scouting-card-header">
+                      Match ${index + 1}
+                    </div>
+
+                    ${Object.entries(row)
+                      .map(([column, value]) => `
+
+                        <div class="scouting-row">
+
+                          <span>
+                            ${column}
+                          </span>
+
+                          <strong>
+                            ${value ?? "—"}
+                          </strong>
+
+                        </div>
+
+                      `)
+                      .join("")}
+
+                  </article>
+
+                `).join("")}
+
+              </section>
+
+            `
+
+            : `
+
+              <div class="empty-state">
+                No scouting entries found for this team.
+              </div>
+
+            `
+        }
+
+      `;
+
+    }
+
+
+    /* =================================
+       RELOAD EVERYTHING
+    ================================= */
+
+    async function reloadData() {
+
+      eventKey =
+        eventKeySelect.value;
+
+
+      resetTeamData();
+
+
+      results.innerHTML = `
+        <div class="loading">
+          Loading event data…
+        </div>
+      `;
+
+
+      try {
+
+        await Promise.all([
+            loadEventData(),
+  loadScoutingData(),
+  loadPitScoutingData()
+]);
+        await printTeamData();
+
+
+      } catch (error) {
+
+        console.error(error);
+
+
+        results.innerHTML = `
+
+          <div class="empty-state">
+
+            Error loading data:
+
+            <br><br>
+
+            ${error.message}
+
+          </div>
+
+        `;
+
+      }
+
+    }
+
+
+    /* =================================
+       EVENT LISTENERS
+    ================================= */
+
+    eventKeySelect.addEventListener(
+      "change",
+      reloadData
+    );
+
+
+    button.addEventListener(
+      "click",
+      reloadData
+    );
+
+
+    teamNumberInput.addEventListener(
+      "keydown",
+      event => {
+
+        if (event.key === "Enter") {
+          reloadData();
+        }
+
+      }
+    );
+
+
+    /* =================================
+       AUTO-REFRESH SCOUTING DATA
+    ================================= */
+
+    setInterval(
+
+      async () => {
+
+        try {
+
+          await loadScoutingData();
+
+          if (teamNumberInput.value.trim()) {
+            await printTeamData();
+          }
+
+        } catch (error) {
+
+          console.error(
+            "Failed to refresh scouting data:",
+            error
+          );
+
+        }
+
+      },
+
+      30000
+
+    );
+
+
+    /* INITIAL LOAD */
+
+    reloadData();
+
+  </script>
+
+</body>
+</html>
