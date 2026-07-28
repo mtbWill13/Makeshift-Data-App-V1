@@ -661,6 +661,7 @@
        LOAD SCOUTING DATA
     ================================= */
 
+    let stats = null;
     async function loadScoutingData() {
   const url = `/api/scouting/${eventKey}`;
   const response = await fetch(url);
@@ -745,11 +746,12 @@ async function loadPitScoutingData() {
       const rankings =
         await rankingsResponse.json();
 
-      const stats =
+      stats =
         await oprsResponse.json();
 
 
       /* OPR / DPR / CCWM */
+
 
       for (
         const [teamKey, opr]
@@ -994,7 +996,8 @@ async function loadPitScoutingData() {
       const programmingLanguage = firstTextValue(
         pitScoutingRows,
         "What language is your robot programmed in?"
-      )
+      );
+
 
 
       /* EPA */
@@ -1030,7 +1033,65 @@ async function loadPitScoutingData() {
           ?.total_points
           ?.mean ?? null;
 
+      const oprValues = Object.values(stats.oprs || {})
+  .map(Number)
+  .filter(Number.isFinite);
 
+const eventAverageOpr =
+  oprValues.reduce((sum, opr) => sum + opr, 0) / oprValues.length;
+
+      const topTen = [...oprValues]
+        .sort((a, b) => b - a)
+        .slice(0, 10);
+
+      const topTenAverageOpr =
+        topTen.reduce((sum, opr) => sum + opr, 0) / topTen.length;
+
+
+
+     const topTenMultiplier =
+        topTenAverageOpr / eventAverageOpr;
+
+      const sortedOprs = [...oprValues]
+  .sort((a, b) => b - a);
+
+const sixteenBestOpr = sortedOprs[15]; 
+
+
+
+const sixteenBestMultiplier =
+  sixteenBestOpr / eventAverageOpr;
+
+  const highestOPR = sortedOprs[0];
+
+
+      function averagePowerRating() {
+          let totalPoints = 0;
+          let numEntries = 0;
+
+          if(epa != null) {
+            totalPoints += epa;
+            numEntries++;
+          }if(opr != null) {
+            totalPoints += opr;
+            numEntries++;
+          }if(averageTotalPoints != null) {
+            totalPoints += averageTotalPoints;
+            numEntries++;
+          }
+
+          return totalPoints / numEntries;
+      }
+
+      function estimatePick() {
+        let pick = "";
+
+        if(opr >= sixteenBestMultiplier * eventAverageOpr) {
+          pick = "1st"
+        } //else if()
+
+        return pick;
+      }
       /* RENDER */
 
       results.innerHTML = `
@@ -1041,16 +1102,14 @@ async function loadPitScoutingData() {
 
           <span>
             ${scoutingRows.length}
-            scouting matches recorded
+            scouting matches recorded • Average Power Rating: ${averagePowerRating().toFixed(2)}
           </span>
 
         </div>
 
-
         <!-- TOP STATISTICS -->
 
         <section class="top-stats">
-
           <div class="stat-card">
 
             <div class="stat-label">
@@ -1119,7 +1178,7 @@ async function loadPitScoutingData() {
         <!-- EVENT DATA -->
 
         <h3 class="section-title">
-          Event Statistics
+          TBA and Statbotics Statistics
         </h3>
 
 
@@ -1340,6 +1399,79 @@ async function loadPitScoutingData() {
 
           
 
+        </section>
+
+        <!-- Event Stats -->
+
+        <h3 class="section-title">
+          Event Statistics
+        </h3>
+
+        
+
+        <section class="data-grid">
+
+          
+          <div class="data-item">
+
+            <div class="data-item-label">
+              Average OPR
+            </div>
+
+            <div class="data-item-value">
+              ${formatAverage(eventAverageOpr)}
+            </div>
+
+          </div>
+
+
+          <div class="data-item">
+
+            <div class="data-item-label">
+              Top Ten Average OPR
+            </div>
+
+            <div class="data-item-value">
+              ${formatAverage(topTenAverageOpr)}
+            </div>
+
+          </div>
+          
+          <div class="data-item">
+
+            <div class="data-item-label">
+              Top Ten OPR Higher Than Average by
+            </div>
+
+            <div class="data-item-value">
+              ${formatAverage((topTenMultiplier - 1) * 100)}%
+            </div>
+
+          </div>
+
+          <div class="data-item">
+
+            <div class="data-item-label">
+              Highest OPR
+            </div>
+
+            <div class="data-item-value">
+              ${highestOPR.toFixed(2)}
+            </div>
+
+          </div>
+
+          <div class="data-item">
+
+            <div class="data-item-label">
+              Highest OPR Better Than Average By
+            </div>
+
+            <div class="data-item-value">
+              ${formatAverage(((highestOPR / eventAverageOpr) - 1) * 100)}%
+            </div>
+
+          </div>
         </section>
 
         <!-- PIT SCOUTING -->
