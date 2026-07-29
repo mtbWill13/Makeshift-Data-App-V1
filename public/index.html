@@ -32,6 +32,11 @@
       color: var(--black);
     }
 
+    .external-link {
+      color: var(--cyan);
+      text-decoration: underline;
+    }
+
     /* =========================
        HEADER
     ========================= */
@@ -387,7 +392,11 @@
 
   <header>
     <div class="header-content">
-      <div class="eyebrow">MakeShift Robotics • FRC 4039 • Powered  By <a href="https://www.thebluealliance.com/">thebluealliance</a> & <a href="https://www.statbotics.io/">Statbotics</a></div>
+      <div class="eyebrow">MakeShift Robotics • FRC 4039 • Powered  By <a href="https://www.thebluealliance.com/" target="_blank" 
+                      rel="noopener noreferrer" 
+                      class="external-link">thebluealliance</a> & <a href="https://www.statbotics.io/" target="_blank" 
+                      rel="noopener noreferrer" 
+                      class="external-link">Statbotics</a></div>
 
       <h1>Scouting<br>Data Hub</h1>
 
@@ -959,7 +968,7 @@ async function loadPitScoutingData() {
           "Robot was defended"
         );
 
-      const driveType = firstTextValue(
+      let driveType = firstTextValue(
   pitScoutingRows,
   "What type of drive base does your robot have?"
 );
@@ -1086,23 +1095,37 @@ const sixteenBestMultiplier =
       function estimatePick() {
         let pick = "";
 
-        if(opr >= sixteenBestMultiplier * eventAverageOpr) {
+        if(opr >= sixteenBestOpr) {
           pick = "1st"
-        } //else if()
+        } else if(String(driveType ?? "").toLowerCase().includes("tank")) {
+          pick = "dnp"
+        }
 
         return pick;
+      }
+
+      function determineOPRRank() {
+        let rank = 0;
+        
+        for(let i = 0; i < sortedOprs.length; i++) {
+          if(opr == sortedOprs[i]) {
+            rank = i + 1;
+            break;
+          }
+        }
+
+        return rank;
       }
       /* RENDER */
 
       results.innerHTML = `
 
         <div class="team-heading">
-
           <h2>Team ${teamNumber}</h2>
 
           <span>
             ${scoutingRows.length}
-            scouting matches recorded • Average Power Rating: ${averagePowerRating().toFixed(2)}
+            scouting matches recorded • EPA, OPR and Scouting Average Score: ${averagePowerRating().toFixed(2)}
           </span>
 
         </div>
@@ -1178,7 +1201,13 @@ const sixteenBestMultiplier =
         <!-- EVENT DATA -->
 
         <h3 class="section-title">
-          TBA and Statbotics Statistics
+          <a href="https://www.thebluealliance.com/team/${teamNumber}" 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      class="external-link">TBA</a> and <a href="https://www.statbotics.io/team/${teamNumber}" 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      class="external-link">Statbotics</a> Statistics
         </h3>
 
 
@@ -1197,6 +1226,19 @@ const sixteenBestMultiplier =
             </div>
 
           </div>
+
+          <div class="data-item">
+
+            <div class="data-item-label">
+              OPR rank
+            </div>
+
+            <div class="data-item-value">
+              ${determineOPRRank()}
+            </div>
+
+          </div>
+
 
           <div class="data-item">
 
@@ -1437,17 +1479,7 @@ const sixteenBestMultiplier =
 
           </div>
           
-          <div class="data-item">
-
-            <div class="data-item-label">
-              Top Ten OPR Higher Than Average by
-            </div>
-
-            <div class="data-item-value">
-              ${formatAverage((topTenMultiplier - 1) * 100)}%
-            </div>
-
-          </div>
+          
 
           <div class="data-item">
 
@@ -1461,17 +1493,6 @@ const sixteenBestMultiplier =
 
           </div>
 
-          <div class="data-item">
-
-            <div class="data-item-label">
-              Highest OPR Better Than Average By
-            </div>
-
-            <div class="data-item-value">
-              ${formatAverage(((highestOPR / eventAverageOpr) - 1) * 100)}%
-            </div>
-
-          </div>
         </section>
 
         <!-- PIT SCOUTING -->
