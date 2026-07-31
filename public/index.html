@@ -37,6 +37,21 @@
       text-decoration: underline;
     }
 
+    .compare-link {
+      display: inline-block;
+      margin-top: 8px;
+      border: 2px solid var(--cyan);
+      color: var(--white);
+      padding: 10px 14px;
+      font-weight: bold;
+      text-decoration: none;
+    }
+
+    .compare-link:hover {
+      background: var(--cyan);
+      color: var(--black);
+    }
+
     /* =========================
        HEADER
     ========================= */
@@ -403,6 +418,10 @@
       <p class="header-description">
         Competition data, scouting averages, and performance metrics
         for making alliance decisions.
+      </p>
+
+      <p>
+        <a class="compare-link" href="/compare.html">Compare two teams →</a>
       </p>
     </div>
   </header>
