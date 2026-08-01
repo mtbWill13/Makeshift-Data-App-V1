@@ -317,7 +317,7 @@ const teams = getTeamsFromUrl();
 
 if (teams.length == 2) {
 	teamAInput.value = teams[0];
-	teamBInput.value = teams[0];
+	teamBInput.value = teams[1];
 }
 
 compareTeams();
