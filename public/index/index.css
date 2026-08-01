@@ -297,6 +297,14 @@
       font-weight: 900;
     }
 
+    .data-item-description {
+      color: var(--text-gray);
+      font-size: 0.75rem;
+      font-weight: bold;
+      line-height: 1.35;
+      margin-top: 8px;
+    }
+
     /* =========================
        SCOUTING MATCH CARDS
     ========================= */

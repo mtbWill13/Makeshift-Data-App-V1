@@ -240,6 +240,49 @@ app.get("/api/statbotics/team-event/:team/:event", async (req, res) => {
     });
   }
 });
+
+app.get("/api/statbotics/team-matches/:team/:event", async (req, res) => {
+  const { team, event } = req.params;
+  const query = new URLSearchParams({
+    team,
+    event,
+    limit: "100"
+  });
+  const url = `https://api.statbotics.io/v3/matches?${query}`;
+
+  try {
+    const response = await fetch(url, {
+      headers: { Accept: "application/json" }
+    });
+    const text = await response.text();
+
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { rawResponse: text };
+    }
+
+    if (!response.ok) {
+      console.error("Statbotics match-history response:", response.status, data);
+
+      return res.status(response.status).json({
+        error: `Statbotics returned ${response.status}`,
+        details: data
+      });
+    }
+
+    res.json(data);
+  } catch (error) {
+    console.error("Statbotics match-history connection error:", error.message);
+
+    res.status(502).json({
+      error: "Could not contact Statbotics",
+      details: error.message
+    });
+  }
+});
+
 app.use("/", express.static("public/index"));
 app.use(express.static("public"));
 const PORT = process.env.PORT || 3000;

@@ -412,6 +412,253 @@ async function loadPitScoutingData() {
     }
 
 
+    async function loadStatboticsMatchHistory(
+      teamNumber,
+      eventKey
+    ) {
+
+      const response =
+        await fetch(
+          `/api/statbotics/team-matches/${teamNumber}/${eventKey}`
+        );
+
+
+      const data =
+        await response.json();
+
+
+      if (!response.ok) {
+
+        throw new Error(
+          data.error ||
+          "Statbotics match history is unavailable"
+        );
+
+      }
+
+
+      return Array.isArray(data)
+        ? data
+        : [];
+
+    }
+
+
+    function teamIsOnAlliance(teamNumber, teamKeys) {
+
+  return (teamKeys || []).some(team =>
+    String(team) === String(teamNumber)
+  );
+
+}
+
+
+    function probabilityToUnit(value) {
+
+      const probability = Number(value);
+
+
+      if (!Number.isFinite(probability)) {
+        return null;
+      }
+
+
+      const unitProbability =
+        probability > 1
+          ? probability / 100
+          : probability;
+
+
+      return unitProbability >= 0 && unitProbability <= 1
+        ? unitProbability
+        : null;
+
+    }
+
+
+function clutchFactor(matches, teamNumber) {
+
+  const matchResults = [];
+
+
+  for (const match of matches) {
+
+    const redTeams = match.alliances?.red?.team_keys ?? [];
+    const blueTeams = match.alliances?.blue?.team_keys ?? [];
+
+    const alliance =
+      teamIsOnAlliance(teamNumber, redTeams)
+        ? "red"
+        : teamIsOnAlliance(teamNumber, blueTeams)
+          ? "blue"
+          : null;
+
+    const redWinProbability =
+      probabilityToUnit(match.pred?.red_win_prob);
+
+
+    if (!alliance || redWinProbability === null) {
+      continue;
+    }
+
+
+    const redScore = Number(match.result?.red_score);
+    const blueScore = Number(match.result?.blue_score);
+    const winner = String(match.result?.winner ?? "").toLowerCase();
+
+    let outcome = null;
+
+
+    if (winner === "red" || winner === "blue") {
+      outcome = winner === alliance ? 1 : 0;
+    } else if (
+      Number.isFinite(redScore) &&
+      Number.isFinite(blueScore)
+    ) {
+      if (redScore === blueScore) {
+        outcome = 0.5;
+      } else {
+        const winningAlliance =
+          redScore > blueScore
+            ? "red"
+            : "blue";
+
+        outcome = winningAlliance === alliance ? 1 : 0;
+      }
+    }
+
+
+    if (outcome === null) {
+      continue;
+    }
+
+
+    const winProbability =
+      alliance === "red"
+        ? redWinProbability
+        : 1 - redWinProbability;
+
+
+  
+
+const predictedRedScore = Number(match.pred?.red_score);
+const predictedBlueScore = Number(match.pred?.blue_score);
+
+let ownScoreDelta = null;
+let opponentScoreDelta = null;
+
+if (
+  Number.isFinite(redScore) &&
+  Number.isFinite(blueScore) &&
+  Number.isFinite(predictedRedScore) &&
+  Number.isFinite(predictedBlueScore)
+) {
+
+  const actualOwnScore =
+    alliance === "red" ? redScore : blueScore;
+
+  const predictedOwnScore =
+    alliance === "red" ? predictedRedScore : predictedBlueScore;
+
+  const actualOpponentScore =
+    alliance === "red" ? blueScore : redScore;
+
+  const predictedOpponentScore =
+    alliance === "red" ? predictedBlueScore : predictedRedScore;
+
+  ownScoreDelta = actualOwnScore - predictedOwnScore;
+  opponentScoreDelta = actualOpponentScore - predictedOpponentScore;
+
+}
+
+
+matchResults.push({
+  outcome,
+  winProbability,
+  ownScoreDelta,
+  opponentScoreDelta
+});
+
+  }
+
+
+  if (matchResults.length === 0) {
+    return null;
+  }
+
+
+  const actualWins =
+    matchResults.reduce(
+      (total, match) => total + match.outcome,
+      0
+    );
+
+  const expectedWins =
+    matchResults.reduce(
+      (total, match) => total + match.winProbability,
+      0
+    );
+
+  const scoreResults =
+    matchResults.filter(match => match.ownScoreDelta !== null);
+
+  const averageOwnScoreDelta =
+    scoreResults.length
+      ? scoreResults.reduce(
+          (total, match) => total + match.ownScoreDelta,
+          0
+        ) / scoreResults.length
+      : null;
+
+  const averageOpponentScoreDelta =
+    scoreResults.length
+      ? scoreResults.reduce(
+          (total, match) => total + match.opponentScoreDelta,
+          0
+        ) / scoreResults.length
+      : null;
+
+  return {
+    matches: matchResults.length,
+    actualWins,
+    expectedWins,
+    winScore: ((actualWins - expectedWins) / matchResults.length) * 100,
+    scoreMatches: scoreResults.length,
+    averageOwnScoreDelta,
+    averageOpponentScoreDelta
+  };
+
+}
+
+
+   function formatClutchFactor(clutch) {
+
+  if (!clutch) {
+    return "—";
+  }
+
+
+  const sign = clutch.winScore > 0 ? "+" : "";
+
+
+  return `${sign}${clutch.winScore.toFixed(1)}%`;
+
+}
+
+
+function formatOwnScoreDelta(clutch) {
+
+  if (!clutch || clutch.averageOwnScoreDelta === null) {
+    return "—";
+  }
+
+  const sign = clutch.averageOwnScoreDelta > 0 ? "+" : "";
+
+  return `${sign}${clutch.averageOwnScoreDelta.toFixed(1)} pts`;
+
+}
+
+
     /* =================================
        RENDER TEAM
     ================================= */
@@ -561,6 +808,7 @@ async function loadPitScoutingData() {
       /* EPA */
 
       let statbotics = null;
+      let statboticsMatches = [];
 
 
       try {
@@ -581,6 +829,24 @@ async function loadPitScoutingData() {
       }
 
 
+      try {
+
+        statboticsMatches =
+          await loadStatboticsMatchHistory(
+            teamNumber,
+            eventKey
+          );
+
+      } catch (error) {
+
+        console.log(
+          "Statbotics match-history error:",
+          error.message
+        );
+
+      }
+
+
       const opr =
         team?.opr ?? null;
 
@@ -590,6 +856,12 @@ async function loadPitScoutingData() {
           ?.epa
           ?.total_points
           ?.mean ?? null;
+
+      const teamClutchFactor =
+        clutchFactor(
+          statboticsMatches,
+          teamNumber
+        );
 
       const oprValues = Object.values(stats.oprs || {})
   .map(Number)
@@ -820,6 +1092,45 @@ const sixteenBestMultiplier =
             </div>
 
           </div>
+
+          <div class="data-item">
+
+            <div class="data-item-label">
+              Clutch Factor
+            </div>
+
+            <div class="data-item-value">
+              ${formatClutchFactor(teamClutchFactor)}
+            </div>
+
+            <div class="data-item-description">
+              ${
+                teamClutchFactor
+                  ? `${teamClutchFactor.actualWins.toFixed(1)} actual wins vs ${teamClutchFactor.expectedWins.toFixed(1)} expected over ${teamClutchFactor.matches} completed matches`
+                  : "No completed Statbotics match predictions available"
+              }
+            </div>
+
+          </div>
+
+          <div class="data-item">
+
+  <div class="data-item-label">
+Own Score vs Prediction  </div>
+
+  <div class="data-item-value">
+  ${formatOwnScoreDelta(teamClutchFactor)}
+</div>
+
+<div class="data-item-description">
+  ${
+    teamClutchFactor && teamClutchFactor.averageOwnScoreDelta !== null
+      ? `Averaged over ${teamClutchFactor.scoreMatches} matches with score predictions`
+      : "No Statbotics score predictions available"
+  }
+</div>
+
+</div>
         </section>
 
 
