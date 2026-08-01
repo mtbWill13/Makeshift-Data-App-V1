@@ -125,9 +125,10 @@
           dpr: Number(team.dpr),
           ccwm: Number(team.ccwm),
           matches: team.matches || 0,
-          totalEpa: Number(statbotics?.epa?.total_points?.mean),
+          totalEpa: Number(statbotics?.epa?.breakdown?.auto_points + statbotics?.epa?.breakdown?.teleop_points + statbotics?.epa?.breakdown?.endgame_points),
           autoEpa: Number(statbotics?.epa?.breakdown?.auto_points),
           teleopEpa: Number(statbotics?.epa?.breakdown?.teleop_points),
+          endgameEpa: Number(statbotics?.epa?.breakdown?.endgame_points),
           auto: averageColumn(scoutingRows, "Auto Scoring Points"),
           teleop: averageColumn(scoutingRows, "Teleop Scoring Points"),
           defense: averageColumn(
@@ -207,7 +208,7 @@
         <section class="summary"><div class="summary-card"><div class="summary-label">Comparison edge</div><div class="summary-value">${summary}</div><div class="summary-note">Based on available OPR, CCWM, and scouting scoring data.</div></div><div class="summary-card"><div class="summary-label">Event</div><div class="summary-value">${escapeHtml(eventSelect.selectedOptions[0].text)}</div><div class="summary-note">Green cells indicate the stronger numeric value.</div></div></section>
         <h3 class="section-title">Event performance</h3>
         <table class="comparison-table"><thead><tr><th>Stat</th><th>Team ${escapeHtml(a.number)}</th><th>Team ${escapeHtml(b.number)}</th></tr></thead><tbody>
-          ${numericRow("OPR", a.opr, b.opr, { digits: 2 })}${numericRow("DPR", a.dpr, b.dpr, { digits: 2, lowerIsBetter: true })}${numericRow("CCWM", a.ccwm, b.ccwm, { digits: 2 })}${numericRow("Total EPA", a.totalEpa, b.totalEpa)}${numericRow("Auto EPA", a.autoEpa, b.autoEpa)}${numericRow("Teleop EPA", a.teleopEpa, b.teleopEpa)}${numericRow("Matches played", a.matches, b.matches, { digits: 0 })}
+          ${numericRow("OPR", a.opr, b.opr, { digits: 2 })}${numericRow("DPR", a.dpr, b.dpr, { digits: 2, lowerIsBetter: true })}${numericRow("CCWM", a.ccwm, b.ccwm, { digits: 2 })}${numericRow("Total EPA", a.totalEpa, b.totalEpa)}${numericRow("Auto EPA", a.autoEpa, b.autoEpa)}${numericRow("Teleop EPA", a.teleopEpa, b.teleopEpa)}${numericRow("Endgame EPA", a.endgameEpa, b.endgameEpa)}${numericRow("Matches played", a.matches, b.matches, { digits: 0 })}
         </tbody></table>
         <h3 class="section-title">Match scouting</h3>
         <table class="comparison-table"><thead><tr><th>Stat</th><th>Team ${escapeHtml(a.number)}</th><th>Team ${escapeHtml(b.number)}</th></tr></thead><tbody>

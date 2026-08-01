@@ -622,6 +622,8 @@ const sixteenBestMultiplier =
 
   const highestOPR = sortedOprs[0];
 
+  //const totalEPA = statbotics.epa.breakdown.auto_points + statbotics.epa.breakdown.teleop_points  + statbotics?.epa?.breakdown?.endgame_points
+    const totalEPA = statbotics.epa.total_points
 
       function averagePowerRating() {
           let totalPoints = 0;
@@ -712,7 +714,7 @@ const sixteenBestMultiplier =
             <div class="stat-value">
               ${
                 averageTotalPoints !== null
-                  ? averageTotalPoints.toFixed(1)
+                  ? averageTotalPoints.toFixed(2)
                   : "—"
               }
             </div>
@@ -732,8 +734,8 @@ const sixteenBestMultiplier =
 
             <div class="stat-value">
               ${
-                epa !== null
-                  ? epa.toFixed(1)
+                totalEPA !== null
+                  ? totalEPA.toFixed(2)
                   : "—"
               }
             </div>
@@ -824,28 +826,7 @@ const sixteenBestMultiplier =
 
           </div>
 
-          <div class="data-item">
-
-            <div class="data-item-label">
-              EPA Uncertainty
-            </div>
-
-            <div class="data-item-value">
-              ${
-                statbotics
-                  ?.epa
-                  ?.total_points
-                  ?.sd !== undefined
-
-                  ? statbotics.epa.total_points.sd
-                      .toFixed(1)
-
-                  : "—"
-              }
-            </div>
-
-          </div>
-
+          
 
           <div class="data-item">
 
@@ -884,6 +865,27 @@ const sixteenBestMultiplier =
                   ?.teleop_points !== undefined
 
                   ? statbotics.epa.breakdown.teleop_points
+                      .toFixed(1)
+
+                  : "—"
+              }
+            </div>
+
+          </div>
+          <div class="data-item">
+
+            <div class="data-item-label">
+              Estimated Endgame EPA
+            </div>
+
+            <div class="data-item-value">
+              ${
+                statbotics
+                  ?.epa
+                  ?.breakdown
+                  ?.endgame_points !== undefined
+
+                  ? statbotics.epa.breakdown.endgame_points
                       .toFixed(1)
 
                   : "—"

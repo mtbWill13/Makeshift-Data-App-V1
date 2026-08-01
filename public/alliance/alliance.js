@@ -113,6 +113,7 @@
           totalEpa: numberOrNull(epa?.epa?.total_points?.mean),
           autoEpa: numberOrNull(epa?.epa?.breakdown?.auto_points),
           teleopEpa: numberOrNull(epa?.epa?.breakdown?.teleop_points),
+          endgameEpa: numberOrNull(epa?.epa?.breakdown?.endgame_points),
           auto,
           teleop,
           endgame,
@@ -144,6 +145,7 @@
           totalEpa: sum(teams.map((team) => team.totalEpa)),
           autoEpa: sum(teams.map((team) => team.autoEpa)),
           teleopEpa: sum(teams.map((team) => team.teleopEpa)),
+          endgameEpa: sum(teams.map((team) => team.endgameEpa)),
           dpr: sum(teams.map((team) => team.dpr)),
           ccwm: sum(teams.map((team) => team.ccwm)),
           auto: sum(teams.map((team) => team.auto)),
@@ -240,9 +242,11 @@
           blue,
           [
             ["Combined OPR", red.opr, blue.opr, { digits: 2 }],
-            //['Combined total EPA',red.totalEpa,blue.totalEpa],['Combined auto EPA',red.autoEpa,blue.autoEpa],['Combined teleop EPA',red.teleopEpa,blue.teleopEpa],
             ["Combined DPR", red.dpr, blue.dpr, { digits: 2, lower: true }],
             ["Combined CCWM", red.ccwm, blue.ccwm, { digits: 2 }],
+            ['Combined total EPA',red.autoEpa + red.teleopEpa + red.endgameEpa,blue.autoEpa + blue.teleopEpa + blue.endgameEpa],
+            ['Combined auto EPA',red.autoEpa,blue.autoEpa],
+            ['Combined teleop EPA',red.teleopEpa,blue.teleopEpa],
           ],
         )}${table("Match scouting projection", red, blue, [
           ["Expected auto points", red.auto, blue.auto],
@@ -261,7 +265,7 @@
             { suffix: "%" },
           ],
           ["Scouting reports", red.reports, blue.reports, { digits: 0 }],
-        ])}<h3 class="section-title">Individual team comparison</h3><section class="individual-tables">${teamTable("Red alliance", "red", redTeams)}${teamTable("Blue alliance", "blue", blueTeams)}</section><h3 class="section-title">Individual team charts</h3><section class="charts-grid">${charts}</section><p class="note">Scouting total points = average auto + average teleop + average endgame. Defense ratings are shown as recorded (1 is strongest, 5 is weakest); consistency is calculated from defense-rating variation.</p>`;
+        ])}<h3 class="section-title">Individual team comparison</h3><section class="individual-tables">${teamTable("Red alliance", "red", redTeams)}${teamTable("Blue alliance", "blue", blueTeams)}</section><h3 class="section-title">Individual team charts</h3><section class="charts-grid">${charts}</section>`;
       }
       let currentData = { teams: {}, scouting: [], epas: {} };
       async function compare() {
