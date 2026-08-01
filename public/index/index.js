@@ -622,6 +622,11 @@ const sixteenBestMultiplier =
 
   const highestOPR = sortedOprs[0];
 
+  const recordQuals = statbotics.record.qual.wins + "-" + statbotics.record.qual.losses;
+  const recordElims = statbotics.record.elim.wins + "-" + statbotics.record.elim.losses;
+  const totalRecord = (statbotics.record.qual.wins + statbotics.record.elim.wins) + "-" + (statbotics.record.qual.losses + statbotics.record.elim.losses);
+  const winRate = statbotics.record.total.winrate * 100
+
   //const totalEPA = statbotics.epa.breakdown.auto_points + statbotics.epa.breakdown.teleop_points  + statbotics?.epa?.breakdown?.endgame_points
     const totalEPA = statbotics.epa.total_points
 
@@ -672,7 +677,7 @@ const sixteenBestMultiplier =
       results.innerHTML = `
 
         <div class="team-heading">
-          <h2>Team ${teamNumber}</h2>
+          <h2>Team ${teamNumber}: ${statbotics.team_name}</h2>
 
           <span>
             ${scoutingRows.length}
@@ -748,19 +753,9 @@ const sixteenBestMultiplier =
 
         </section>
 
+        <!-- Event Results -->
 
-        <!-- EVENT DATA -->
-
-        <h3 class="section-title">
-          <a href="https://www.thebluealliance.com/team/${teamNumber}" 
-                      target="_blank" 
-                      rel="noopener noreferrer" 
-                      class="external-link">TBA</a> and <a href="https://www.statbotics.io/team/${teamNumber}" 
-                      target="_blank" 
-                      rel="noopener noreferrer" 
-                      class="external-link">Statbotics</a> Statistics
-        </h3>
-
+        <h3 class="section-title">Event Results</h3>
 
         <section class="data-grid">
 
@@ -777,6 +772,72 @@ const sixteenBestMultiplier =
             </div>
 
           </div>
+
+          <div class="data-item">
+
+            <div class="data-item-label">
+              record
+            </div>
+
+            <div class="data-item-value">
+              ${
+                totalRecord !== null?
+                totalRecord :
+                "—"
+              }
+            </div>
+
+          </div>
+
+          <div class="data-item">
+
+            <div class="data-item-label">
+              Quals Record
+            </div>
+
+            <div class="data-item-value">
+              ${
+                recordQuals !== null?
+                recordQuals :
+                "—"
+              }
+            </div>
+
+          </div>
+
+          <div class="data-item">
+
+            <div class="data-item-label">
+              Win Rate
+            </div>
+
+            <div class="data-item-value">
+              ${
+                winRate !== null?
+                winRate.toFixed(0) + "%" :
+                "—"
+              }
+            </div>
+
+          </div>
+        </section>
+
+
+        <!-- EVENT DATA -->
+
+        <h3 class="section-title">
+          <a href="https://www.thebluealliance.com/team/${teamNumber}" 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      class="external-link">TBA</a> and <a href="https://www.statbotics.io/team/${teamNumber}" 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      class="external-link">Statbotics</a> Statistics
+        </h3>
+
+        <section class="data-grid">
+
+       
 
           <div class="data-item">
 
