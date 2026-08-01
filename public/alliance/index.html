@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Compare Alliances | MakeShift Scouting Data Hub</title>
+    <link rel="stylesheet" href="alliance.css" />
+  </head>
+  <body>
+    <div class="top-bar"></div>
+    <header>
+      <div class="header-content">
+        <div class="eyebrow">MakeShift Robotics • FRC 4039</div>
+        <h1>Alliance<br />Comparison</h1>
+        <p class="header-description">
+          Enter three teams on each side to compare projected alliance
+          performance from event and scouting data.
+        </p>
+        <a class="back-link" href="/">← Back to Scouting Data Hub</a>
+      </div>
+    </header>
+    <main>
+      <section class="controls">
+        <div class="control-group event-control">
+          <label for="eventKey">Event</label
+          ><select id="eventKey">
+            <option value="2026onham">McMaster</option>
+            <option value="2026onosh">Durham College</option>
+            <option value="2026onwat">Waterloo</option>
+            <option value="2026oncmp2" selected>
+              Provincials Technology Division
+            </option>
+            <option value="2026oncmp1">Provincials Science Division</option>
+            <option value="2026ontor">Humber</option>
+            <option value="2026onwin">Windsor</option>
+          </select>
+        </div>
+        <section class="alliance-inputs red">
+          <h2>Red Alliance</h2>
+          <div class="team-inputs">
+            <div class="control-group">
+              <label for="red1">Team 1</label
+              ><input id="red1" type="number" placeholder="e.g. 4039" />
+            </div>
+            <div class="control-group">
+              <label for="red2">Team 2</label
+              ><input id="red2" type="number" placeholder="e.g. 1114" />
+            </div>
+            <div class="control-group">
+              <label for="red3">Team 3</label
+              ><input id="red3" type="number" placeholder="e.g. 2056" />
+            </div>
+          </div>
+        </section>
+        <section class="alliance-inputs blue">
+          <h2>Blue Alliance</h2>
+          <div class="team-inputs">
+            <div class="control-group">
+              <label for="blue1">Team 1</label
+              ><input id="blue1" type="number" placeholder="e.g. 5406" />
+            </div>
+            <div class="control-group">
+              <label for="blue2">Team 2</label
+              ><input id="blue2" type="number" placeholder="e.g. 1325" />
+            </div>
+            <div class="control-group">
+              <label for="blue3">Team 3</label
+              ><input id="blue3" type="number" placeholder="e.g. 4678" />
+            </div>
+          </div>
+        </section>
+        <div class="button-row">
+          <button id="compareButton">Compare Alliances</button>
+        </div>
+      </section>
+      <div id="results">
+        <div class="empty-state">
+          Enter three teams for each alliance, then select Compare Alliances.
+        </div>
+      </div>
+    </main>
+    <script src="alliance.js"></script>
+  </body>
+</html>

@@ -240,6 +240,7 @@ app.get("/api/statbotics/team-event/:team/:event", async (req, res) => {
     });
   }
 });
+app.use("/", express.static("public/index"));
 app.use(express.static("public"));
 const PORT = process.env.PORT || 3000;
 

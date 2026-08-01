@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Compare Teams | MakeShift Scouting Data Hub</title>
+    <link rel="stylesheet" href="compare.css" />
+  </head>
+  <body>
+    <div class="top-bar"></div>
+    <header>
+      <div class="header-content">
+        <div class="eyebrow">MakeShift Robotics • FRC 4039</div>
+        <h1>Team<br />Comparison</h1>
+        <p class="header-description">
+          Compare two teams’ event performance, scouting results, and pit
+          information side by side.
+        </p>
+        <p><a class="back-link" href="/">← Back to Scouting Data Hub</a></p>
+      </div>
+    </header>
+    <main>
+      <section class="controls">
+        <div class="control-group">
+          <label for="eventKey">Event</label
+          ><select id="eventKey">
+            <option value="2026onham">McMaster</option>
+            <option value="2026onosh">Durham College</option>
+            <option value="2026onwat">Waterloo</option>
+            <option value="2026oncmp2" selected>
+              Provincials Technology Division
+            </option>
+            <option value="2026oncmp1">Provincials Science Division</option>
+            <option value="2026ontor">Humber</option>
+            <option value="2026onwin">Windsor</option>
+          </select>
+        </div>
+        <div class="control-group">
+          <label for="teamA">Team A</label
+          ><input
+            id="teamA"
+            type="number"
+            inputmode="numeric"
+            placeholder="e.g. 4039"
+          />
+        </div>
+        <div class="control-group">
+          <label for="teamB">Team B</label
+          ><input
+            id="teamB"
+            type="number"
+            inputmode="numeric"
+            placeholder="e.g. 1114"
+          />
+        </div>
+        <button id="compareButton">Compare</button>
+      </section>
+      <div id="results">
+        <div class="empty-state">
+          Choose an event, enter two team numbers, then select Compare.
+        </div>
+      </div>
+    </main>
+    <script src="compare.js"></script>
+  </body>
+</html>

@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>MakeShift Scouting Data Hub</title>
+  <link rel="stylesheet" href="index.css">
+</head>
+
+<body>
+
+  <div class="top-bar"></div>
+
+  <header>
+    <div class="header-content">
+      <div class="eyebrow">MakeShift Robotics • FRC 4039 • Powered  By <a href="https://www.thebluealliance.com/" target="_blank" 
+                      rel="noopener noreferrer" 
+                      class="external-link">thebluealliance</a> & <a href="https://www.statbotics.io/" target="_blank" 
+                      rel="noopener noreferrer" 
+                      class="external-link">Statbotics</a></div>
+
+      <h1>Scouting<br>Data Hub</h1>
+
+      <p class="header-description">
+        Competition data, scouting averages, and performance metrics
+        for making alliance decisions.
+      </p>
+
+      <p>
+        <a class="compare-link" href="/compare/">Compare two teams →</a>
+        <a class="compare-link" href="/alliance/">Compare alliances →</a>
+      </p>
+    </div>
+  </header>
+
+  <main>
+
+    <section class="controls">
+
+      <div class="control-group">
+        <label for="EventKeys">Choose an Event</label>
+
+        <select name="EventKeys" id="EventKeys">
+          <option value="2026onham">McMaster</option>
+          <option value="2026onosh">Durham College</option>
+          <option value="2026onwat">Waterloo</option>
+          <option value="2026oncmp2" selected>Provincials Technology Division</option>
+          <option value="2026oncmp1">Provincials Science Division</option>
+          <option value="2026ontor">Humber</option>
+          <option value="2026onwin">Windsor</option>
+
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label for="teamInput">Enter a Team Number</label>
+
+        <input
+          id="teamInput"
+          type="number"
+          placeholder="e.g. 4039"
+        >
+      </div>
+
+      <button id="button">
+        View Team
+      </button>
+
+    </section>
+
+    <div id="results">
+      <div class="loading">Loading…</div>
+    </div>
+
+  </main>
+  <script src="index.js"></script>
+
+</body>
+</html>
