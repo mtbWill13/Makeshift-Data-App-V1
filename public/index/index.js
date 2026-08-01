@@ -629,8 +629,8 @@ const sixteenBestMultiplier =
           let totalPoints = 0;
           let numEntries = 0;
 
-          if(epa != null) {
-            totalPoints += epa;
+          if(totalEPA != null) {
+            totalPoints += totalEPA;
             numEntries++;
           }if(opr != null) {
             totalPoints += opr;
