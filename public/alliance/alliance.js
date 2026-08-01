@@ -258,12 +258,12 @@
             blue.defense,
             { lower: true },
           ],
-          [
-            "Defense consistency",
-            red.consistency,
-            blue.consistency,
-            { suffix: "%" },
-          ],
+          // [
+          //   "Defense consistency",
+          //   red.consistency,
+          //   blue.consistency,
+          //   { suffix: "%" },
+          // ],
           ["Scouting reports", red.reports, blue.reports, { digits: 0 }],
         ])}<h3 class="section-title">Individual team comparison</h3><section class="individual-tables">${teamTable("Red alliance", "red", redTeams)}${teamTable("Blue alliance", "blue", blueTeams)}</section><h3 class="section-title">Individual team charts</h3><section class="charts-grid">${charts}</section>`;
       }
