@@ -133,6 +133,18 @@ function formatAverage(value) {
 }
 
 
+function finiteNumberOrNull(value) {
+
+	const number = Number(value);
+
+
+	return Number.isFinite(number)
+		? number
+		: null;
+
+}
+
+
 function consistencyScore(
 	rows,
 	columnName,
@@ -140,24 +152,7 @@ function consistencyScore(
 	maxScore = 5
 ) {
 
-    function finiteNumberOrNull(value) {
-
-      const number = Number(value);
-
-
-      return Number.isFinite(number)
-        ? number
-        : null;
-
-    }
-
-
-    function consistencyScore(
-      rows,
-      columnName,
-      minScore = 1,
-      maxScore = 5
-    ) {
+	const scores = rows
 
 		.filter(row =>
 			String(row["No Show"])
@@ -208,7 +203,7 @@ function consistencyScore(
 		)
 	);
 
-}
+	}
 
 function defenceMatchesPlayed(rows, columnName) {
 
@@ -423,8 +418,12 @@ async function loadStatboticsEPA(
 
 	}
 
+	return data;
 
-    async function loadStatboticsMatchHistory(
+}
+
+
+async function loadStatboticsMatchHistory(
       teamNumber,
       eventKey
     ) {
@@ -667,13 +666,6 @@ function formatOwnScoreDelta(clutch) {
   const sign = clutch.averageOwnScoreDelta > 0 ? "+" : "";
 
   return `${sign}${clutch.averageOwnScoreDelta.toFixed(1)} pts`;
-
-}
-
-
-    /* =================================
-       RENDER TEAM
-    ================================= */
 
 }
 
