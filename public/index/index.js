@@ -133,6 +133,18 @@
     }
 
 
+    function finiteNumberOrNull(value) {
+
+      const number = Number(value);
+
+
+      return Number.isFinite(number)
+        ? number
+        : null;
+
+    }
+
+
     function consistencyScore(
       rows,
       columnName,
@@ -894,13 +906,59 @@ const sixteenBestMultiplier =
 
   const highestOPR = sortedOprs[0];
 
-  const recordQuals = statbotics.record.qual.wins + "-" + statbotics.record.qual.losses;
-  const recordElims = statbotics.record.elim.wins + "-" + statbotics.record.elim.losses;
-  const totalRecord = (statbotics.record.qual.wins + statbotics.record.elim.wins) + "-" + (statbotics.record.qual.losses + statbotics.record.elim.losses);
-  const winRate = statbotics.record.total.winrate * 100
+      const qualRecord = statbotics?.record?.qual ?? null;
+      const elimRecord = statbotics?.record?.elim ?? null;
+      const totalStatboticsRecord = statbotics?.record?.total ?? null;
 
-  //const totalEPA = statbotics.epa.breakdown.auto_points + statbotics.epa.breakdown.teleop_points  + statbotics?.epa?.breakdown?.endgame_points
-    const totalEPA = statbotics.epa.total_points
+      const recordQuals =
+        Number.isFinite(qualRecord?.wins) &&
+        Number.isFinite(qualRecord?.losses)
+          ? `${qualRecord.wins}-${qualRecord.losses}`
+          : null;
+
+      const recordElims =
+        Number.isFinite(elimRecord?.wins) &&
+        Number.isFinite(elimRecord?.losses)
+          ? `${elimRecord.wins}-${elimRecord.losses}`
+          : null;
+
+      const totalRecord =
+        Number.isFinite(qualRecord?.wins) &&
+        Number.isFinite(qualRecord?.losses) &&
+        Number.isFinite(elimRecord?.wins) &&
+        Number.isFinite(elimRecord?.losses)
+          ? `${qualRecord.wins + elimRecord.wins}-${qualRecord.losses + elimRecord.losses}`
+          : null;
+
+      const winRate =
+        finiteNumberOrNull(totalStatboticsRecord?.winrate) === null
+          ? null
+          : finiteNumberOrNull(totalStatboticsRecord.winrate) * 100;
+
+      const totalEPA =
+        finiteNumberOrNull(
+          statbotics?.epa?.total_points?.mean ??
+          statbotics?.epa?.total_points
+        );
+
+      const teamName =
+        statbotics?.team_name ??
+        `Team ${teamNumber}`;
+
+      const autoEPA =
+        finiteNumberOrNull(
+          statbotics?.epa?.breakdown?.auto_points
+        );
+
+      const teleopEPA =
+        finiteNumberOrNull(
+          statbotics?.epa?.breakdown?.teleop_points
+        );
+
+      const endgameEPA =
+        finiteNumberOrNull(
+          statbotics?.epa?.breakdown?.endgame_points
+        );
 
       function averagePowerRating() {
           let totalPoints = 0;
@@ -917,7 +975,7 @@ const sixteenBestMultiplier =
             numEntries++;
           }
 
-          return totalPoints / numEntries;
+          return numEntries ? totalPoints / numEntries : null;
       }
 
       function estimatePick() {
@@ -949,11 +1007,15 @@ const sixteenBestMultiplier =
       results.innerHTML = `
 
         <div class="team-heading">
-          <h2>Team ${teamNumber}: ${statbotics.team_name}</h2>
+          <h2>Team ${teamNumber}: ${teamName}</h2>
 
           <span>
             ${scoutingRows.length}
-            scouting matches recorded • EPA, OPR and Scouting Average Score: ${averagePowerRating().toFixed(2)}
+            scouting matches recorded • EPA, OPR and Scouting Average Score: ${
+              averagePowerRating() === null
+                ? "—"
+                : averagePowerRating().toFixed(2)
+            }
           </span>
 
         </div>
@@ -1207,17 +1269,7 @@ Own Score vs Prediction  </div>
             </div>
 
             <div class="data-item-value">
-              ${
-                statbotics
-                  ?.epa
-                  ?.breakdown
-                  ?.auto_points !== undefined
-
-                  ? statbotics.epa.breakdown.auto_points
-                      .toFixed(1)
-
-                  : "—"
-              }
+              ${autoEPA === null ? "—" : autoEPA.toFixed(1)}
             </div>
 
           </div>
@@ -1230,17 +1282,7 @@ Own Score vs Prediction  </div>
             </div>
 
             <div class="data-item-value">
-              ${
-                statbotics
-                  ?.epa
-                  ?.breakdown
-                  ?.teleop_points !== undefined
-
-                  ? statbotics.epa.breakdown.teleop_points
-                      .toFixed(1)
-
-                  : "—"
-              }
+              ${teleopEPA === null ? "—" : teleopEPA.toFixed(1)}
             </div>
 
           </div>
@@ -1251,17 +1293,7 @@ Own Score vs Prediction  </div>
             </div>
 
             <div class="data-item-value">
-              ${
-                statbotics
-                  ?.epa
-                  ?.breakdown
-                  ?.endgame_points !== undefined
-
-                  ? statbotics.epa.breakdown.endgame_points
-                      .toFixed(1)
-
-                  : "—"
-              }
+              ${endgameEPA === null ? "—" : endgameEPA.toFixed(1)}
             </div>
 
           </div>
