@@ -1,137 +1,144 @@
 
-    /* =================================
-       DOM ELEMENTS
-    ================================= */
+/* =================================
+   DOM ELEMENTS
+================================= */
 
-    const eventKeySelect =
-      document.getElementById("EventKeys");
+const eventKeySelect =
+	document.getElementById("EventKeys");
 
-    const teamNumberInput =
-      document.getElementById("teamInput");
+const teamNumberInput =
+	document.getElementById("teamInput");
 
-    const results =
-      document.getElementById("results");
+const results =
+	document.getElementById("results");
 
-    const button =
-      document.getElementById("button");
-
-
-    /* =================================
-       GLOBAL DATA
-    ================================= */
-
-    let eventKey = eventKeySelect.value;
-
-    const teamData = {};
-
-    let scoutingData = [];
-
-    let pitScoutingData = [];
+const button =
+	document.getElementById("button");
 
 
-    /* =================================
-       DATA HELPERS
-    ================================= */
+/* =================================
+   GLOBAL DATA
+================================= */
 
-    function resetTeamData() {
-      for (const teamKey of Object.keys(teamData)) {
-        delete teamData[teamKey];
-      }
-    }
+let eventKey = eventKeySelect.value;
 
+const teamData = {};
 
-    function getTeam(teamKey) {
+let scoutingData = [];
 
-      if (!teamData[teamKey]) {
-
-        teamData[teamKey] = {
-          teamKey,
-          opr: null,
-          dpr: null,
-          ccwm: null,
-          rank: null,
-          record: null,
-          matches: []
-        };
-
-      }
-
-      return teamData[teamKey];
-
-    }
+let pitScoutingData = [];
 
 
-    function averageColumn(rows, columnName) {
+/* =================================
+   DATA HELPERS
+================================= */
 
-      const values = rows
-
-        .filter(row =>
-          String(row["No Show"])
-            .toUpperCase() !== "TRUE"
-        )
-
-        .map(row =>
-          String(row[columnName] ?? "").trim()
-        )
-
-        .filter(value => value !== "")
-
-        .map(Number)
-
-        .filter(Number.isFinite);
+function resetTeamData() {
+	for (const teamKey of Object.keys(teamData)) {
+		delete teamData[teamKey];
+	}
+}
 
 
-      if (values.length === 0) {
-        return null;
-      }
+function getTeam(teamKey) {
+
+	if (!teamData[teamKey]) {
+
+		teamData[teamKey] = {
+			teamKey,
+			opr: null,
+			dpr: null,
+			ccwm: null,
+			rank: null,
+			record: null,
+			matches: []
+		};
+
+	}
+
+	return teamData[teamKey];
+
+}
 
 
-      return values.reduce(
-        (sum, value) => sum + value,
-        0
-      ) / values.length;
+function averageColumn(rows, columnName) {
 
-    }
+	const values = rows
 
+		.filter(row =>
+			String(row["No Show"])
+				.toUpperCase() !== "TRUE"
+		)
 
-    function truePercentage(rows, columnName) {
+		.map(row =>
+			String(row[columnName] ?? "").trim()
+		)
 
-      const answers = rows
+		.filter(value => value !== "")
 
-        .map(row =>
-          String(row[columnName] ?? "")
-            .trim()
-            .toUpperCase()
-        )
+		.map(Number)
 
-        .filter(value =>
-          value === "TRUE" ||
-          value === "FALSE"
-        );
+		.filter(Number.isFinite);
 
 
-      if (answers.length === 0) {
-        return null;
-      }
+	if (values.length === 0) {
+		return null;
+	}
 
 
-      const trueCount =
-        answers.filter(value => value === "TRUE").length;
+	return values.reduce(
+		(sum, value) => sum + value,
+		0
+	) / values.length;
+
+}
 
 
-      return (trueCount / answers.length) * 100;
+function truePercentage(rows, columnName) {
 
-    }
+	const answers = rows
+
+		.map(row =>
+			String(row[columnName] ?? "")
+				.trim()
+				.toUpperCase()
+		)
+
+		.filter(value =>
+			value === "TRUE" ||
+			value === "FALSE"
+		);
 
 
-    function formatAverage(value) {
+	if (answers.length === 0) {
+		return null;
+	}
 
-      return value === null
-        ? "Not available"
-        : value.toFixed(1);
 
-    }
+	const trueCount =
+		answers.filter(value => value === "TRUE").length;
 
+
+	return (trueCount / answers.length) * 100;
+
+}
+
+
+function formatAverage(value) {
+
+	return value === null
+		? "Not available"
+		: value.toFixed(1);
+
+}
+
+
+function consistencyScore(
+	rows,
+	columnName,
+	minScore = 1,
+	maxScore = 5
+) {
 
     function finiteNumberOrNull(value) {
 
@@ -152,276 +159,269 @@
       maxScore = 5
     ) {
 
-      const scores = rows
+		.filter(row =>
+			String(row["No Show"])
+				.toUpperCase() !== "TRUE"
+		)
 
-        .filter(row =>
-          String(row["No Show"])
-            .toUpperCase() !== "TRUE"
-        )
+		.map(row =>
+			Number(row[columnName])
+		)
 
-        .map(row =>
-          Number(row[columnName])
-        )
-
-        .filter(Number.isFinite);
+		.filter(Number.isFinite);
 
 
-      if (scores.length < 2) {
-        return null;
-      }
+	if (scores.length < 2) {
+		return null;
+	}
 
 
-      const average =
-        scores.reduce(
-          (sum, score) => sum + score,
-          0
-        ) / scores.length;
+	const average =
+		scores.reduce(
+			(sum, score) => sum + score,
+			0
+		) / scores.length;
 
 
-      const variance =
-        scores.reduce(
-          (sum, score) =>
-            sum + (score - average) ** 2,
-          0
-        ) / scores.length;
+	const variance =
+		scores.reduce(
+			(sum, score) =>
+				sum + (score - average) ** 2,
+			0
+		) / scores.length;
 
 
-      const standardDeviation =
-        Math.sqrt(variance);
+	const standardDeviation =
+		Math.sqrt(variance);
 
 
-      const maximumDeviation =
-        (maxScore - minScore) / 2;
+	const maximumDeviation =
+		(maxScore - minScore) / 2;
 
 
-      return Math.max(
-        0,
-        Math.min(
-          100,
-          100 *
-          (1 - standardDeviation / maximumDeviation)
-        )
-      );
+	return Math.max(
+		0,
+		Math.min(
+			100,
+			100 *
+			(1 - standardDeviation / maximumDeviation)
+		)
+	);
 
-    }
+}
 
-    function defenceMatchesPlayed(rows, columnName) {
+function defenceMatchesPlayed(rows, columnName) {
 
-      const scores = rows
+	const scores = rows
 
-        .filter(row =>
-          String(row["No Show"])
-            .toUpperCase() !== "TRUE"
-        )
+		.filter(row =>
+			String(row["No Show"])
+				.toUpperCase() !== "TRUE"
+		)
 
-        .map(row =>
-          Number(row[columnName])
-        )
+		.map(row =>
+			Number(row[columnName])
+		)
 
-        .filter(Number.isFinite);
-
-
-        return scores.length;
-      
-
-    }
+		.filter(Number.isFinite);
 
 
-    /* =================================
-       LOAD SCOUTING DATA
-    ================================= */
+	return scores.length;
 
-    let stats = null;
-    async function loadScoutingData() {
-  const url = `/api/scouting/${eventKey}`;
-  const response = await fetch(url);
-  const text = await response.text();
 
-  let data;
-  try {
-    data = JSON.parse(text);
-  } catch {
-    throw new Error(
-      `${url} returned HTML instead of JSON (HTTP ${response.status}). ` +
-      "Open the site at http://localhost:3000."
-    );
-  }
+}
 
-  if (!response.ok) {
-    throw new Error(data.error || "Could not load scouting data");
-  }
 
-  if (!Array.isArray(data)) {
-    throw new Error("Scouting API did not return an array");
-  }
+/* =================================
+   LOAD SCOUTING DATA
+================================= */
 
-  scoutingData = data;
+let stats = null;
+async function loadScoutingData() {
+	const url = `/api/scouting/${eventKey}`;
+	const response = await fetch(url);
+	const text = await response.text();
+
+	let data;
+	try {
+		data = JSON.parse(text);
+	} catch {
+		throw new Error(
+			`${url} returned HTML instead of JSON (HTTP ${response.status}). ` +
+			"Open the site at http://localhost:3000."
+		);
+	}
+
+	if (!response.ok) {
+		throw new Error(data.error || "Could not load scouting data");
+	}
+
+	if (!Array.isArray(data)) {
+		throw new Error("Scouting API did not return an array");
+	}
+
+	scoutingData = data;
 }
 
 async function loadPitScoutingData() {
-  const url = `/api/pitscouting/${eventKey}`;
-  const response = await fetch(url);
-  const text = await response.text();
+	const url = `/api/pitscouting/${eventKey}`;
+	const response = await fetch(url);
+	const text = await response.text();
 
-  let data;
-  try {
-    data = JSON.parse(text);
-  } catch {
-    throw new Error(
-      `${url} returned HTML instead of JSON (HTTP ${response.status}). ` +
-      "Open the site at http://localhost:3000."
-    );
-  }
+	let data;
+	try {
+		data = JSON.parse(text);
+	} catch {
+		throw new Error(
+			`${url} returned HTML instead of JSON (HTTP ${response.status}). ` +
+			"Open the site at http://localhost:3000."
+		);
+	}
 
-  if (!response.ok) {
-    throw new Error(data.error || "Could not load scouting data");
-  }
+	if (!response.ok) {
+		throw new Error(data.error || "Could not load scouting data");
+	}
 
-  if (!Array.isArray(data)) {
-    throw new Error("Scouting API did not return an array");
-  }
+	if (!Array.isArray(data)) {
+		throw new Error("Scouting API did not return an array");
+	}
 
-  pitScoutingData = data;
+	pitScoutingData = data;
 }
-    /* =================================
-       LOAD EVENT DATA
-    ================================= */
+/* =================================
+   LOAD EVENT DATA
+================================= */
 
-    async function loadEventData() {
+async function loadEventData() {
 
-      const [
-        matchesResponse,
-        rankingsResponse,
-        oprsResponse
-      ] = await Promise.all([
+	const [
+		matchesResponse,
+		rankingsResponse,
+		oprsResponse
+	] = await Promise.all([
 
-        fetch(
-          `/api/events/${eventKey}/matches`
-        ),
+		fetch(
+			`/api/events/${eventKey}/matches`
+		),
 
-        fetch(
-          `/api/events/${eventKey}/rankings`
-        ),
+		fetch(
+			`/api/events/${eventKey}/rankings`
+		),
 
-        fetch(
-          `/api/events/${eventKey}/oprs`
-        )
+		fetch(
+			`/api/events/${eventKey}/oprs`
+		)
 
-      ]);
-
-
-      const matches =
-        await matchesResponse.json();
-
-      const rankings =
-        await rankingsResponse.json();
-
-      stats =
-        await oprsResponse.json();
+	]);
 
 
-      /* OPR / DPR / CCWM */
+	const matches =
+		await matchesResponse.json();
+
+	const rankings =
+		await rankingsResponse.json();
+
+	stats =
+		await oprsResponse.json();
 
 
-      for (
-        const [teamKey, opr]
-        of Object.entries(stats.oprs || {})
-      ) {
-
-        const team =
-          getTeam(teamKey);
+	/* OPR / DPR / CCWM */
 
 
-        team.opr =
-          opr;
+	for (
+		const [teamKey, opr]
+		of Object.entries(stats.oprs || {})
+	) {
 
-        team.dpr =
-          stats.dprs?.[teamKey];
-
-        team.ccwm =
-          stats.ccwms?.[teamKey];
-
-      }
+		const team =
+			getTeam(teamKey);
 
 
-      /* Rankings */
+		team.opr =
+			opr;
 
-      if (Array.isArray(rankings)) {
+		team.dpr =
+			stats.dprs?.[teamKey];
 
-        for (const ranking of rankings) {
+		team.ccwm =
+			stats.ccwms?.[teamKey];
 
-          const team =
-            getTeam(ranking.team_key);
-
-
-          team.rank =
-            ranking.rank;
-
-          team.record =
-            ranking.record;
-
-        }
-
-      }
+	}
 
 
-      /* Matches */
+	/* Rankings */
 
-      for (const match of matches) {
+	if (Array.isArray(rankings)) {
 
-        const teamsInMatch = [
+		for (const ranking of rankings) {
 
-          ...match.red.team_keys,
-          ...match.blue.team_keys
-
-        ];
+			const team =
+				getTeam(ranking.team_key);
 
 
-        for (const teamKey of teamsInMatch) {
+			team.rank =
+				ranking.rank;
 
-          getTeam(teamKey)
-            .matches
-            .push(match);
+			team.record =
+				ranking.record;
 
-        }
+		}
 
-      }
-
-    }
+	}
 
 
-    /* =================================
-       STATBOTICS
-    ================================= */
+	/* Matches */
 
-    async function loadStatboticsEPA(
-      teamNumber,
-      eventKey
-    ) {
+	for (const match of matches) {
 
-      const response =
-        await fetch(
-          `/api/statbotics/team-event/${teamNumber}/${eventKey}`
-        );
+		const teamsInMatch = [
+
+			...match.red.team_keys,
+			...match.blue.team_keys
+
+		];
 
 
-      const data =
-        await response.json();
+		for (const teamKey of teamsInMatch) {
+
+			getTeam(teamKey)
+				.matches
+				.push(match);
+
+		}
+
+	}
+
+}
 
 
-      if (!response.ok) {
+/* =================================
+   STATBOTICS
+================================= */
 
-        throw new Error(
-          data.error ||
-          "Statbotics EPA is unavailable"
-        );
+async function loadStatboticsEPA(
+	teamNumber,
+	eventKey
+) {
 
-      }
+	const response =
+		await fetch(
+			`/api/statbotics/team-event/${teamNumber}/${eventKey}`
+		);
 
 
-      return data;
+	const data =
+		await response.json();
 
-    }
+
+	if (!response.ok) {
+
+		throw new Error(
+			data.error ||
+			"Statbotics EPA is unavailable"
+		);
+
+	}
 
 
     async function loadStatboticsMatchHistory(
@@ -675,170 +675,173 @@ function formatOwnScoreDelta(clutch) {
        RENDER TEAM
     ================================= */
 
-    async function printTeamData() {
-
-      const teamNumber =
-        teamNumberInput.value.trim();
+}
 
 
-      if (!teamNumber) {
+/* =================================
+   RENDER TEAM
+================================= */
 
-        results.innerHTML = `
+async function printTeamData() {
+	const teamNumber =
+		teamNumberInput.value.trim();
+
+	if (!teamNumber) {
+		results.innerHTML = `
           <div class="empty-state">
             Enter a team number, then press "View Team".
           </div>
         `;
 
-        return;
+		return;
+	}
 
-      }
+	saveTeamsInUrl(teamNumber);
 
+	const teamKey =
+		`frc${teamNumber}`;
 
-      const teamKey =
-        `frc${teamNumber}`;
-
-
-      const team =
-        teamData[teamKey];
-
-
-      const scoutingRows =
-        scoutingData.filter(row =>
-          String(row["Team Number"] ?? "").trim()
-          === teamNumber
-        );
-
-      const pitScoutingRows =
-        pitScoutingData.filter(row =>
-          String(row["Team Number of Team Being Scouted"] ?? "").trim()
-          === teamNumber
-        );
+	const team =
+		teamData[teamKey];
 
 
-      if (!team && scoutingRows.length === 0 && pitScoutingRows.length === 0) {
-  results.innerHTML = `
+	const scoutingRows =
+		scoutingData.filter(row =>
+			String(row["Team Number"] ?? "").trim()
+			=== teamNumber
+		);
+
+	const pitScoutingRows =
+		pitScoutingData.filter(row =>
+			String(row["Team Number of Team Being Scouted"] ?? "").trim()
+			=== teamNumber
+		);
+
+
+	if (!team && scoutingRows.length === 0 && pitScoutingRows.length === 0) {
+		results.innerHTML = `
     <div class="empty-state">
       No TBA, match-scouting, or pit-scouting data found for team ${teamNumber}.
     </div>
   `;
-  return;
-}
+		return;
+	}
 
-      function firstTextValue(rows, columnName) {
-  return rows
-    .map(row => String(row[columnName] ?? "").trim())
-    .find(value => value !== "") ?? null;
-}
+	function firstTextValue(rows, columnName) {
+		return rows
+			.map(row => String(row[columnName] ?? "").trim())
+			.find(value => value !== "") ?? null;
+	}
 
-      /* Scouting calculations */
+	/* Scouting calculations */
 
-      const averageAuto =
-        averageColumn(
-          scoutingRows,
-          "Auto Scoring Points"
-        );
-
-
-      const averageTeleop =
-        averageColumn(
-          scoutingRows,
-          "Teleop Scoring Points"
-        );
+	const averageAuto =
+		averageColumn(
+			scoutingRows,
+			"Auto Scoring Points"
+		);
 
 
-      const averageTotalPoints =
-
-        averageAuto !== null &&
-        averageTeleop !== null
-
-          ? averageAuto + averageTeleop
-
-          : null;
+	const averageTeleop =
+		averageColumn(
+			scoutingRows,
+			"Teleop Scoring Points"
+		);
 
 
-      const averageDefenseScore =
-        averageColumn(
-          scoutingRows,
-          "Defense Rating from 1 (incredible) to 5 (poor)"
-        );
+	const averageTotalPoints =
+
+		averageAuto !== null &&
+			averageTeleop !== null
+
+			? averageAuto + averageTeleop
+
+			: null;
 
 
-      const defenseConsistency =
-        consistencyScore(
-          scoutingRows,
-          "Defense Rating from 1 (incredible) to 5 (poor)"
-        );
+	const averageDefenseScore =
+		averageColumn(
+			scoutingRows,
+			"Defense Rating from 1 (incredible) to 5 (poor)"
+		);
 
 
-      const defendedPercentage =
-        truePercentage(
-          scoutingRows,
-          "Robot was defended"
-        );
-
-      let driveType = firstTextValue(
-  pitScoutingRows,
-  "What type of drive base does your robot have?"
-);
-      const coolestThing = firstTextValue(
-        pitScoutingRows, 
-        "What is the coolest thing about your robot or robot cart?"
-      )
-
-      const preferredStart = firstTextValue(
-        pitScoutingRows,
-        "Preferred Starting Location"
-      )
-
-      const matchesPlayingDefence = defenceMatchesPlayed(
-        scoutingRows,
-        "Defense Rating from 1 (incredible) to 5 (poor)"
-      )
-
-      const trench = firstTextValue(
-        pitScoutingRows,
-        "Can your robot drive under the trench?"
-      )
-
-      const bump = firstTextValue(
-        pitScoutingRows,
-        "Can your robot drive over the bump?"
-      )
-
-      const okPlayingDefence = firstTextValue(
-        pitScoutingRows,
-        "If strategy required; would you be open to playing defense?"
-      )
-
-      const programmingLanguage = firstTextValue(
-        pitScoutingRows,
-        "What language is your robot programmed in?"
-      );
+	const defenseConsistency =
+		consistencyScore(
+			scoutingRows,
+			"Defense Rating from 1 (incredible) to 5 (poor)"
+		);
 
 
+	const defendedPercentage =
+		truePercentage(
+			scoutingRows,
+			"Robot was defended"
+		);
 
-      /* EPA */
+	let driveType = firstTextValue(
+		pitScoutingRows,
+		"What type of drive base does your robot have?"
+	);
+	const coolestThing = firstTextValue(
+		pitScoutingRows,
+		"What is the coolest thing about your robot or robot cart?"
+	)
+
+	const preferredStart = firstTextValue(
+		pitScoutingRows,
+		"Preferred Starting Location"
+	)
+
+	const matchesPlayingDefence = defenceMatchesPlayed(
+		scoutingRows,
+		"Defense Rating from 1 (incredible) to 5 (poor)"
+	)
+
+	const trench = firstTextValue(
+		pitScoutingRows,
+		"Can your robot drive under the trench?"
+	)
+
+	const bump = firstTextValue(
+		pitScoutingRows,
+		"Can your robot drive over the bump?"
+	)
+
+	const okPlayingDefence = firstTextValue(
+		pitScoutingRows,
+		"If strategy required; would you be open to playing defense?"
+	)
+
+	const programmingLanguage = firstTextValue(
+		pitScoutingRows,
+		"What language is your robot programmed in?"
+	);
+
+
+
+	/* EPA */
 
       let statbotics = null;
       let statboticsMatches = [];
 
 
-      try {
+	try {
 
-        statbotics =
-          await loadStatboticsEPA(
-            teamNumber,
-            eventKey
-          );
+		statbotics =
+			await loadStatboticsEPA(
+				teamNumber,
+				eventKey
+			);
 
-      } catch (error) {
+	} catch (error) {
 
-        console.log(
-          "Statbotics error:",
-          error.message
-        );
+		console.log(
+			"Statbotics error:",
+			error.message
+		);
 
-      }
+	}
 
 
       try {
@@ -863,11 +866,11 @@ function formatOwnScoreDelta(clutch) {
         team?.opr ?? null;
 
 
-      const epa =
-        statbotics
-          ?.epa
-          ?.total_points
-          ?.mean ?? null;
+	const epa =
+		statbotics
+			?.epa
+			?.total_points
+			?.mean ?? null;
 
       const teamClutchFactor =
         clutchFactor(
@@ -879,32 +882,32 @@ function formatOwnScoreDelta(clutch) {
   .map(Number)
   .filter(Number.isFinite);
 
-const eventAverageOpr =
-  oprValues.reduce((sum, opr) => sum + opr, 0) / oprValues.length;
+	const eventAverageOpr =
+		oprValues.reduce((sum, opr) => sum + opr, 0) / oprValues.length;
 
-      const topTen = [...oprValues]
-        .sort((a, b) => b - a)
-        .slice(0, 10);
+	const topTen = [...oprValues]
+		.sort((a, b) => b - a)
+		.slice(0, 10);
 
-      const topTenAverageOpr =
-        topTen.reduce((sum, opr) => sum + opr, 0) / topTen.length;
-
-
-
-     const topTenMultiplier =
-        topTenAverageOpr / eventAverageOpr;
-
-      const sortedOprs = [...oprValues]
-  .sort((a, b) => b - a);
-
-const sixteenBestOpr = sortedOprs[15]; 
+	const topTenAverageOpr =
+		topTen.reduce((sum, opr) => sum + opr, 0) / topTen.length;
 
 
 
-const sixteenBestMultiplier =
-  sixteenBestOpr / eventAverageOpr;
+	const topTenMultiplier =
+		topTenAverageOpr / eventAverageOpr;
 
-  const highestOPR = sortedOprs[0];
+	const sortedOprs = [...oprValues]
+		.sort((a, b) => b - a);
+
+	const sixteenBestOpr = sortedOprs[15];
+
+
+
+	const sixteenBestMultiplier =
+		sixteenBestOpr / eventAverageOpr;
+
+	const highestOPR = sortedOprs[0];
 
       const qualRecord = statbotics?.record?.qual ?? null;
       const elimRecord = statbotics?.record?.elim ?? null;
@@ -960,51 +963,51 @@ const sixteenBestMultiplier =
           statbotics?.epa?.breakdown?.endgame_points
         );
 
-      function averagePowerRating() {
-          let totalPoints = 0;
-          let numEntries = 0;
+	function averagePowerRating() {
+		let totalPoints = 0;
+		let numEntries = 0;
 
-          if(totalEPA != null) {
-            totalPoints += totalEPA;
-            numEntries++;
-          }if(opr != null) {
-            totalPoints += opr;
-            numEntries++;
-          }if(averageTotalPoints != null) {
-            totalPoints += averageTotalPoints;
-            numEntries++;
-          }
+		if (totalEPA != null) {
+			totalPoints += totalEPA;
+			numEntries++;
+		} if (opr != null) {
+			totalPoints += opr;
+			numEntries++;
+		} if (averageTotalPoints != null) {
+			totalPoints += averageTotalPoints;
+			numEntries++;
+		}
 
           return numEntries ? totalPoints / numEntries : null;
       }
 
-      function estimatePick() {
-        let pick = "";
+	function estimatePick() {
+		let pick = "";
 
-        if(opr >= sixteenBestOpr) {
-          pick = "1st"
-        } else if(String(driveType ?? "").toLowerCase().includes("tank")) {
-          pick = "dnp"
-        }
+		if (opr >= sixteenBestOpr) {
+			pick = "1st"
+		} else if (String(driveType ?? "").toLowerCase().includes("tank")) {
+			pick = "dnp"
+		}
 
-        return pick;
-      }
+		return pick;
+	}
 
-      function determineOPRRank() {
-        let rank = 0;
-        
-        for(let i = 0; i < sortedOprs.length; i++) {
-          if(opr == sortedOprs[i]) {
-            rank = i + 1;
-            break;
-          }
-        }
+	function determineOPRRank() {
+		let rank = 0;
 
-        return rank;
-      }
-      /* RENDER */
+		for (let i = 0; i < sortedOprs.length; i++) {
+			if (opr == sortedOprs[i]) {
+				rank = i + 1;
+				break;
+			}
+		}
 
-      results.innerHTML = `
+		return rank;
+	}
+	/* RENDER */
+
+	results.innerHTML = `
 
         <div class="team-heading">
           <h2>Team ${teamNumber}: ${teamName}</h2>
@@ -1030,11 +1033,10 @@ const sixteenBestMultiplier =
             </div>
 
             <div class="stat-value">
-              ${
-                opr !== null
-                  ? opr.toFixed(2)
-                  : "—"
-              }
+              ${opr !== null
+			? opr.toFixed(2)
+			: "—"
+		}
             </div>
 
             <div class="stat-description">
@@ -1051,11 +1053,10 @@ const sixteenBestMultiplier =
             </div>
 
             <div class="stat-value">
-              ${
-                averageTotalPoints !== null
-                  ? averageTotalPoints.toFixed(2)
-                  : "—"
-              }
+              ${averageTotalPoints !== null
+			? averageTotalPoints.toFixed(2)
+			: "—"
+		}
             </div>
 
             <div class="stat-description">
@@ -1072,11 +1073,10 @@ const sixteenBestMultiplier =
             </div>
 
             <div class="stat-value">
-              ${
-                totalEPA !== null
-                  ? totalEPA.toFixed(2)
-                  : "—"
-              }
+              ${totalEPA !== null
+			? totalEPA.toFixed(2)
+			: "—"
+		}
             </div>
 
             <div class="stat-description">
@@ -1100,9 +1100,8 @@ const sixteenBestMultiplier =
             </div>
 
             <div class="data-item-value">
-              ${
-                team?.matches?.length ?? 0
-              }
+              ${team?.matches?.length ?? 0
+		}
             </div>
 
           </div>
@@ -1114,11 +1113,10 @@ const sixteenBestMultiplier =
             </div>
 
             <div class="data-item-value">
-              ${
-                totalRecord !== null?
-                totalRecord :
-                "—"
-              }
+              ${totalRecord !== null ?
+			totalRecord :
+			"—"
+		}
             </div>
 
           </div>
@@ -1130,11 +1128,10 @@ const sixteenBestMultiplier =
             </div>
 
             <div class="data-item-value">
-              ${
-                recordQuals !== null?
-                recordQuals :
-                "—"
-              }
+              ${recordQuals !== null ?
+			recordQuals :
+			"—"
+		}
             </div>
 
           </div>
@@ -1146,11 +1143,10 @@ const sixteenBestMultiplier =
             </div>
 
             <div class="data-item-value">
-              ${
-                winRate !== null?
-                winRate.toFixed(0) + "%" :
-                "—"
-              }
+              ${winRate !== null ?
+			winRate.toFixed(0) + "%" :
+			"—"
+		}
             </div>
 
           </div>
@@ -1232,12 +1228,11 @@ Own Score vs Prediction  </div>
             </div>
 
             <div class="data-item-value">
-              ${
-                team?.dpr !== null &&
-                team?.dpr !== undefined
-                  ? team.dpr.toFixed(2)
-                  : "—"
-              }
+              ${team?.dpr !== null &&
+			team?.dpr !== undefined
+			? team.dpr.toFixed(2)
+			: "—"
+		}
             </div>
 
           </div>
@@ -1250,12 +1245,11 @@ Own Score vs Prediction  </div>
             </div>
 
             <div class="data-item-value">
-              ${
-                team?.ccwm !== null &&
-                team?.ccwm !== undefined
-                  ? team.ccwm.toFixed(2)
-                  : "—"
-              }
+              ${team?.ccwm !== null &&
+			team?.ccwm !== undefined
+			? team.ccwm.toFixed(2)
+			: "—"
+		}
             </div>
 
           </div>
@@ -1366,11 +1360,10 @@ Own Score vs Prediction  </div>
             </div>
 
             <div class="data-item-value">
-              ${
-                defenseConsistency === null
-                  ? "Not enough matches"
-                  : `${defenseConsistency.toFixed(0)}%` + " over " + matchesPlayingDefence + " matches" 
-              }
+              ${defenseConsistency === null
+			? "Not enough matches"
+			: `${defenseConsistency.toFixed(0)}%` + " over " + matchesPlayingDefence + " matches"
+		}
             </div>
 
           </div>
@@ -1381,11 +1374,10 @@ Own Score vs Prediction  </div>
             </div>
 
             <div class="data-item-value">
-              ${
-                defendedPercentage === null
-                  ? "—"
-                  : `${defendedPercentage.toFixed(0)}%`
-              }
+              ${defendedPercentage === null
+			? "—"
+			: `${defendedPercentage.toFixed(0)}%`
+		}
             </div>
 
           </div>
@@ -1552,10 +1544,9 @@ Own Score vs Prediction  </div>
         </h3>
 
 
-        ${
-          scoutingRows.length
+        ${scoutingRows.length
 
-            ? `
+			? `
 
               <section class="scouting-list">
 
@@ -1568,7 +1559,7 @@ Own Score vs Prediction  </div>
                     </div>
 
                     ${Object.entries(row)
-                      .map(([column, value]) => `
+					.map(([column, value]) => `
 
                         <div class="scouting-row">
 
@@ -1583,7 +1574,7 @@ Own Score vs Prediction  </div>
                         </div>
 
                       `)
-                      .join("")}
+					.join("")}
 
                   </article>
 
@@ -1593,56 +1584,56 @@ Own Score vs Prediction  </div>
 
             `
 
-            : `
+			: `
 
               <div class="empty-state">
                 No scouting entries found for this team.
               </div>
 
             `
-        }
+		}
 
       `;
 
-    }
+}
 
 
-    /* =================================
-       RELOAD EVERYTHING
-    ================================= */
+/* =================================
+   RELOAD EVERYTHING
+================================= */
 
-    async function reloadData() {
+async function reloadData() {
 
-      eventKey =
-        eventKeySelect.value;
-
-
-      resetTeamData();
+	eventKey =
+		eventKeySelect.value;
 
 
-      results.innerHTML = `
+	resetTeamData();
+
+
+	results.innerHTML = `
         <div class="loading">
           Loading event data…
         </div>
       `;
 
 
-      try {
+	try {
 
-        await Promise.all([
-            loadEventData(),
-  loadScoutingData(),
-  loadPitScoutingData()
-]);
-        await printTeamData();
-
-
-      } catch (error) {
-
-        console.error(error);
+		await Promise.all([
+			loadEventData(),
+			loadScoutingData(),
+			loadPitScoutingData()
+		]);
+		await printTeamData();
 
 
-        results.innerHTML = `
+	} catch (error) {
+
+		console.error(error);
+
+
+		results.innerHTML = `
 
           <div class="empty-state">
 
@@ -1656,71 +1647,76 @@ Own Score vs Prediction  </div>
 
         `;
 
-      }
+	}
 
-    }
-
-
-    /* =================================
-       EVENT LISTENERS
-    ================================= */
-
-    eventKeySelect.addEventListener(
-      "change",
-      reloadData
-    );
+}
 
 
-    button.addEventListener(
-      "click",
-      reloadData
-    );
+/* =================================
+   EVENT LISTENERS
+================================= */
+
+eventKeySelect.addEventListener(
+	"change",
+	reloadData
+);
 
 
-    teamNumberInput.addEventListener(
-      "keydown",
-      event => {
-
-        if (event.key === "Enter") {
-          reloadData();
-        }
-
-      }
-    );
+button.addEventListener(
+	"click",
+	reloadData
+);
 
 
-    /* =================================
-       AUTO-REFRESH SCOUTING DATA
-    ================================= */
+teamNumberInput.addEventListener(
+	"keydown",
+	event => {
 
-    setInterval(
+		if (event.key === "Enter") {
+			reloadData();
+		}
 
-      async () => {
-
-        try {
-
-          await loadScoutingData();
-
-          if (teamNumberInput.value.trim()) {
-            await printTeamData();
-          }
-
-        } catch (error) {
-
-          console.error(
-            "Failed to refresh scouting data:",
-            error
-          );
-
-        }
-
-      },
-
-      30000
-
-    );
+	}
+);
 
 
-    /* INITIAL LOAD */
+/* =================================
+   AUTO-REFRESH SCOUTING DATA
+================================= */
 
-    reloadData();
+setInterval(
+
+	async () => {
+
+		try {
+
+			await loadScoutingData();
+
+			if (teamNumberInput.value.trim()) {
+				await printTeamData();
+			}
+
+		} catch (error) {
+
+			console.error(
+				"Failed to refresh scouting data:",
+				error
+			);
+
+		}
+
+	},
+
+	30000
+
+);
+
+
+/* INITIAL LOAD */
+const teams = getTeamsFromUrl();
+
+if (teams.length == 1) {
+	teamNumberInput.value = teams[0];
+}
+
+reloadData();
