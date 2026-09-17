@@ -71,8 +71,14 @@ function fieldMarkup(header) {
 	}
 
 	const type = isTeamNumberField(header) ? "number" : "text";
-	const value = isTimestampField(header) ? new Date().toISOString() : "";
 	const readOnly = isTimestampField(header) ? "readonly" : "";
+	let value = isTimestampField(header) ? new Date().toISOString() : "";
+
+	if (safeHeader == "Pit Scouter Name") {
+		if (localStorage.scouterName) {
+			value = localStorage.scouterName;
+		}
+	}
 
 	return `
     <div class="control-group">
@@ -133,6 +139,10 @@ pitScoutingForm.addEventListener("submit", async event => {
 	const answers = Object.fromEntries(new FormData(pitScoutingForm).entries());
 	submitButton.disabled = true;
 	formStatus.textContent = "Submitting pit-scouting response…";
+
+	if (answers["Pit Scouter Name"]) {
+		localStorage.scouterName = answers["Pit Scouter Name"];
+	}
 
 	try {
 		await fetchJson(`/api/pitscouting/${eventKey.value}`, {
