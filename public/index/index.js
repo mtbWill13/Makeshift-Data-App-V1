@@ -203,7 +203,7 @@ function consistencyScore(
 		)
 	);
 
-	}
+}
 
 function defenceMatchesPlayed(rows, columnName) {
 
@@ -424,248 +424,248 @@ async function loadStatboticsEPA(
 
 
 async function loadStatboticsMatchHistory(
-      teamNumber,
-      eventKey
-    ) {
+	teamNumber,
+	eventKey
+) {
 
-      const response =
-        await fetch(
-          `/api/statbotics/team-matches/${teamNumber}/${eventKey}`
-        );
-
-
-      const data =
-        await response.json();
+	const response =
+		await fetch(
+			`/api/statbotics/team-matches/${teamNumber}/${eventKey}`
+		);
 
 
-      if (!response.ok) {
-
-        throw new Error(
-          data.error ||
-          "Statbotics match history is unavailable"
-        );
-
-      }
+	const data =
+		await response.json();
 
 
-      return Array.isArray(data)
-        ? data
-        : [];
+	if (!response.ok) {
 
-    }
+		throw new Error(
+			data.error ||
+			"Statbotics match history is unavailable"
+		);
+
+	}
 
 
-    function teamIsOnAlliance(teamNumber, teamKeys) {
-
-  return (teamKeys || []).some(team =>
-    String(team) === String(teamNumber)
-  );
+	return Array.isArray(data)
+		? data
+		: [];
 
 }
 
 
-    function probabilityToUnit(value) {
+function teamIsOnAlliance(teamNumber, teamKeys) {
 
-      const probability = Number(value);
+	return (teamKeys || []).some(team =>
+		String(team) === String(teamNumber)
+	);
 
-
-      if (!Number.isFinite(probability)) {
-        return null;
-      }
-
-
-      const unitProbability =
-        probability > 1
-          ? probability / 100
-          : probability;
+}
 
 
-      return unitProbability >= 0 && unitProbability <= 1
-        ? unitProbability
-        : null;
+function probabilityToUnit(value) {
 
-    }
+	const probability = Number(value);
+
+
+	if (!Number.isFinite(probability)) {
+		return null;
+	}
+
+
+	const unitProbability =
+		probability > 1
+			? probability / 100
+			: probability;
+
+
+	return unitProbability >= 0 && unitProbability <= 1
+		? unitProbability
+		: null;
+
+}
 
 
 function clutchFactor(matches, teamNumber) {
 
-  const matchResults = [];
+	const matchResults = [];
 
 
-  for (const match of matches) {
+	for (const match of matches) {
 
-    const redTeams = match.alliances?.red?.team_keys ?? [];
-    const blueTeams = match.alliances?.blue?.team_keys ?? [];
+		const redTeams = match.alliances?.red?.team_keys ?? [];
+		const blueTeams = match.alliances?.blue?.team_keys ?? [];
 
-    const alliance =
-      teamIsOnAlliance(teamNumber, redTeams)
-        ? "red"
-        : teamIsOnAlliance(teamNumber, blueTeams)
-          ? "blue"
-          : null;
+		const alliance =
+			teamIsOnAlliance(teamNumber, redTeams)
+				? "red"
+				: teamIsOnAlliance(teamNumber, blueTeams)
+					? "blue"
+					: null;
 
-    const redWinProbability =
-      probabilityToUnit(match.pred?.red_win_prob);
-
-
-    if (!alliance || redWinProbability === null) {
-      continue;
-    }
+		const redWinProbability =
+			probabilityToUnit(match.pred?.red_win_prob);
 
 
-    const redScore = Number(match.result?.red_score);
-    const blueScore = Number(match.result?.blue_score);
-    const winner = String(match.result?.winner ?? "").toLowerCase();
-
-    let outcome = null;
+		if (!alliance || redWinProbability === null) {
+			continue;
+		}
 
 
-    if (winner === "red" || winner === "blue") {
-      outcome = winner === alliance ? 1 : 0;
-    } else if (
-      Number.isFinite(redScore) &&
-      Number.isFinite(blueScore)
-    ) {
-      if (redScore === blueScore) {
-        outcome = 0.5;
-      } else {
-        const winningAlliance =
-          redScore > blueScore
-            ? "red"
-            : "blue";
+		const redScore = Number(match.result?.red_score);
+		const blueScore = Number(match.result?.blue_score);
+		const winner = String(match.result?.winner ?? "").toLowerCase();
 
-        outcome = winningAlliance === alliance ? 1 : 0;
-      }
-    }
+		let outcome = null;
 
 
-    if (outcome === null) {
-      continue;
-    }
+		if (winner === "red" || winner === "blue") {
+			outcome = winner === alliance ? 1 : 0;
+		} else if (
+			Number.isFinite(redScore) &&
+			Number.isFinite(blueScore)
+		) {
+			if (redScore === blueScore) {
+				outcome = 0.5;
+			} else {
+				const winningAlliance =
+					redScore > blueScore
+						? "red"
+						: "blue";
+
+				outcome = winningAlliance === alliance ? 1 : 0;
+			}
+		}
 
 
-    const winProbability =
-      alliance === "red"
-        ? redWinProbability
-        : 1 - redWinProbability;
+		if (outcome === null) {
+			continue;
+		}
 
 
-  
+		const winProbability =
+			alliance === "red"
+				? redWinProbability
+				: 1 - redWinProbability;
 
-const predictedRedScore = Number(match.pred?.red_score);
-const predictedBlueScore = Number(match.pred?.blue_score);
 
-let ownScoreDelta = null;
-let opponentScoreDelta = null;
 
-if (
-  Number.isFinite(redScore) &&
-  Number.isFinite(blueScore) &&
-  Number.isFinite(predictedRedScore) &&
-  Number.isFinite(predictedBlueScore)
-) {
 
-  const actualOwnScore =
-    alliance === "red" ? redScore : blueScore;
+		const predictedRedScore = Number(match.pred?.red_score);
+		const predictedBlueScore = Number(match.pred?.blue_score);
 
-  const predictedOwnScore =
-    alliance === "red" ? predictedRedScore : predictedBlueScore;
+		let ownScoreDelta = null;
+		let opponentScoreDelta = null;
 
-  const actualOpponentScore =
-    alliance === "red" ? blueScore : redScore;
+		if (
+			Number.isFinite(redScore) &&
+			Number.isFinite(blueScore) &&
+			Number.isFinite(predictedRedScore) &&
+			Number.isFinite(predictedBlueScore)
+		) {
 
-  const predictedOpponentScore =
-    alliance === "red" ? predictedBlueScore : predictedRedScore;
+			const actualOwnScore =
+				alliance === "red" ? redScore : blueScore;
 
-  ownScoreDelta = actualOwnScore - predictedOwnScore;
-  opponentScoreDelta = actualOpponentScore - predictedOpponentScore;
+			const predictedOwnScore =
+				alliance === "red" ? predictedRedScore : predictedBlueScore;
+
+			const actualOpponentScore =
+				alliance === "red" ? blueScore : redScore;
+
+			const predictedOpponentScore =
+				alliance === "red" ? predictedBlueScore : predictedRedScore;
+
+			ownScoreDelta = actualOwnScore - predictedOwnScore;
+			opponentScoreDelta = actualOpponentScore - predictedOpponentScore;
+
+		}
+
+
+		matchResults.push({
+			outcome,
+			winProbability,
+			ownScoreDelta,
+			opponentScoreDelta
+		});
+
+	}
+
+
+	if (matchResults.length === 0) {
+		return null;
+	}
+
+
+	const actualWins =
+		matchResults.reduce(
+			(total, match) => total + match.outcome,
+			0
+		);
+
+	const expectedWins =
+		matchResults.reduce(
+			(total, match) => total + match.winProbability,
+			0
+		);
+
+	const scoreResults =
+		matchResults.filter(match => match.ownScoreDelta !== null);
+
+	const averageOwnScoreDelta =
+		scoreResults.length
+			? scoreResults.reduce(
+				(total, match) => total + match.ownScoreDelta,
+				0
+			) / scoreResults.length
+			: null;
+
+	const averageOpponentScoreDelta =
+		scoreResults.length
+			? scoreResults.reduce(
+				(total, match) => total + match.opponentScoreDelta,
+				0
+			) / scoreResults.length
+			: null;
+
+	return {
+		matches: matchResults.length,
+		actualWins,
+		expectedWins,
+		winScore: ((actualWins - expectedWins) / matchResults.length) * 100,
+		scoreMatches: scoreResults.length,
+		averageOwnScoreDelta,
+		averageOpponentScoreDelta
+	};
 
 }
 
 
-matchResults.push({
-  outcome,
-  winProbability,
-  ownScoreDelta,
-  opponentScoreDelta
-});
+function formatClutchFactor(clutch) {
 
-  }
+	if (!clutch) {
+		return "—";
+	}
 
 
-  if (matchResults.length === 0) {
-    return null;
-  }
+	const sign = clutch.winScore > 0 ? "+" : "";
 
 
-  const actualWins =
-    matchResults.reduce(
-      (total, match) => total + match.outcome,
-      0
-    );
-
-  const expectedWins =
-    matchResults.reduce(
-      (total, match) => total + match.winProbability,
-      0
-    );
-
-  const scoreResults =
-    matchResults.filter(match => match.ownScoreDelta !== null);
-
-  const averageOwnScoreDelta =
-    scoreResults.length
-      ? scoreResults.reduce(
-          (total, match) => total + match.ownScoreDelta,
-          0
-        ) / scoreResults.length
-      : null;
-
-  const averageOpponentScoreDelta =
-    scoreResults.length
-      ? scoreResults.reduce(
-          (total, match) => total + match.opponentScoreDelta,
-          0
-        ) / scoreResults.length
-      : null;
-
-  return {
-    matches: matchResults.length,
-    actualWins,
-    expectedWins,
-    winScore: ((actualWins - expectedWins) / matchResults.length) * 100,
-    scoreMatches: scoreResults.length,
-    averageOwnScoreDelta,
-    averageOpponentScoreDelta
-  };
-
-}
-
-
-   function formatClutchFactor(clutch) {
-
-  if (!clutch) {
-    return "—";
-  }
-
-
-  const sign = clutch.winScore > 0 ? "+" : "";
-
-
-  return `${sign}${clutch.winScore.toFixed(1)}%`;
+	return `${sign}${clutch.winScore.toFixed(1)}%`;
 
 }
 
 
 function formatOwnScoreDelta(clutch) {
 
-  if (!clutch || clutch.averageOwnScoreDelta === null) {
-    return "—";
-  }
+	if (!clutch || clutch.averageOwnScoreDelta === null) {
+		return "—";
+	}
 
-  const sign = clutch.averageOwnScoreDelta > 0 ? "+" : "";
+	const sign = clutch.averageOwnScoreDelta > 0 ? "+" : "";
 
-  return `${sign}${clutch.averageOwnScoreDelta.toFixed(1)} pts`;
+	return `${sign}${clutch.averageOwnScoreDelta.toFixed(1)} pts`;
 
 }
 
@@ -814,8 +814,8 @@ async function printTeamData() {
 
 	/* EPA */
 
-      let statbotics = null;
-      let statboticsMatches = [];
+	let statbotics = null;
+	let statboticsMatches = [];
 
 
 	try {
@@ -836,26 +836,26 @@ async function printTeamData() {
 	}
 
 
-      try {
+	try {
 
-        statboticsMatches =
-          await loadStatboticsMatchHistory(
-            teamNumber,
-            eventKey
-          );
+		statboticsMatches =
+			await loadStatboticsMatchHistory(
+				teamNumber,
+				eventKey
+			);
 
-      } catch (error) {
+	} catch (error) {
 
-        console.log(
-          "Statbotics match-history error:",
-          error.message
-        );
+		console.log(
+			"Statbotics match-history error:",
+			error.message
+		);
 
-      }
+	}
 
 
-      const opr =
-        team?.opr ?? null;
+	const opr =
+		team?.opr ?? null;
 
 
 	const epa =
@@ -864,15 +864,17 @@ async function printTeamData() {
 			?.total_points
 			?.mean ?? null;
 
-      const teamClutchFactor =
-        clutchFactor(
-          statboticsMatches,
-          teamNumber
-        );
+	const tbaTeamName = (await (await fetch(`api/teamName/${teamNumber}`)).json()).name;
 
-      const oprValues = Object.values(stats.oprs || {})
-  .map(Number)
-  .filter(Number.isFinite);
+	const teamClutchFactor =
+		clutchFactor(
+			statboticsMatches,
+			teamNumber
+		);
+
+	const oprValues = Object.values(stats.oprs || {})
+		.map(Number)
+		.filter(Number.isFinite);
 
 	const eventAverageOpr =
 		oprValues.reduce((sum, opr) => sum + opr, 0) / oprValues.length;
@@ -901,59 +903,59 @@ async function printTeamData() {
 
 	const highestOPR = sortedOprs[0];
 
-      const qualRecord = statbotics?.record?.qual ?? null;
-      const elimRecord = statbotics?.record?.elim ?? null;
-      const totalStatboticsRecord = statbotics?.record?.total ?? null;
+	const qualRecord = statbotics?.record?.qual ?? null;
+	const elimRecord = statbotics?.record?.elim ?? null;
+	const totalStatboticsRecord = statbotics?.record?.total ?? null;
 
-      const recordQuals =
-        Number.isFinite(qualRecord?.wins) &&
-        Number.isFinite(qualRecord?.losses)
-          ? `${qualRecord.wins}-${qualRecord.losses}`
-          : null;
+	const recordQuals =
+		Number.isFinite(qualRecord?.wins) &&
+			Number.isFinite(qualRecord?.losses)
+			? `${qualRecord.wins}-${qualRecord.losses}`
+			: null;
 
-      const recordElims =
-        Number.isFinite(elimRecord?.wins) &&
-        Number.isFinite(elimRecord?.losses)
-          ? `${elimRecord.wins}-${elimRecord.losses}`
-          : null;
+	const recordElims =
+		Number.isFinite(elimRecord?.wins) &&
+			Number.isFinite(elimRecord?.losses)
+			? `${elimRecord.wins}-${elimRecord.losses}`
+			: null;
 
-      const totalRecord =
-        Number.isFinite(qualRecord?.wins) &&
-        Number.isFinite(qualRecord?.losses) &&
-        Number.isFinite(elimRecord?.wins) &&
-        Number.isFinite(elimRecord?.losses)
-          ? `${qualRecord.wins + elimRecord.wins}-${qualRecord.losses + elimRecord.losses}`
-          : null;
+	const totalRecord =
+		Number.isFinite(qualRecord?.wins) &&
+			Number.isFinite(qualRecord?.losses) &&
+			Number.isFinite(elimRecord?.wins) &&
+			Number.isFinite(elimRecord?.losses)
+			? `${qualRecord.wins + elimRecord.wins}-${qualRecord.losses + elimRecord.losses}`
+			: null;
 
-      const winRate =
-        finiteNumberOrNull(totalStatboticsRecord?.winrate) === null
-          ? null
-          : finiteNumberOrNull(totalStatboticsRecord.winrate) * 100;
+	const winRate =
+		finiteNumberOrNull(totalStatboticsRecord?.winrate) === null
+			? null
+			: finiteNumberOrNull(totalStatboticsRecord.winrate) * 100;
 
-      const totalEPA =
-        finiteNumberOrNull(
-          statbotics?.epa?.total_points?.mean ??
-          statbotics?.epa?.total_points
-        );
+	const totalEPA =
+		finiteNumberOrNull(
+			statbotics?.epa?.total_points?.mean ??
+			statbotics?.epa?.total_points
+		);
 
-      const teamName =
-        statbotics?.team_name ??
-        `Team ${teamNumber}`;
+	const teamName =
+		statbotics?.team_name ?? tbaTeamName ??
+		`Team ${teamNumber}`;
 
-      const autoEPA =
-        finiteNumberOrNull(
-          statbotics?.epa?.breakdown?.auto_points
-        );
+	const autoEPA =
+		finiteNumberOrNull(
+			statbotics?.epa?.breakdown?.auto_points
+		);
 
-      const teleopEPA =
-        finiteNumberOrNull(
-          statbotics?.epa?.breakdown?.teleop_points
-        );
+	const teleopEPA =
+		finiteNumberOrNull(
+			statbotics?.epa?.breakdown?.teleop_points
+		);
 
-      const endgameEPA =
-        finiteNumberOrNull(
-          statbotics?.epa?.breakdown?.endgame_points
-        );
+	const endgameEPA =
+		finiteNumberOrNull(
+			statbotics?.epa?.breakdown?.endgame_points
+		);
 
 	function averagePowerRating() {
 		let totalPoints = 0;
@@ -970,8 +972,8 @@ async function printTeamData() {
 			numEntries++;
 		}
 
-          return numEntries ? totalPoints / numEntries : null;
-      }
+		return numEntries ? totalPoints / numEntries : null;
+	}
 
 	function estimatePick() {
 		let pick = "";
@@ -997,20 +999,25 @@ async function printTeamData() {
 
 		return rank;
 	}
+
+	const teamImage = `https://www.thebluealliance.com/avatar/2026/frc${teamNumber}.png`;
+
 	/* RENDER */
 
 	results.innerHTML = `
 
         <div class="team-heading">
-          <h2>Team ${teamNumber}: ${teamName}</h2>
+			<div class="team-heading-container">
+				<h2>Team ${teamNumber}: ${teamName}</h2>
+				<img class="teamImage" src=${teamImage}></img>
+			</div>
 
           <span>
             ${scoutingRows.length}
-            scouting matches recorded • EPA, OPR and Scouting Average Score: ${
-              averagePowerRating() === null
-                ? "—"
-                : averagePowerRating().toFixed(2)
-            }
+            scouting matches recorded • EPA, OPR and Scouting Average Score: ${averagePowerRating() === null
+			? "—"
+			: averagePowerRating().toFixed(2)
+		}
           </span>
 
         </div>
@@ -1154,11 +1161,10 @@ async function printTeamData() {
             </div>
 
             <div class="data-item-description">
-              ${
-                teamClutchFactor
-                  ? `${teamClutchFactor.actualWins.toFixed(1)} actual wins vs ${teamClutchFactor.expectedWins.toFixed(1)} expected over ${teamClutchFactor.matches} completed matches`
-                  : "No completed Statbotics match predictions available"
-              }
+              ${teamClutchFactor
+			? `${teamClutchFactor.actualWins.toFixed(1)} actual wins vs ${teamClutchFactor.expectedWins.toFixed(1)} expected over ${teamClutchFactor.matches} completed matches`
+			: "No completed Statbotics match predictions available"
+		}
             </div>
 
           </div>
@@ -1173,11 +1179,10 @@ Own Score vs Prediction  </div>
 </div>
 
 <div class="data-item-description">
-  ${
-    teamClutchFactor && teamClutchFactor.averageOwnScoreDelta !== null
-      ? `Averaged over ${teamClutchFactor.scoreMatches} matches with score predictions`
-      : "No Statbotics score predictions available"
-  }
+  ${teamClutchFactor && teamClutchFactor.averageOwnScoreDelta !== null
+			? `Averaged over ${teamClutchFactor.scoreMatches} matches with score predictions`
+			: "No Statbotics score predictions available"
+		}
 </div>
 
 </div>
