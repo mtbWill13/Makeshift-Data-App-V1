@@ -5,6 +5,22 @@ const formStatus = document.getElementById("formStatus");
 const submissionToken = document.getElementById("submissionToken");
 const submitButton = document.getElementById("submitButton");
 
+/*
+  Pit-scouting columns shown to scouts.
+  Add or remove names here to change the form. Each name must exactly match
+  a column heading in the "Pit Scouting Raw Data" sheet.
+*/
+const PIT_SCOUTING_FIELDS = [
+  "Team Number of Team Being Scouted",
+  "What type of drive base does your robot have?",
+  "Preferred Starting Location",
+  "Can your robot drive under the trench?",
+  "Can your robot drive over the bump?",
+  "If strategy required; would you be open to playing defense?",
+  "What language is your robot programmed in?",
+  "What is the coolest thing about your robot or robot cart?"
+];
+
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, character => ({
     "&": "&amp;",
@@ -83,9 +99,23 @@ async function loadForm() {
 
   try {
     const { headers } = await fetchJson(`/api/pitscouting/${eventKey.value}/schema`);
-    formFields.innerHTML = headers.map(fieldMarkup).join("");
+    const selectedHeaders = headers.filter(header =>
+      PIT_SCOUTING_FIELDS.includes(header)
+    );
+
+    const unavailableFields = PIT_SCOUTING_FIELDS.filter(header =>
+      !headers.includes(header)
+    );
+
+    if (!selectedHeaders.length) {
+      throw new Error("None of the column names in PIT_SCOUTING_FIELDS match this sheet's header row.");
+    }
+
+    formFields.innerHTML = selectedHeaders.map(fieldMarkup).join("");
     pitScoutingForm.hidden = false;
-    formStatus.textContent = `Ready — ${headers.length} fields loaded from this event’s pit-scouting sheet.`;
+    formStatus.textContent = unavailableFields.length
+      ? `Ready — ${selectedHeaders.length} configured fields loaded. ${unavailableFields.length} configured field name(s) were not found in this sheet.`
+      : `Ready — ${selectedHeaders.length} configured fields loaded.`;
   } catch (error) {
     formFields.innerHTML = "";
     formStatus.textContent = error.message;
