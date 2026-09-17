@@ -3,6 +3,8 @@ import express from "express";
 import { google } from "googleapis";
 const app = express();
 
+app.use(express.json({ limit: "100kb" }));
+
 app.use((req, res, next) => {
 	console.log("REQUEST:", req.method, req.url);
 	next();
@@ -15,7 +17,7 @@ const googleAuth = new google.auth.GoogleAuth({
 	keyFile: process.env.GOOGLE_SERVICE_ACCOUNT_JSON
 		? undefined
 		: "./google-service-account.json",
-	scopes: ["https://www.googleapis.com/auth/spreadsheets.readonly"]
+	scopes: ["https://www.googleapis.com/auth/spreadsheets"]
 });
 
 
@@ -31,6 +33,17 @@ const sheets = google.sheets({
 	version: "v4",
 	auth: googleAuth
 });
+
+const scoutingSheetIds = {
+	"2026oncmp2": process.env.SCOUTING_SHEET_2026ONCMP2,
+	"2026ontor": process.env.SCOUTING_SHEET_2026ONTOR,
+	"2026onwin": process.env.SCOUTING_SHEET_2026ONWIN,
+	"2026test": process.env.SCOUTING_SHEET_2026TEST
+};
+
+function spreadsheetIdForEvent(eventKey) {
+	return scoutingSheetIds[eventKey];
+}
 
 async function tba(path) {
 	const response = await fetch(`${TBA_BASE}${path}`, {
@@ -209,6 +222,89 @@ app.get("/api/pitscouting/:eventKey", async (req, res) => {
 		res.status(500).json({
 			error: error.message
 		});
+	}
+});
+
+app.get("/api/pitscouting/:eventKey/schema", async (req, res) => {
+	try {
+		const spreadsheetId = spreadsheetIdForEvent(req.params.eventKey);
+
+		if (!spreadsheetId) {
+			return res.status(404).json({ error: "No pit-scouting sheet is configured for this event." });
+		}
+
+		const response = await sheets.spreadsheets.values.get({
+			spreadsheetId,
+			range: "'Pit Scouting Raw Data'!1:1"
+		});
+
+		const headers = (response.data.values?.[0] ?? [])
+			.map(header => String(header).trim())
+			.filter(Boolean);
+
+		if (!headers.length) {
+			return res.status(500).json({ error: "The pit-scouting sheet has no header row." });
+		}
+
+		res.json({ headers });
+	} catch (error) {
+		console.error("PIT SCOUTING SCHEMA ERROR:", error);
+		res.status(500).json({ error: error.message });
+	}
+});
+
+app.post("/api/pitscouting/:eventKey", async (req, res) => {
+	try {
+		const submissionToken = process.env.PIT_SCOUTING_SUBMISSION_TOKEN;
+
+		if (!submissionToken) {
+			return res.status(503).json({
+				error: "Pit scouting submissions are not configured. Set PIT_SCOUTING_SUBMISSION_TOKEN on the server first."
+			});
+		}
+
+		if (req.body?.submissionToken !== submissionToken) {
+			return res.status(401).json({ error: "Incorrect scout passcode." });
+		}
+
+		const spreadsheetId = spreadsheetIdForEvent(req.params.eventKey);
+
+		if (!spreadsheetId) {
+			return res.status(404).json({ error: "No pit-scouting sheet is configured for this event." });
+		}
+
+		const answers = req.body?.answers;
+
+		if (!answers || typeof answers !== "object" || Array.isArray(answers)) {
+			return res.status(400).json({ error: "A pit-scouting response is required." });
+		}
+
+		const headerResponse = await sheets.spreadsheets.values.get({
+			spreadsheetId,
+			range: "'Pit Scouting Raw Data'!1:1"
+		});
+
+		const headers = (headerResponse.data.values?.[0] ?? [])
+			.map(header => String(header).trim());
+
+		if (!headers.length) {
+			return res.status(500).json({ error: "The pit-scouting sheet has no header row." });
+		}
+
+		await sheets.spreadsheets.values.append({
+			spreadsheetId,
+			range: "'Pit Scouting Raw Data'!A:AL",
+			valueInputOption: "USER_ENTERED",
+			insertDataOption: "INSERT_ROWS",
+			requestBody: {
+				values: [headers.map(header => String(answers[header] ?? ""))]
+			}
+		});
+
+		res.status(201).json({ ok: true });
+	} catch (error) {
+		console.error("PIT SCOUTING WRITE ERROR:", error);
+		res.status(500).json({ error: error.message });
 	}
 });
 

@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pit Scouting | MakeShift Scouting Data Hub</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <div class="top-bar"></div>
+    <header>
+      <div class="header-content">
+        <div class="eyebrow">MakeShift Robotics • FRC 4039</div>
+        <h1>Pit<br>Scouting</h1>
+        <p class="header-description">Record robot capabilities and strategy details directly into the event’s pit-scouting sheet.</p>
+        <a class="back-link" href="/">← Back to Scouting Data Hub</a>
+      </div>
+    </header>
+
+    <main>
+      <section class="form-shell">
+        <div class="event-row">
+          <div class="control-group">
+            <label for="eventKey">Event</label>
+            <select id="eventKey">
+              <option value="2026oncmp2" selected>Provincials Technology Division</option>
+              <option value="2026ontor">Humber</option>
+              <option value="2026onwin">Windsor</option>
+              <option value="2026test">Test Event</option>
+            </select>
+          </div>
+          <div class="control-group">
+            <label for="submissionToken">Scout passcode</label>
+            <input id="submissionToken" type="password" autocomplete="off" required>
+          </div>
+        </div>
+
+        <p id="formStatus" class="status" aria-live="polite">Choose an event to load its pit-scouting form.</p>
+        <form id="pitScoutingForm" hidden>
+          <div id="formFields" class="form-fields"></div>
+          <button id="submitButton" type="submit">Submit Pit Scouting</button>
+        </form>
+      </section>
+    </main>
+    <script src="index.js"></script>
+  </body>
+</html>
