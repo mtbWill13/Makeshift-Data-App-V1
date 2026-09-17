@@ -7,19 +7,10 @@ const submitButton = document.getElementById("submitButton");
 
 /*
   Pit-scouting columns shown to scouts.
-  Add or remove names here to change the form. Each name must exactly match
-  a column heading in the "Pit Scouting Raw Data" sheet.
+  Add or remove Google Sheets column letters here to change the form.
+  For example, ["A", "C", "F"] shows only columns A, C, and F.
 */
-const PIT_SCOUTING_FIELDS = [
-  "Team Number of Team Being Scouted",
-  "What type of drive base does your robot have?",
-  "Preferred Starting Location",
-  "Can your robot drive under the trench?",
-  "Can your robot drive over the bump?",
-  "If strategy required; would you be open to playing defense?",
-  "What language is your robot programmed in?",
-  "What is the coolest thing about your robot or robot cart?"
-];
+const PIT_SCOUTING_COLUMNS = ["A", "B", "C", "D", "E", "F", "G", "H"];
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, character => ({
@@ -45,6 +36,19 @@ function isYesNoField(header) {
 
 function isLongAnswerField(header) {
   return /coolest|describe|explain|notes|comments|anything else|strategy/i.test(header);
+}
+
+function columnLetterToIndex(columnLetter) {
+  const normalized = String(columnLetter).trim().toUpperCase();
+
+  if (!/^[A-Z]+$/.test(normalized)) {
+    return null;
+  }
+
+  return [...normalized].reduce(
+    (index, character) => index * 26 + character.charCodeAt(0) - 64,
+    0
+  ) - 1;
 }
 
 function fieldMarkup(header) {
@@ -99,22 +103,28 @@ async function loadForm() {
 
   try {
     const { headers } = await fetchJson(`/api/pitscouting/${eventKey.value}/schema`);
-    const selectedHeaders = headers.filter(header =>
-      PIT_SCOUTING_FIELDS.includes(header)
-    );
+    const selectedColumns = PIT_SCOUTING_COLUMNS
+      .map(columnLetter => ({
+        columnLetter: String(columnLetter).trim().toUpperCase(),
+        index: columnLetterToIndex(columnLetter)
+      }))
+      .filter(column => column.index !== null && headers[column.index]);
 
-    const unavailableFields = PIT_SCOUTING_FIELDS.filter(header =>
-      !headers.includes(header)
-    );
+    const selectedHeaders = selectedColumns.map(column => headers[column.index]);
+
+    const unavailableColumns = PIT_SCOUTING_COLUMNS.filter(columnLetter => {
+      const index = columnLetterToIndex(columnLetter);
+      return index === null || !headers[index];
+    });
 
     if (!selectedHeaders.length) {
-      throw new Error("None of the column names in PIT_SCOUTING_FIELDS match this sheet's header row.");
+      throw new Error("None of the column letters in PIT_SCOUTING_COLUMNS match this sheet's header row.");
     }
 
     formFields.innerHTML = selectedHeaders.map(fieldMarkup).join("");
     pitScoutingForm.hidden = false;
-    formStatus.textContent = unavailableFields.length
-      ? `Ready — ${selectedHeaders.length} configured fields loaded. ${unavailableFields.length} configured field name(s) were not found in this sheet.`
+    formStatus.textContent = unavailableColumns.length
+      ? `Ready — ${selectedHeaders.length} configured fields loaded. ${unavailableColumns.join(", ")} could not be found in this sheet.`
       : `Ready — ${selectedHeaders.length} configured fields loaded.`;
   } catch (error) {
     formFields.innerHTML = "";
