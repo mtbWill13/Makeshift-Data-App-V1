@@ -5,7 +5,7 @@ const formStatus = document.getElementById("formStatus");
 const submissionToken = document.getElementById("submissionToken");
 const submitButton = document.getElementById("submitButton");
 
-const PIT_SCOUTING_COLUMNS = "B C D F G H J K L M Z AD AE AF AH AI AJ AK".split(" ");
+const PIT_SCOUTING_COLUMNS = "B C D F G H J K L M Z AD AE AF AH AJ".split(" ");
 
 function escapeHtml(value) {
 	return String(value ?? "").replace(/[&<>"']/g, character => ({
