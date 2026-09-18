@@ -9,7 +9,7 @@ const submitButton = document.getElementById("submitButton");
   Match-scouting columns shown to scouts.
   Add or remove Google Sheets column letters here to change the form.
 */
-const SCOUTING_COLUMNS = "B C D G H K L M N R T".split(" ");
+const SCOUTING_COLUMNS = "B C D H K L M N R T".split(" ");
 
 function escapeHtml(value) {
 	return String(value ?? "").replace(/[&<>"']/g, character => ({
@@ -206,7 +206,7 @@ formFields.addEventListener("click", event => {
 	const currentScore = Number(scoreInput?.value) || 0;
 
 	if (scoreInput) {
-		scoreInput.value = currentScore + 5;
+		scoreInput.value = currentScore + 4;
 	}
 });
 
