@@ -93,7 +93,7 @@ function fieldMarkup(field) {
         <label for="${fieldId}">${safeHeader}</label>
         <div class="score-clicker">
           <input id="${fieldId}" name="${fieldName}" type="number" value="0" min="0" step="5">
-          <button class="score-button" type="button" data-score-field="${fieldId}">+4</button>
+          <button class="score-button" type="button" data-score-field="${fieldId}">+5</button>
         </div>
       </div>`;
 	}
@@ -206,7 +206,7 @@ formFields.addEventListener("click", event => {
 	const currentScore = Number(scoreInput?.value) || 0;
 
 	if (scoreInput) {
-		scoreInput.value = currentScore + 4;
+		scoreInput.value = currentScore + 5;
 	}
 });
 
