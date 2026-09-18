@@ -45,6 +45,19 @@ function spreadsheetIdForEvent(eventKey) {
 	return scoutingSheetIds[eventKey];
 }
 
+function columnIndexToLetter(index) {
+	let result = "";
+	let current = index + 1;
+
+	while (current > 0) {
+		const remainder = (current - 1) % 26;
+		result = String.fromCharCode(65 + remainder) + result;
+		current = Math.floor((current - 1) / 26);
+	}
+
+	return result;
+}
+
 async function tba(path) {
 	const response = await fetch(`${TBA_BASE}${path}`, {
 		headers: {
@@ -166,6 +179,133 @@ app.get("/api/scouting/:eventKey", async (req, res) => {
 		res.status(500).json({
 			error: error.message
 		});
+	}
+});
+
+app.get("/api/scouting/:eventKey/schema", async (req, res) => {
+	try {
+		const spreadsheetId = spreadsheetIdForEvent(req.params.eventKey);
+
+		if (!spreadsheetId) {
+			return res.status(404).json({ error: "No scouting sheet is configured for this event." });
+		}
+
+		const response = await sheets.spreadsheets.values.get({
+			spreadsheetId,
+			range: "'Scouting Raw Data'!A:ZZ"
+		});
+
+		/* Keep blank cells: array index 0 must always remain column A.
+		   Filtering blank headers shifts later columns (for example Y becomes B). */
+		const rows = response.data.values ?? [];
+		const headers = (rows[0] ?? [])
+			.map(header => String(header).trim());
+
+		if (!headers.some(Boolean)) {
+			return res.status(500).json({ error: "The scouting sheet has no header row." });
+		}
+
+		const booleanColumnIndexes = headers
+			.map((header, index) => {
+				const values = rows
+					.slice(1)
+					.map(row => String(row[index] ?? "").trim().toUpperCase())
+					.filter(Boolean);
+
+				return values.length && values.every(value =>
+					value === "TRUE" || value === "FALSE"
+				)
+					? index
+					: null;
+			})
+			.filter(Number.isInteger);
+
+		res.json({ headers, booleanColumnIndexes });
+	} catch (error) {
+		console.error("SCOUTING SCHEMA ERROR:", error);
+		res.status(500).json({ error: error.message });
+	}
+});
+
+app.post("/api/scouting/:eventKey", async (req, res) => {
+	try {
+		const submissionToken =
+			process.env.SCOUTING_SUBMISSION_TOKEN ??
+			process.env.PIT_SCOUTING_SUBMISSION_TOKEN;
+
+		if (!submissionToken) {
+			return res.status(503).json({
+				error: "Scouting submissions are not configured. Set SCOUTING_SUBMISSION_TOKEN on the server first."
+			});
+		}
+
+		if (req.body?.submissionToken !== submissionToken) {
+			return res.status(401).json({ error: "Incorrect scout passcode." });
+		}
+
+		const spreadsheetId = spreadsheetIdForEvent(req.params.eventKey);
+
+		if (!spreadsheetId) {
+			return res.status(404).json({ error: "No scouting sheet is configured for this event." });
+		}
+
+		const answers = req.body?.answers;
+
+		if (!answers || typeof answers !== "object" || Array.isArray(answers)) {
+			return res.status(400).json({ error: "A scouting response is required." });
+		}
+
+		const headerResponse = await sheets.spreadsheets.values.get({
+			spreadsheetId,
+			range: "'Scouting Raw Data'!1:1"
+		});
+
+		const headers = (headerResponse.data.values?.[0] ?? [])
+			.map(header => String(header).trim());
+
+		if (!headers.length) {
+			return res.status(500).json({ error: "The scouting sheet has no header row." });
+		}
+
+		/*
+			Do not use values.append here. Google Sheets can detect the existing
+			table starting in a later column when the earlier columns are blank,
+			which shifts a scouting response into the wrong fields. Find the next
+			row and explicitly write A through AF instead.
+		*/
+		const lastColumn = columnIndexToLetter(headers.length - 1);
+
+		const existingRowsResponse = await sheets.spreadsheets.values.get({
+			spreadsheetId,
+			range: `'Scouting Raw Data'!A:${lastColumn}`
+		});
+
+		const existingRows = existingRowsResponse.data.values ?? [];
+		const lastUsedRowIndex = existingRows.reduce(
+			(lastIndex, row, index) =>
+				row.some(value => String(value ?? "").trim() !== "")
+					? index
+					: lastIndex,
+			0
+		);
+
+		const nextRow = lastUsedRowIndex + 2;
+
+		await sheets.spreadsheets.values.update({
+			spreadsheetId,
+			range: `'Scouting Raw Data'!A${nextRow}:${lastColumn}${nextRow}`,
+			valueInputOption: "USER_ENTERED",
+			requestBody: {
+				values: [headers.map((header, index) =>
+					String(answers[`column-${index}`] ?? "")
+				)]
+			}
+		});
+
+		res.status(201).json({ ok: true });
+	} catch (error) {
+		console.error("SCOUTING WRITE ERROR:", error);
+		res.status(500).json({ error: error.message });
 	}
 });
 

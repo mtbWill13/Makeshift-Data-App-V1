@@ -1,0 +1,17 @@
+:root { --red:#ff3c32; --orange:#f2b305; --yellow:#ffe11c; --green:#4cdb54; --cyan:#34aadc; --black:#000; --white:#fff; --light-gray:#f4f4f4; --text-gray:#555; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--light-gray); color:var(--black); font-family:Arial,Helvetica,sans-serif; }
+.top-bar { height:10px; background:linear-gradient(to right,var(--red) 0 20%,var(--orange) 20% 40%,var(--yellow) 40% 60%,var(--green) 60% 80%,var(--cyan) 80%); }
+header { background:var(--black); color:var(--white); padding:42px 7vw 48px; }
+.header-content,main { max-width:1100px; margin:auto; }
+.eyebrow { color:var(--cyan); font-size:.85rem; font-weight:bold; letter-spacing:.16em; text-transform:uppercase; margin-bottom:12px; }
+h1 { font-size:clamp(2.5rem,6vw,5.5rem); letter-spacing:-.06em; line-height:.95; margin:0; }
+.header-description { color:#cfcfcf; line-height:1.6; max-width:600px; margin:22px 0; }
+.back-link { color:var(--cyan); font-weight:bold; text-decoration:none; }.back-link:hover { text-decoration:underline; }
+main { padding:38px 7vw 80px; }.form-shell { background:var(--white); border:2px solid var(--black); box-shadow:8px 8px 0 var(--black); padding:28px; }
+.event-row,.form-fields { display:grid; gap:18px; grid-template-columns:repeat(2,minmax(0,1fr)); }.event-row { margin-bottom:24px; }.full-width { grid-column:1 / -1; }
+.control-group { display:flex; flex-direction:column; gap:8px; }label { font-size:.78rem; font-weight:bold; letter-spacing:.06em; text-transform:uppercase; }
+input,select,textarea,button { background:var(--white); border:2px solid var(--black); font:inherit; padding:12px; }input,select,button { min-height:48px; }textarea { resize:vertical; }input:focus,select:focus,textarea:focus { border-color:var(--cyan); box-shadow:4px 4px 0 var(--cyan); outline:none; }
+button { background:var(--red); cursor:pointer; font-weight:bold; margin-top:28px; padding:0 28px; }button:hover:not(:disabled) { box-shadow:5px 5px 0 var(--black); transform:translate(-3px,-3px); }button:disabled { cursor:wait; opacity:.65; }.status { color:var(--text-gray); font-weight:bold; line-height:1.5; margin:0 0 24px; }
+.score-clicker { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:10px; }.score-clicker input { text-align:center; font-size:1.4rem; font-weight:bold; }.score-button { margin:0; min-width:72px; padding:0 16px; }
+@media(max-width:700px) { .event-row,.form-fields { grid-template-columns:1fr; }.full-width { grid-column:auto; } }
