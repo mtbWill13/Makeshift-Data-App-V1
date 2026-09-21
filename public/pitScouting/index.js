@@ -4,6 +4,9 @@ const formFields = document.getElementById("formFields");
 const formStatus = document.getElementById("formStatus");
 const submissionToken = document.getElementById("submissionToken");
 const submitButton = document.getElementById("submitButton");
+const FORM_TYPE = "pit-scouting";
+
+ScoutOffline.registerServiceWorker();
 
 const PIT_SCOUTING_COLUMNS = "B C D F G H J K L M Z AD AE AF AH".split(" ");
 
@@ -98,13 +101,50 @@ async function fetchJson(url, options) {
 	return data;
 }
 
+async function submitToServer(submission) {
+	return fetchJson(`/api/pitscouting/${submission.eventKey}`, {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({
+			submissionToken: submission.submissionToken,
+			answers: submission.answers
+		})
+	});
+}
+
+async function syncOfflineQueue() {
+	const result = await ScoutOffline.sync(FORM_TYPE, submitToServer);
+
+	if (result.synced) {
+		formStatus.textContent = `${result.synced} offline pit-scouting response${result.synced === 1 ? "" : "s"} synced to Google Sheets.`;
+	}
+
+	return result;
+}
+
 async function loadForm() {
 	pitScoutingForm.hidden = true;
 	formStatus.textContent = "Loading pit-scouting fields…";
 
 	try {
 		const { headers } = await fetchJson(`/api/pitscouting/${eventKey.value}/schema`);
-		const selectedColumns = PIT_SCOUTING_COLUMNS
+		ScoutOffline.saveSchema(FORM_TYPE, eventKey.value, { headers });
+		renderForm(headers, false);
+	} catch (error) {
+		const cached = ScoutOffline.cachedSchema(FORM_TYPE, eventKey.value);
+
+		if (cached) {
+			renderForm(cached.headers, true);
+			return;
+		}
+
+		formFields.innerHTML = "";
+		formStatus.textContent = error.message;
+	}
+}
+
+function renderForm(headers, offline) {
+	const selectedColumns = PIT_SCOUTING_COLUMNS
 			.map(columnLetter => ({
 				columnLetter: String(columnLetter).trim().toUpperCase(),
 				index: columnLetterToIndex(columnLetter)
@@ -122,15 +162,13 @@ async function loadForm() {
 			throw new Error("None of the column letters in PIT_SCOUTING_COLUMNS match this sheet's header row.");
 		}
 
-		formFields.innerHTML = selectedHeaders.map(fieldMarkup).join("");
-		pitScoutingForm.hidden = false;
-		formStatus.textContent = unavailableColumns.length
+	formFields.innerHTML = selectedHeaders.map(fieldMarkup).join("");
+	pitScoutingForm.hidden = false;
+	formStatus.textContent = offline
+		? `Offline mode — ${selectedHeaders.length} cached fields loaded. New submissions will be saved on this device until connection returns.`
+		: unavailableColumns.length
 			? `Ready — ${selectedHeaders.length} configured fields loaded. ${unavailableColumns.join(", ")} could not be found in this sheet.`
 			: `Ready — ${selectedHeaders.length} configured fields loaded.`;
-	} catch (error) {
-		formFields.innerHTML = "";
-		formStatus.textContent = error.message;
-	}
 }
 
 pitScoutingForm.addEventListener("submit", async event => {
@@ -144,25 +182,38 @@ pitScoutingForm.addEventListener("submit", async event => {
 		localStorage.scouterName = answers["Pit Scouter Name"];
 	}
 
+	const submission = {
+		type: FORM_TYPE,
+		eventKey: eventKey.value,
+		submissionToken: submissionToken.value,
+		answers
+	};
+
 	try {
-		await fetchJson(`/api/pitscouting/${eventKey.value}`, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({
-				submissionToken: submissionToken.value,
-				answers
-			})
-		});
+		if (!navigator.onLine) {
+			throw new TypeError("Device is offline");
+		}
+
+		await submitToServer(submission);
 
 		pitScoutingForm.reset();
 		formStatus.textContent = "Pit-scouting response submitted successfully.";
 		await loadForm();
 	} catch (error) {
-		formStatus.textContent = error.message;
+		if (error instanceof TypeError) {
+			await ScoutOffline.queueSubmission(submission);
+			pitScoutingForm.reset();
+			submissionToken.value = "";
+			formStatus.textContent = "Offline — pit-scouting response saved on this device and will sync automatically when online.";
+		} else {
+			formStatus.textContent = error.message;
+		}
 	} finally {
 		submitButton.disabled = false;
 	}
 });
 
 eventKey.addEventListener("change", loadForm);
+window.addEventListener("online", syncOfflineQueue);
+syncOfflineQueue();
 loadForm();

@@ -4,6 +4,9 @@ const formFields = document.getElementById("formFields");
 const formStatus = document.getElementById("formStatus");
 const submissionToken = document.getElementById("submissionToken");
 const submitButton = document.getElementById("submitButton");
+const FORM_TYPE = "match-scouting";
+
+ScoutOffline.registerServiceWorker();
 
 /*
   Match-scouting columns shown to scouts.
@@ -128,12 +131,49 @@ async function fetchJson(url, options) {
 	return data;
 }
 
+async function submitToServer(submission) {
+	return fetchJson(`/api/scouting/${submission.eventKey}`, {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({
+			submissionToken: submission.submissionToken,
+			answers: submission.answers
+		})
+	});
+}
+
+async function syncOfflineQueue() {
+	const result = await ScoutOffline.sync(FORM_TYPE, submitToServer);
+
+	if (result.synced) {
+		formStatus.textContent = `${result.synced} offline scouting response${result.synced === 1 ? "" : "s"} synced to Google Sheets.`;
+	}
+
+	return result;
+}
+
 async function loadForm() {
 	scoutingForm.hidden = true;
 	formStatus.textContent = "Loading scouting fields…";
 
 	try {
 		const { headers, booleanColumnIndexes = [] } = await fetchJson(`/api/scouting/${eventKey.value}/schema`);
+		ScoutOffline.saveSchema(FORM_TYPE, eventKey.value, { headers, booleanColumnIndexes });
+		renderForm(headers, booleanColumnIndexes, false);
+	} catch (error) {
+		const cached = ScoutOffline.cachedSchema(FORM_TYPE, eventKey.value);
+
+		if (cached) {
+			renderForm(cached.headers, cached.booleanColumnIndexes ?? [], true);
+			return;
+		}
+
+		formFields.innerHTML = "";
+		formStatus.textContent = error.message;
+	}
+}
+
+function renderForm(headers, booleanColumnIndexes, offline) {
 		const selectedColumns = SCOUTING_COLUMNS
 			.map(columnLetter => ({
 				columnLetter: String(columnLetter).trim().toUpperCase(),
@@ -156,15 +196,13 @@ async function loadForm() {
 			throw new Error("None of the column letters in SCOUTING_COLUMNS match this sheet's header row.");
 		}
 
-		formFields.innerHTML = selectedFields.map(fieldMarkup).join("");
-		scoutingForm.hidden = false;
-		formStatus.textContent = unavailableColumns.length
+	formFields.innerHTML = selectedFields.map(fieldMarkup).join("");
+	scoutingForm.hidden = false;
+	formStatus.textContent = offline
+		? `Offline mode — ${selectedFields.length} cached fields loaded. New submissions will be saved on this device until connection returns.`
+		: unavailableColumns.length
 			? `Ready — ${selectedFields.length} configured fields loaded. ${unavailableColumns.join(", ")} could not be found in this sheet.`
 			: `Ready — ${selectedFields.length} configured fields loaded.`;
-	} catch (error) {
-		formFields.innerHTML = "";
-		formStatus.textContent = error.message;
-	}
 }
 
 scoutingForm.addEventListener("submit", async event => {
@@ -174,22 +212,33 @@ scoutingForm.addEventListener("submit", async event => {
 	submitButton.disabled = true;
 	formStatus.textContent = "Submitting scouting response…";
 
+	const submission = {
+		type: FORM_TYPE,
+		eventKey: eventKey.value,
+		submissionToken: submissionToken.value,
+		answers
+	};
+
 	try {
-		await fetchJson(`/api/scouting/${eventKey.value}`, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({
-				submissionToken: submissionToken.value,
-				answers
-			})
-		});
+		if (!navigator.onLine) {
+			throw new TypeError("Device is offline");
+		}
+
+		await submitToServer(submission);
 
 		scoutingForm.reset();
 		submissionToken.value = "";
 		formStatus.textContent = "Scouting response submitted successfully.";
 		await loadForm();
 	} catch (error) {
-		formStatus.textContent = error.message;
+		if (error instanceof TypeError) {
+			await ScoutOffline.queueSubmission(submission);
+			scoutingForm.reset();
+			submissionToken.value = "";
+			formStatus.textContent = "Offline — scouting response saved on this device and will sync automatically when online.";
+		} else {
+			formStatus.textContent = error.message;
+		}
 	} finally {
 		submitButton.disabled = false;
 	}
@@ -211,4 +260,6 @@ formFields.addEventListener("click", event => {
 });
 
 eventKey.addEventListener("change", loadForm);
+window.addEventListener("online", syncOfflineQueue);
+syncOfflineQueue();
 loadForm();
