@@ -316,12 +316,12 @@ app.get("/api/pitscouting/:eventKey", async (req, res) => {
 	try {
 		const { eventKey } = req.params;
 
-    const sheetIds = {
-      "2026oncmp2": process.env.SCOUTING_SHEET_2026ONCMP2,
-      "2026ontor": process.env.SCOUTING_SHEET_2026ONTOR,
-      "2026onwin": process.env.SCOUTING_SHEET_2026ONWIN,
-      "2026test": process.env.SCOUTING_SHEET_2026TEST
-    };
+		const sheetIds = {
+			"2026oncmp2": process.env.SCOUTING_SHEET_2026ONCMP2,
+			"2026ontor": process.env.SCOUTING_SHEET_2026ONTOR,
+			"2026onwin": process.env.SCOUTING_SHEET_2026ONWIN,
+			"2026test": process.env.SCOUTING_SHEET_2026TEST
+		};
 
 		const spreadsheetId = sheetIds[eventKey];
 

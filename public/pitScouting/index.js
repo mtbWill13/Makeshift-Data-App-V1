@@ -145,30 +145,30 @@ async function loadForm() {
 
 function renderForm(headers, offline) {
 	const selectedColumns = PIT_SCOUTING_COLUMNS
-			.map(columnLetter => ({
-				columnLetter: String(columnLetter).trim().toUpperCase(),
-				index: columnLetterToIndex(columnLetter)
-			}))
-			.filter(column => column.index !== null && headers[column.index]);
+		.map(columnLetter => ({
+			columnLetter: String(columnLetter).trim().toUpperCase(),
+			index: columnLetterToIndex(columnLetter)
+		}))
+		.filter(column => column.index !== null && headers[column.index]);
 
-		const selectedHeaders = selectedColumns.map(column => headers[column.index]);
+	const selectedHeaders = selectedColumns.map(column => headers[column.index]);
 
-		const unavailableColumns = PIT_SCOUTING_COLUMNS.filter(columnLetter => {
-			const index = columnLetterToIndex(columnLetter);
-			return index === null || !headers[index];
-		});
+	const unavailableColumns = PIT_SCOUTING_COLUMNS.filter(columnLetter => {
+		const index = columnLetterToIndex(columnLetter);
+		return index === null || !headers[index];
+	});
 
-		if (!selectedHeaders.length) {
-			throw new Error("None of the column letters in PIT_SCOUTING_COLUMNS match this sheet's header row.");
-		}
+	if (!selectedHeaders.length) {
+		throw new Error("None of the column letters in PIT_SCOUTING_COLUMNS match this sheet's header row.");
+	}
 
 	formFields.innerHTML = selectedHeaders.map(fieldMarkup).join("");
 	pitScoutingForm.hidden = false;
 	formStatus.textContent = offline
-		? `Offline mode — ${selectedHeaders.length} cached fields loaded. New submissions will be saved on this device until connection returns.`
+		? `Offline mode: ${selectedHeaders.length} cached fields loaded. New submissions will be saved on this device until connection returns.`
 		: unavailableColumns.length
-			? `Ready — ${selectedHeaders.length} configured fields loaded. ${unavailableColumns.join(", ")} could not be found in this sheet.`
-			: `Ready — ${selectedHeaders.length} configured fields loaded.`;
+			? `Ready: ${selectedHeaders.length} configured fields loaded. ${unavailableColumns.join(", ")} could not be found in this sheet.`
+			: `Ready: ${selectedHeaders.length} configured fields loaded.`;
 }
 
 pitScoutingForm.addEventListener("submit", async event => {
@@ -204,7 +204,7 @@ pitScoutingForm.addEventListener("submit", async event => {
 			await ScoutOffline.queueSubmission(submission);
 			pitScoutingForm.reset();
 			submissionToken.value = "";
-			formStatus.textContent = "Offline — pit-scouting response saved on this device and will sync automatically when online.";
+			formStatus.textContent = "Offline pit-scouting response saved on this device and will sync automatically when online.";
 		} else {
 			formStatus.textContent = error.message;
 		}

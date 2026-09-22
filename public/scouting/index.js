@@ -88,7 +88,7 @@ function applyAssignment(headers) {
 	if (stationInput) stationInput.value = assignment.driverStation.toUpperCase();
 
 	assignmentStatus.textContent = match && teamNumber
-		? `Assigned to Qual ${assignment.matchNumber}, ${assignment.driverStation.toUpperCase()} — Team ${teamNumber}.`
+		? `Assigned to Qual ${assignment.matchNumber}, ${assignment.driverStation.toUpperCase()}: Team ${teamNumber}.`
 		: `Qual ${assignment.matchNumber} is not in the cached schedule yet.`;
 }
 
@@ -334,37 +334,37 @@ async function loadForm() {
 }
 
 function renderForm(headers, booleanColumnIndexes, offline) {
-		const selectedColumns = SCOUTING_COLUMNS
-			.map(columnLetter => ({
-				columnLetter: String(columnLetter).trim().toUpperCase(),
-				index: columnLetterToIndex(columnLetter)
-			}))
-			.filter(column => column.index !== null && headers[column.index]);
+	const selectedColumns = SCOUTING_COLUMNS
+		.map(columnLetter => ({
+			columnLetter: String(columnLetter).trim().toUpperCase(),
+			index: columnLetterToIndex(columnLetter)
+		}))
+		.filter(column => column.index !== null && headers[column.index]);
 
-		const selectedFields = selectedColumns.map(column => ({
-			header: headers[column.index],
-			index: column.index,
-			isBoolean: booleanColumnIndexes.includes(column.index)
-		}));
+	const selectedFields = selectedColumns.map(column => ({
+		header: headers[column.index],
+		index: column.index,
+		isBoolean: booleanColumnIndexes.includes(column.index)
+	}));
 
-		const unavailableColumns = SCOUTING_COLUMNS.filter(columnLetter => {
-			const index = columnLetterToIndex(columnLetter);
-			return index === null || !headers[index];
-		});
+	const unavailableColumns = SCOUTING_COLUMNS.filter(columnLetter => {
+		const index = columnLetterToIndex(columnLetter);
+		return index === null || !headers[index];
+	});
 
-		if (!selectedFields.length) {
-			throw new Error("None of the column letters in SCOUTING_COLUMNS match this sheet's header row.");
-		}
+	if (!selectedFields.length) {
+		throw new Error("None of the column letters in SCOUTING_COLUMNS match this sheet's header row.");
+	}
 
 	formFields.innerHTML = selectedFields.map(fieldMarkup).join("");
 	scoutingForm.hidden = false;
 	restorePersistentScoutFields();
 	applyAssignment(headers);
 	formStatus.textContent = offline
-		? `Offline mode — ${selectedFields.length} cached fields loaded. New submissions will be saved on this device until connection returns.`
+		? `Offline mode: ${selectedFields.length} cached fields loaded. New submissions will be saved on this device until connection returns.`
 		: unavailableColumns.length
-			? `Ready — ${selectedFields.length} configured fields loaded. ${unavailableColumns.join(", ")} could not be found in this sheet.`
-			: `Ready — ${selectedFields.length} configured fields loaded.`;
+			? `Ready: ${selectedFields.length} fields loaded. ${unavailableColumns.join(", ")} could not be found in this sheet.`
+			: `Ready: ${selectedFields.length} fields loaded.`;
 }
 
 scoutingForm.addEventListener("submit", async event => {
@@ -399,7 +399,7 @@ scoutingForm.addEventListener("submit", async event => {
 			scoutingForm.reset();
 			advanceMatchAssignment();
 			await loadForm();
-			formStatus.textContent = "Offline — scouting response saved on this device and will sync automatically when online.";
+			formStatus.textContent = "Offline scouting response saved on this device and will sync automatically when online.";
 		} else {
 			formStatus.textContent = error.message;
 		}
