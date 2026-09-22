@@ -21,7 +21,17 @@
         <h2>Send reports from this device</h2>
         <div class="controls">
           <label>Report type<select id="sendType"><option value="match-scouting">Match scouting</option><option value="pit-scouting">Pit scouting</option></select></label>
-          <label>Event key<input id="sendEvent" value="2026test" required></label>
+          <label>Event key <select name="EventKeys" id="EventKeys">
+          <option value="2026onham">McMaster</option>
+          <option value="2026onosh">Durham College</option>
+          <option value="2026onwat">Waterloo</option>
+          <option value="2026oncmp2" selected>Provincials Technology Division</option>
+          <option value="2026oncmp1">Provincials Science Division</option>
+          <option value="2026ontor">Humber</option>
+          <option value="2026onwin">Windsor</option>
+          <option value="2026test">test</option>
+
+        </select></label>
         </div>
         <div class="actions"><button id="prepareButton" type="button">Prepare saved reports</button><button id="downloadButton" type="button" disabled>Download backup file</button></div>
         <p id="sendStatus" class="status">Saved offline reports remain on this device after transfer.</p>
