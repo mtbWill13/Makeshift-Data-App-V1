@@ -4,15 +4,142 @@ const formFields = document.getElementById("formFields");
 const formStatus = document.getElementById("formStatus");
 const submissionToken = document.getElementById("submissionToken");
 const submitButton = document.getElementById("submitButton");
+const startingMatch = document.getElementById("startingMatch");
+const driverStation = document.getElementById("driverStation");
+const setAssignmentButton = document.getElementById("setAssignmentButton");
+const assignmentStatus = document.getElementById("assignmentStatus");
 const FORM_TYPE = "match-scouting";
+const ASSIGNMENT_STORAGE_KEY = "makeshift-match-assignment";
+const SCOUT_NAME_STORAGE_KEY = "makeshift-scout-name";
+const PASSCODE_STORAGE_KEY = "makeshift-scouting-passcode";
+let eventMatches = [];
 
 ScoutOffline.registerServiceWorker();
+
+function scheduleCacheKey(event) {
+	return `makeshift-match-schedule-${event}`;
+}
+
+function savedAssignment() {
+	try {
+		return JSON.parse(localStorage.getItem(ASSIGNMENT_STORAGE_KEY) || "null");
+	} catch {
+		return null;
+	}
+}
+
+function saveAssignment(assignment) {
+	localStorage.setItem(ASSIGNMENT_STORAGE_KEY, JSON.stringify(assignment));
+}
+
+function stationDetails(station) {
+	const match = /^([a-z]+)([1-3])$/i.exec(station || "");
+
+	return match
+		? { alliance: match[1].toLowerCase(), index: Number(match[2]) - 1 }
+		: null;
+}
+
+function currentScheduledMatch() {
+	const assignment = savedAssignment();
+
+	if (!assignment || assignment.eventKey !== eventKey.value) {
+		return null;
+	}
+
+	return eventMatches.find(match =>
+		match.level === "qm" && Number(match.number) === Number(assignment.matchNumber)
+	) ?? null;
+}
+
+function teamForAssignment() {
+	const assignment = savedAssignment();
+	const match = currentScheduledMatch();
+	const station = stationDetails(assignment?.driverStation);
+
+	if (!match || !station) {
+		return null;
+	}
+
+	const teamKey = match[station.alliance]?.team_keys?.[station.index];
+	return teamKey ? String(teamKey).replace(/^frc/i, "") : null;
+}
+
+function headerIndex(headers, expression) {
+	return headers.findIndex(header => expression.test(header));
+}
+
+function applyAssignment(headers) {
+	const assignment = savedAssignment();
+	const match = currentScheduledMatch();
+	const teamNumber = teamForAssignment();
+
+	if (!assignment || assignment.eventKey !== eventKey.value) {
+		assignmentStatus.textContent = "Set a starting match and driver station to assign teams automatically.";
+		return;
+	}
+
+	const matchInput = document.querySelector(`[name="column-${headerIndex(headers, /^match number$/i)}"]`);
+	const teamInput = document.querySelector(`[name="column-${headerIndex(headers, /^team number$/i)}"]`);
+	const stationInput = document.querySelector(`[name="column-${headerIndex(headers, /^driver station$/i)}"]`);
+
+	if (matchInput) matchInput.value = assignment.matchNumber;
+	if (teamInput) teamInput.value = teamNumber ?? "";
+	if (stationInput) stationInput.value = assignment.driverStation.toUpperCase();
+
+	assignmentStatus.textContent = match && teamNumber
+		? `Assigned to Qual ${assignment.matchNumber}, ${assignment.driverStation.toUpperCase()} — Team ${teamNumber}.`
+		: `Qual ${assignment.matchNumber} is not in the cached schedule yet.`;
+}
+
+async function loadMatchSchedule() {
+	try {
+		const matches = await fetchJson(`/api/events/${eventKey.value}/matches`);
+		eventMatches = Array.isArray(matches) ? matches : [];
+		localStorage.setItem(scheduleCacheKey(eventKey.value), JSON.stringify(eventMatches));
+	} catch (error) {
+		try {
+			eventMatches = JSON.parse(localStorage.getItem(scheduleCacheKey(eventKey.value)) || "[]");
+		} catch {
+			eventMatches = [];
+		}
+	}
+}
+
+function setMatchAssignment() {
+	const matchNumber = Number(startingMatch.value);
+
+	if (!Number.isInteger(matchNumber) || matchNumber < 1 || !driverStation.value) {
+		assignmentStatus.textContent = "Enter a starting match and select a driver station.";
+		return;
+	}
+
+	saveAssignment({
+		eventKey: eventKey.value,
+		matchNumber,
+		driverStation: driverStation.value
+	});
+
+	loadForm();
+}
+
+function advanceMatchAssignment() {
+	const assignment = savedAssignment();
+
+	if (!assignment || assignment.eventKey !== eventKey.value) {
+		return;
+	}
+
+	assignment.matchNumber += 1;
+	saveAssignment(assignment);
+	startingMatch.value = assignment.matchNumber;
+}
 
 /*
   Match-scouting columns shown to scouts.
   Add or remove Google Sheets column letters here to change the form.
 */
-const SCOUTING_COLUMNS = "B C D H K L M N R T".split(" ");
+const SCOUTING_COLUMNS = "B C D E H K L M N R T".split(" ");
 
 function escapeHtml(value) {
 	return String(value ?? "").replace(/[&<>"']/g, character => ({
@@ -30,6 +157,10 @@ function isTimestampField(header) {
 
 function isTeamNumberField(header) {
 	return /team number/i.test(header);
+}
+
+function isScoutNameField(header) {
+	return /scout(?:er)?\s*name/i.test(header);
 }
 
 function isYesNoField(header) {
@@ -77,6 +208,7 @@ function fieldMarkup(field) {
 	const fieldName = `column-${index}`;
 	const fieldId = `field-${columnIndexToLetter(index)}`;
 	const required = isTeamNumberField(header) ? "required" : "";
+	const isScoutName = isScoutNameField(header);
 
 	if (isBoolean || isYesNoField(header)) {
 		return `
@@ -111,13 +243,40 @@ function fieldMarkup(field) {
 
 	const type = isTeamNumberField(header) ? "number" : "text";
 	const readOnly = isTimestampField(header) ? "readonly" : "";
-	let value = isTimestampField(header) ? new Date().toISOString() : "";
+	let value = isTimestampField(header)
+		? new Date().toISOString()
+		: isScoutName
+			? localStorage.getItem(SCOUT_NAME_STORAGE_KEY) || ""
+			: "";
 
 	return `
     <div class="control-group">
       <label for="${fieldId}">${safeHeader}</label>
-      <input id="${fieldId}" name="${fieldName}" type="${type}" value="${value}" ${readOnly} ${required}>
+      <input id="${fieldId}" name="${fieldName}" type="${type}" value="${escapeHtml(value)}" ${isScoutName ? "data-scout-name" : ""} ${readOnly} ${required}>
     </div>`;
+}
+
+function savePersistentScoutFields() {
+	const scoutName = formFields.querySelector("[data-scout-name]")?.value.trim();
+
+	if (scoutName) {
+		localStorage.setItem(SCOUT_NAME_STORAGE_KEY, scoutName);
+	}
+
+	if (submissionToken.value) {
+		sessionStorage.setItem(PASSCODE_STORAGE_KEY, submissionToken.value);
+	}
+}
+
+function restorePersistentScoutFields() {
+	const scoutName = localStorage.getItem(SCOUT_NAME_STORAGE_KEY);
+	const scoutNameInput = formFields.querySelector("[data-scout-name]");
+
+	if (scoutName && scoutNameInput) {
+		scoutNameInput.value = scoutName;
+	}
+
+	submissionToken.value = sessionStorage.getItem(PASSCODE_STORAGE_KEY) || "";
 }
 
 async function fetchJson(url, options) {
@@ -157,6 +316,7 @@ async function loadForm() {
 	formStatus.textContent = "Loading scouting fields…";
 
 	try {
+		await loadMatchSchedule();
 		const { headers, booleanColumnIndexes = [] } = await fetchJson(`/api/scouting/${eventKey.value}/schema`);
 		ScoutOffline.saveSchema(FORM_TYPE, eventKey.value, { headers, booleanColumnIndexes });
 		renderForm(headers, booleanColumnIndexes, false);
@@ -198,6 +358,8 @@ function renderForm(headers, booleanColumnIndexes, offline) {
 
 	formFields.innerHTML = selectedFields.map(fieldMarkup).join("");
 	scoutingForm.hidden = false;
+	restorePersistentScoutFields();
+	applyAssignment(headers);
 	formStatus.textContent = offline
 		? `Offline mode — ${selectedFields.length} cached fields loaded. New submissions will be saved on this device until connection returns.`
 		: unavailableColumns.length
@@ -208,6 +370,7 @@ function renderForm(headers, booleanColumnIndexes, offline) {
 scoutingForm.addEventListener("submit", async event => {
 	event.preventDefault();
 
+	savePersistentScoutFields();
 	const answers = Object.fromEntries(new FormData(scoutingForm).entries());
 	submitButton.disabled = true;
 	formStatus.textContent = "Submitting scouting response…";
@@ -227,14 +390,15 @@ scoutingForm.addEventListener("submit", async event => {
 		await submitToServer(submission);
 
 		scoutingForm.reset();
-		submissionToken.value = "";
+		advanceMatchAssignment();
 		formStatus.textContent = "Scouting response submitted successfully.";
 		await loadForm();
 	} catch (error) {
 		if (error instanceof TypeError) {
 			await ScoutOffline.queueSubmission(submission);
 			scoutingForm.reset();
-			submissionToken.value = "";
+			advanceMatchAssignment();
+			await loadForm();
 			formStatus.textContent = "Offline — scouting response saved on this device and will sync automatically when online.";
 		} else {
 			formStatus.textContent = error.message;
@@ -260,6 +424,22 @@ formFields.addEventListener("click", event => {
 });
 
 eventKey.addEventListener("change", loadForm);
+setAssignmentButton.addEventListener("click", setMatchAssignment);
+submissionToken.addEventListener("input", () => {
+	if (submissionToken.value) {
+		sessionStorage.setItem(PASSCODE_STORAGE_KEY, submissionToken.value);
+	} else {
+		sessionStorage.removeItem(PASSCODE_STORAGE_KEY);
+	}
+});
 window.addEventListener("online", syncOfflineQueue);
+
+const assignment = savedAssignment();
+if (assignment?.eventKey === eventKey.value) {
+	startingMatch.value = assignment.matchNumber;
+	driverStation.value = assignment.driverStation;
+}
+
+restorePersistentScoutFields();
 syncOfflineQueue();
 loadForm();

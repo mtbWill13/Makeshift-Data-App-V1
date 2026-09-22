@@ -35,6 +35,31 @@
           </div>
         </div>
 
+        <section class="match-setup" aria-labelledby="matchSetupTitle">
+          <h2 id="matchSetupTitle">Match Assignment</h2>
+          <p>Set your starting qualification match and driver station once. The team and match number will update automatically after each report.</p>
+          <div class="event-row">
+            <div class="control-group">
+              <label for="startingMatch">Starting match</label>
+              <input id="startingMatch" type="number" min="1" inputmode="numeric" placeholder="e.g. 12">
+            </div>
+            <div class="control-group">
+              <label for="driverStation">Driver station</label>
+              <select id="driverStation">
+                <option value="">Select station</option>
+                <option value="red1">Red 1</option>
+                <option value="red2">Red 2</option>
+                <option value="red3">Red 3</option>
+                <option value="blue1">Blue 1</option>
+                <option value="blue2">Blue 2</option>
+                <option value="blue3">Blue 3</option>
+              </select>
+            </div>
+          </div>
+          <button id="setAssignmentButton" class="secondary-button" type="button">Set Assignment</button>
+          <p id="assignmentStatus" class="status" aria-live="polite">Load this event online once to cache its match schedule.</p>
+        </section>
+
         <p id="formStatus" class="status" aria-live="polite">Choose an event to load its scouting form.</p>
         <form id="scoutingForm" hidden>
           <div id="formFields" class="form-fields"></div>

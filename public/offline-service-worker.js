@@ -1,4 +1,4 @@
-const CACHE_NAME = "makeshift-scouting-v1";
+const CACHE_NAME = "makeshift-scouting-v2";
 const APP_SHELL = [
   "/scouting/",
   "/scouting/index.js",

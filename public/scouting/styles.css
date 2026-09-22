@@ -9,6 +9,7 @@ h1 { font-size:clamp(2.5rem,6vw,5.5rem); letter-spacing:-.06em; line-height:.95;
 .header-description { color:#cfcfcf; line-height:1.6; max-width:600px; margin:22px 0; }
 .back-link { color:var(--cyan); font-weight:bold; text-decoration:none; }.back-link:hover { text-decoration:underline; }
 main { padding:38px 7vw 80px; }.form-shell { background:var(--white); border:2px solid var(--black); box-shadow:8px 8px 0 var(--black); padding:28px; }
+.match-setup { border:2px solid var(--black); margin:0 0 24px; padding:22px; }.match-setup h2 { font-size:1.1rem; letter-spacing:.06em; margin:0 0 8px; text-transform:uppercase; }.match-setup p { color:var(--text-gray); font-weight:bold; line-height:1.45; margin:0 0 18px; }.secondary-button { background:var(--cyan); margin:0; }
 .event-row,.form-fields { display:grid; gap:18px; grid-template-columns:repeat(2,minmax(0,1fr)); }.event-row { margin-bottom:24px; }.full-width { grid-column:1 / -1; }
 .control-group { display:flex; flex-direction:column; gap:8px; }label { font-size:.78rem; font-weight:bold; letter-spacing:.06em; text-transform:uppercase; }
 input,select,textarea,button { background:var(--white); border:2px solid var(--black); font:inherit; padding:12px; }input,select,button { min-height:48px; }textarea { resize:vertical; }input:focus,select:focus,textarea:focus { border-color:var(--cyan); box-shadow:4px 4px 0 var(--cyan); outline:none; }
