@@ -701,7 +701,22 @@ async function printTeamData() {
 		scoutingData.filter(row =>
 			String(row["Team Number"] ?? "").trim()
 			=== teamNumber
-		);
+		)
+			.map(el => {
+				for (let row in el) {
+					if (!row) {
+						continue;
+					}
+
+					if (el[row] === "TRUE") {
+						el[row] = `<span style="color:#1E8F24">TRUE</span>`;
+					} else if (el[row] === "FALSE") {
+						el[row] = `<span style="color:var(--red)">FALSE</span>`;
+					}
+				}
+
+				return el;
+			});
 
 	const pitScoutingRows =
 		pitScoutingData.filter(row =>
