@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Offline Transfer | MakeShift Scouting</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <div class="top-bar"></div>
+    <header>
+      <div class="header-content">
+        <div class="eyebrow">MakeShift Robotics • FRC 4039</div>
+        <h1>Offline<br>Transfer</h1>
+        <p>Move saved scouting reports to the strategy computer without internet, then export or upload them when ready.</p>
+        <a href="/">← Back to Scouting Data Hub</a>
+      </div>
+    </header>
+    <main>
+      <section class="panel">
+        <h2>Send reports from this device</h2>
+        <div class="controls">
+          <label>Report type<select id="sendType"><option value="match-scouting">Match scouting</option><option value="pit-scouting">Pit scouting</option></select></label>
+          <label>Event key<input id="sendEvent" value="2026test" required></label>
+        </div>
+        <div class="actions"><button id="prepareButton" type="button">Prepare saved reports</button><button id="downloadButton" type="button" disabled>Download backup file</button></div>
+        <p id="sendStatus" class="status">Saved offline reports remain on this device after transfer.</p>
+        <div id="qrPanel" hidden>
+          <canvas id="qrCode" width="640" height="640"></canvas>
+          <p id="frameStatus" class="frame-status"></p>
+          <div class="actions"><button id="previousFrame" type="button">Previous</button><button id="nextFrame" type="button">Next</button><button id="autoFrame" type="button">Auto-play</button></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Receive reports on the strategy computer</h2>
+        <p>Scan every QR frame from the scout device. The transfer is accepted only after every numbered frame and its integrity check pass.</p>
+        <div class="actions"><button id="startCamera" type="button">Start QR scanner</button><button id="stopCamera" type="button" disabled>Stop scanner</button></div>
+        <video id="camera" playsinline muted hidden></video>
+        <p id="receiveStatus" class="status">Or import a saved backup file below.</p>
+        <label class="file-label">Import backup file<input id="fileInput" type="file" accept="application/json,.json"></label>
+        <div id="receivedActions" class="actions" hidden>
+          <button id="downloadCsv" type="button">Download CSV</button>
+          <button id="downloadReceivedBackup" type="button">Download received backup</button>
+          <label class="passcode-label">Scout passcode<input id="receiverPasscode" type="password" autocomplete="off"></label>
+          <button id="uploadToSheets" type="button">Upload verified reports to Sheets</button>
+        </div>
+      </section>
+    </main>
+    <script src="/offline.js"></script>
+    <script src="/vendor/qrcode.js"></script>
+    <script src="index.js"></script>
+  </body>
+</html>

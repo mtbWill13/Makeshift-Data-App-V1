@@ -44,7 +44,7 @@ const ScoutOffline = (() => {
     });
   }
 
-  async function queuedSubmissions(type) {
+  async function queuedSubmissions(type, includeTransferOnly = false) {
     const database = await openDatabase();
 
     return new Promise((resolve, reject) => {
@@ -53,7 +53,9 @@ const ScoutOffline = (() => {
 
       request.onsuccess = () => {
         database.close();
-        resolve(request.result.filter(item => item.type === type));
+        resolve(request.result.filter(item =>
+          item.type === type && (includeTransferOnly || !item.transferOnly)
+        ));
       };
       request.onerror = () => reject(request.error);
     });
@@ -63,6 +65,118 @@ const ScoutOffline = (() => {
     return withStore("readwrite", store => {
       store.delete(id);
     });
+  }
+
+  function transferId() {
+    return globalThis.crypto?.randomUUID?.() ||
+      `transfer-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }
+
+  function checksum(value) {
+    let hash = 2166136261;
+
+    for (const character of String(value)) {
+      hash ^= character.charCodeAt(0);
+      hash = Math.imul(hash, 16777619);
+    }
+
+    return (hash >>> 0).toString(36);
+  }
+
+  function bytesToBase64(bytes) {
+    let binary = "";
+
+    for (let index = 0; index < bytes.length; index += 8192) {
+      binary += String.fromCharCode(...bytes.subarray(index, index + 8192));
+    }
+
+    return btoa(binary);
+  }
+
+  function base64ToBytes(value) {
+    const binary = atob(value);
+    return Uint8Array.from(binary, character => character.charCodeAt(0));
+  }
+
+  async function encodeTransferPackage(transferPackage) {
+    const bytes = new TextEncoder().encode(JSON.stringify(transferPackage));
+
+    if ("CompressionStream" in window) {
+      const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream("gzip"));
+      return `G${bytesToBase64(new Uint8Array(await new Response(stream).arrayBuffer()))}`;
+    }
+
+    return `J${bytesToBase64(bytes)}`;
+  }
+
+  async function decodeTransferPackage(payload) {
+    const encoding = payload.slice(0, 1);
+    let bytes = base64ToBytes(payload.slice(1));
+
+    if (encoding === "G") {
+      if (!("DecompressionStream" in window)) {
+        throw new Error("This browser cannot open compressed scouting transfers.");
+      }
+
+      const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
+      bytes = new Uint8Array(await new Response(stream).arrayBuffer());
+    } else if (encoding !== "J") {
+      throw new Error("This is not a MakeShift scouting transfer.");
+    }
+
+    return JSON.parse(new TextDecoder().decode(bytes));
+  }
+
+  async function createTransferPackage(type, eventKey) {
+    const reports = (await queuedSubmissions(type, true))
+      .filter(report => report.eventKey === eventKey)
+      .map(({ submissionToken, id, transferOnly, ...report }) => report);
+
+    if (!reports.length) {
+      throw new Error("There are no saved reports for this event to transfer.");
+    }
+
+    return {
+      format: "makeshift-scouting-transfer",
+      version: 1,
+      transferId: transferId(),
+      createdAt: new Date().toISOString(),
+      type,
+      eventKey,
+      schema: cachedSchema(type, eventKey),
+      reports
+    };
+  }
+
+  async function importTransferPackage(transferPackage) {
+    if (transferPackage?.format !== "makeshift-scouting-transfer" ||
+        transferPackage.version !== 1 ||
+        !Array.isArray(transferPackage.reports)) {
+      throw new Error("This backup file is not a supported scouting transfer.");
+    }
+
+    const existing = await queuedSubmissions(transferPackage.type, true);
+    const alreadyImported = new Set(existing.map(report => report.transferKey).filter(Boolean));
+    let imported = 0;
+
+    if (!alreadyImported.has(transferPackage.transferId)) {
+      for (const report of transferPackage.reports) {
+        await queueSubmission({
+          ...report,
+          type: transferPackage.type,
+          eventKey: transferPackage.eventKey,
+          transferOnly: true,
+          transferKey: transferPackage.transferId
+        });
+        imported += 1;
+      }
+    }
+
+    if (transferPackage.schema) {
+      saveSchema(transferPackage.type, transferPackage.eventKey, transferPackage.schema);
+    }
+
+    return { imported, duplicate: alreadyImported.has(transferPackage.transferId) };
   }
 
   function schemaKey(type, eventKey) {
@@ -113,6 +227,11 @@ const ScoutOffline = (() => {
 
   return {
     cachedSchema,
+    checksum,
+    createTransferPackage,
+    decodeTransferPackage,
+    encodeTransferPackage,
+    importTransferPackage,
     queueSubmission,
     queuedSubmissions,
     registerServiceWorker,

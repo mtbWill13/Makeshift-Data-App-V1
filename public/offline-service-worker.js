@@ -1,4 +1,4 @@
-const CACHE_NAME = "makeshift-scouting-v2";
+const CACHE_NAME = "makeshift-scouting-v3";
 const APP_SHELL = [
   "/scouting/",
   "/scouting/index.js",
@@ -6,7 +6,11 @@ const APP_SHELL = [
   "/pitScouting/",
   "/pitScouting/index.js",
   "/pitScouting/styles.css",
-  "/offline.js"
+  "/offline.js",
+  "/transfer/",
+  "/transfer/index.js",
+  "/transfer/styles.css",
+  "/vendor/qrcode.js"
 ];
 
 self.addEventListener("install", event => {
