@@ -21,7 +21,7 @@
         <h2>Send reports from this device</h2>
         <div class="controls">
           <label>Report type<select id="sendType"><option value="match-scouting">Match scouting</option><option value="pit-scouting">Pit scouting</option></select></label>
-          <label>Event key <select name="EventKeys" id="EventKeys">
+          <label>Event <select id="sendEvent">
           <option value="2026onham">McMaster</option>
           <option value="2026onosh">Durham College</option>
           <option value="2026onwat">Waterloo</option>
@@ -36,7 +36,7 @@
         <div class="actions"><button id="prepareButton" type="button">Prepare saved reports</button><button id="downloadButton" type="button" disabled>Download backup file</button></div>
         <p id="sendStatus" class="status">Saved offline reports remain on this device after transfer.</p>
         <div id="qrPanel" hidden>
-          <canvas id="qrCode" width="640" height="640"></canvas>
+          <canvas id="qrCode" width="360" height="360"></canvas>
           <p id="frameStatus" class="frame-status"></p>
           <div class="actions"><button id="previousFrame" type="button">Previous</button><button id="nextFrame" type="button">Next</button><button id="autoFrame" type="button">Auto-play</button></div>
         </div>

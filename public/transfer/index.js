@@ -21,7 +21,7 @@ const receiverPasscode = document.getElementById("receiverPasscode");
 const uploadToSheets = document.getElementById("uploadToSheets");
 
 /* Smaller, high-error-correction frames scan more reliably from a phone screen. */
-const QR_CHUNK_SIZE = 400;
+const QR_CHUNK_SIZE = 220;
 let preparedPackage = null;
 let frames = [];
 let frameIndex = 0;
@@ -58,7 +58,7 @@ async function showFrame() {
 	await QRCode.toCanvas(qrCode, frames[frameIndex], {
 		errorCorrectionLevel: "Q",
 		margin: 1,
-		width: 640,
+		width: 360,
 		color: { dark: "#000000", light: "#ffffff" }
 	});
 	frameStatus.textContent = `Frame ${frameIndex + 1} of ${frames.length}`;
