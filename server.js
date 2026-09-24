@@ -96,7 +96,6 @@ app.get("/api/events/:eventKey/matches", async (req, res) => {
 app.get(`/api/teamName/:teamNumber`, async (req, res) => {
 	const team = await tba(`/team/frc${req.params.teamNumber}`);
 
-	console.log(team);
 	res.json({ name: team.nickname });
 });
 

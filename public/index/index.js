@@ -1732,3 +1732,9 @@ if (teams.length == 1) {
 }
 
 reloadData();
+
+document.addEventListener("wheel", event => {
+	if (document.activeElement.type == "number") {
+		document.activeElement.blur();
+	}
+});

@@ -4,6 +4,8 @@ const formFields = document.getElementById("formFields");
 const formStatus = document.getElementById("formStatus");
 const submissionToken = document.getElementById("submissionToken");
 const submitButton = document.getElementById("submitButton");
+const SCOUT_NAME_STORAGE_KEY = "makeshift-scout-name";
+const PASSCODE_STORAGE_KEY = "makeshift-scouting-passcode";
 const FORM_TYPE = "pit-scouting";
 
 ScoutOffline.registerServiceWorker();
@@ -78,16 +80,29 @@ function fieldMarkup(header) {
 	let value = isTimestampField(header) ? new Date().toISOString() : "";
 
 	if (safeHeader == "Pit Scouter Name") {
-		if (localStorage.scouterName) {
-			value = localStorage.scouterName;
+		if (localStorage[SCOUT_NAME_STORAGE_KEY]) {
+			value = localStorage[SCOUT_NAME_STORAGE_KEY];
 		}
 	}
+
+	console.log(safeHeader);
 
 	return `
     <div class="control-group">
       <label for="field-${safeHeader}">${safeHeader}</label>
       <input id="field-${safeHeader}" name="${safeHeader}" type="${type}" value="${value}" ${readOnly} ${required}>
     </div>`;
+}
+
+async function fetchJson(url, options) {
+	const response = await fetch(url, options);
+	const data = await response.json().catch(() => ({}));
+
+	if (!response.ok) {
+		throw new Error(data.error || "Could not complete the request.");
+	}
+
+	return data;
 }
 
 async function fetchJson(url, options) {
@@ -123,6 +138,7 @@ async function syncOfflineQueue() {
 }
 
 async function loadForm() {
+	submissionToken.value = localStorage[PASSCODE_STORAGE_KEY] ?? "";
 	pitScoutingForm.hidden = true;
 	formStatus.textContent = "Loading pit-scouting fields…";
 
@@ -179,7 +195,15 @@ pitScoutingForm.addEventListener("submit", async event => {
 	formStatus.textContent = "Submitting pit-scouting response…";
 
 	if (answers["Pit Scouter Name"]) {
-		localStorage.scouterName = answers["Pit Scouter Name"];
+		localStorage[SCOUT_NAME_STORAGE_KEY] = answers["Pit Scouter Name"];
+	}
+
+	console.log(event);
+
+	console.log(answers);
+
+	if (submissionToken.value) {
+		localStorage[PASSCODE_STORAGE_KEY] = submissionToken.value;
 	}
 
 	const submission = {

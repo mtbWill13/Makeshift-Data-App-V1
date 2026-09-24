@@ -178,6 +178,7 @@ async function startScanner() {
 			} catch { /* Keep scanning after a temporary camera decode failure. */ }
 		}, 400);
 	} catch (error) {
+		console.log(error);
 		receiveStatus.textContent = `Camera could not start: ${error.message}`;
 	}
 }

@@ -49,19 +49,17 @@ body {
 
 .top-bar {
 	height: 10px;
-	background: linear-gradient(
-	to right,
-	var(--red) 0%,
-	var(--red) 20%,
-	var(--orange) 20%,
-	var(--orange) 40%,
-	var(--yellow) 40%,
-	var(--yellow) 60%,
-	var(--green) 60%,
-	var(--green) 80%,
-	var(--cyan) 80%,
-	var(--cyan) 100%
-	);
+	background: linear-gradient(to right,
+			var(--red) 0%,
+			var(--red) 20%,
+			var(--orange) 20%,
+			var(--orange) 40%,
+			var(--yellow) 40%,
+			var(--yellow) 60%,
+			var(--green) 60%,
+			var(--green) 80%,
+			var(--cyan) 80%,
+			var(--cyan) 100%);
 }
 
 header {
@@ -360,51 +358,50 @@ button:hover {
 
 @media (max-width: 900px) {
 	.controls {
-	grid-template-columns: 1fr;
+		grid-template-columns: 1fr;
 	}
 
 	.top-stats {
-	grid-template-columns: 1fr;
+		grid-template-columns: 1fr;
 	}
 
 	.data-grid {
-	grid-template-columns: repeat(2, 1fr);
+		grid-template-columns: repeat(2, 1fr);
 	}
 
 	.scouting-list {
-	grid-template-columns: 1fr;
+		grid-template-columns: 1fr;
 	}
 }
 
 @media (max-width: 550px) {
 	header {
-	padding: 32px 6vw 38px;
+		padding: 32px 6vw 38px;
 	}
 
 	main {
-	padding: 28px 6vw 60px;
+		padding: 28px 6vw 60px;
 	}
 
 	.data-grid {
-	grid-template-columns: 1fr;
+		grid-template-columns: 1fr;
 	}
 
 	.controls {
-	padding: 18px;
+		padding: 18px;
 	}
 
 	.stat-card {
-	min-height: 160px;
+		min-height: 160px;
 	}
 }
 
-.team-heading{
-	display:flex;
+.team-heading {
+	display: flex;
 
 	flex-direction: row;
 
 	align-items: center;
-	/* justify-content: center; */
 
 	height: 100%;
 
@@ -412,22 +409,43 @@ button:hover {
 	align-self: center;
 }
 
-.teamImage{
-	display:block;
+.team-heading-container {
+	display: flex;
 
-	border-radius: 3px; 
-	flex-grow: 1;
-	padding: 0;
-	margin: 0;
-
-	margin-left: 2vw;
-}
-
-.team-heading-container{
-	display:flex;
 	flex-direction: row;
 	padding: 0;
 
 	align-items: center;
 	justify-content: center;
+}
+
+.teamImage {
+	border-radius: 3px;
+
+	padding: 0;
+	margin: 0;
+
+	/* align-self: stretch; */
+
+	margin-left: 1vw;
+}
+
+/* button, */
+/* div:not(.scouting-card-header):not(.scouting-row), */
+/* section, */
+/* input, */
+/* select, */
+/* article, */
+/* a { */
+/* 	border-radius: 1vw !important; */
+/* } */
+
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+	-webkit-appearance: none;
+	margin: 0;
+}
+
+input {
+	-moz-appearance: textfield;
 }
