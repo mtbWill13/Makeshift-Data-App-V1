@@ -278,6 +278,9 @@ button:hover {
 	font-weight: bold;
 }
 
+.trend-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }
+.performance-chart { background: var(--white); border: 2px solid var(--black); box-shadow: 6px 6px 0 var(--black); margin: 0; padding: 20px; }.chart-heading { align-items: flex-start; display: flex; flex-direction: column; gap: 10px; }.chart-heading h3 { font-size: 1rem; letter-spacing: .06em; margin: 0; text-transform: uppercase; }.chart-legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: .75rem; font-weight: bold; }.chart-legend span { align-items: center; display: inline-flex; gap: 5px; }.chart-legend i { display: inline-block; height: 11px; width: 11px; }.performance-chart svg { display: block; height: auto; margin-top: 12px; max-width: 100%; width: 100%; }.chart-grid text,.chart-labels text { fill: var(--text-gray); font: bold 13px Arial, sans-serif; }.chart-note { color: var(--text-gray); font-size: .78rem; font-weight: bold; line-height: 1.4; margin: 8px 0 0; }.empty-chart p { color: var(--text-gray); font-weight: bold; }
+
 @media (max-width: 800px) {
 	.controls {
 		grid-template-columns: 1fr;
@@ -309,4 +312,6 @@ button:hover {
 	.summary {
 		grid-template-columns: 1fr;
 	}
+
+	.trend-grid { grid-template-columns: 1fr; }
 }

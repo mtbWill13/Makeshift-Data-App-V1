@@ -84,12 +84,13 @@ function applyAssignment(headers) {
 	const stationInput = document.querySelector(`[name="column-${headerIndex(headers, /^driver station$/i)}"]`);
 
 	if (matchInput) matchInput.value = assignment.matchNumber;
-	if (teamInput) teamInput.value = teamNumber ?? "";
+	/* Schedule lookup is optional: never erase a team number the scout enters manually. */
+	if (teamInput && teamNumber) teamInput.value = teamNumber;
 	if (stationInput) stationInput.value = assignment.driverStation.toUpperCase();
 
 	assignmentStatus.textContent = match && teamNumber
 		? `Assigned to Qual ${assignment.matchNumber}, ${assignment.driverStation.toUpperCase()}: Team ${teamNumber}.`
-		: `Qual ${assignment.matchNumber} is not in the cached schedule yet.`;
+		: `Schedule unavailable for Qual ${assignment.matchNumber}. Enter the team number manually; scouting and offline saving still work.`;
 }
 
 async function loadMatchSchedule() {

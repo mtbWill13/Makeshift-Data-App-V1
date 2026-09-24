@@ -697,26 +697,9 @@ async function printTeamData() {
 		teamData[teamKey];
 
 
-	const scoutingRows =
-		scoutingData.filter(row =>
-			String(row["Team Number"] ?? "").trim()
-			=== teamNumber
-		)
-			.map(el => {
-				for (let row in el) {
-					if (!row) {
-						continue;
-					}
-
-					if (el[row] === "TRUE") {
-						el[row] = `<span style="color:#1E8F24">TRUE</span>`;
-					} else if (el[row] === "FALSE") {
-						el[row] = `<span style="color:var(--red)">FALSE</span>`;
-					}
-				}
-
-				return el;
-			});
+	const scoutingRows = scoutingData.filter(row =>
+		String(row["Team Number"] ?? "").trim() === teamNumber
+	);
 
 	const pitScoutingRows =
 		pitScoutingData.filter(row =>
@@ -972,6 +955,8 @@ async function printTeamData() {
 			statbotics?.epa?.breakdown?.endgame_points
 		);
 
+	const trendPoints = performanceTrendPoints(scoutingRows);
+
 	function averagePowerRating() {
 		let totalPoints = 0;
 		let numEntries = 0;
@@ -1100,6 +1085,8 @@ async function printTeamData() {
           </div>
 
         </section>
+
+        ${performanceTrendChart(trendPoints, "Scouting average by match")}
 
         <!-- Event Results -->
 
@@ -1580,7 +1567,11 @@ Own Score vs Prediction  </div>
                           </span>
 
                           <strong>
-                            ${value ?? "—"}
+							${value === "TRUE"
+								? `<span class="scout-true">TRUE</span>`
+								: value === "FALSE"
+									? `<span class="scout-false">FALSE</span>`
+									: value ?? "—"}
                           </strong>
 
                         </div>

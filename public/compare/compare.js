@@ -159,6 +159,7 @@ function buildProfile(teamNumber, data) {
 			pitRows,
 			"What language is your robot programmed in?",
 		),
+		trendPoints: performanceTrendPoints(scoutingRows),
 	};
 }
 
@@ -206,6 +207,8 @@ function renderComparison(a, b) {
 	results.innerHTML = `
         <div class="comparison-heading"><div><h2 class="team-name">Team ${escapeHtml(a.number)}</h2><p class="team-detail">${a.scoutingCount} scouting reports</p></div><div class="vs">VS</div><div><h2 class="team-name right">Team ${escapeHtml(b.number)}</h2><p class="team-detail right">${b.scoutingCount} scouting reports</p></div></div>
         <section class="summary"><div class="summary-card"><div class="summary-label">Comparison edge</div><div class="summary-value">${summary}</div><div class="summary-note">Based on available OPR, CCWM, and scouting scoring data.</div></div><div class="summary-card"><div class="summary-label">Event</div><div class="summary-value">${escapeHtml(eventSelect.selectedOptions[0].text)}</div><div class="summary-note">Green cells indicate the stronger numeric value.</div></div></section>
+        <h3 class="section-title">Scouting average over matches</h3>
+        <section class="trend-grid">${performanceTrendChart(a.trendPoints, `Team ${a.number}: scouting average`)}${performanceTrendChart(b.trendPoints, `Team ${b.number}: scouting average`)}</section>
         <h3 class="section-title">Event performance</h3>
         <table class="comparison-table"><thead><tr><th>Stat</th><th>Team ${escapeHtml(a.number)}</th><th>Team ${escapeHtml(b.number)}</th></tr></thead><tbody>
           ${numericRow("OPR", a.opr, b.opr, { digits: 2 })}${numericRow("DPR", a.dpr, b.dpr, { digits: 2, lowerIsBetter: true })}${numericRow("CCWM", a.ccwm, b.ccwm, { digits: 2 })}${numericRow("Total EPA", a.totalEpa, b.totalEpa)}${numericRow("Auto EPA", a.autoEpa, b.autoEpa)}${numericRow("Teleop EPA", a.teleopEpa, b.teleopEpa)}${numericRow("Endgame EPA", a.endgameEpa, b.endgameEpa)}${numericRow("Matches played", a.matches, b.matches, { digits: 0 })}

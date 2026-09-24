@@ -353,6 +353,36 @@ button:hover {
 }
 
 /* =========================
+	PERFORMANCE TREND CHART
+========================= */
+
+.performance-chart {
+	background: var(--white);
+	border: 2px solid var(--black);
+	box-shadow: 7px 7px 0 var(--black);
+	margin: 30px 0 46px;
+	padding: 22px;
+}
+
+.chart-heading {
+	display: flex;
+	justify-content: space-between;
+	align-items: start;
+	gap: 16px;
+}
+
+.chart-heading h3 {
+	font-size: 1.1rem;
+	letter-spacing: .06em;
+	margin: 0;
+	text-transform: uppercase;
+}
+
+.chart-legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: .78rem; font-weight: bold; }
+.chart-legend span { display: inline-flex; align-items: center; gap: 5px; }.chart-legend i { width: 12px; height: 12px; display: inline-block; }
+.performance-chart svg { display: block; height: auto; margin-top: 18px; max-width: 100%; width: 100%; }.chart-grid text,.chart-labels text { fill: var(--text-gray); font: bold 13px Arial, sans-serif; }.chart-note { color: var(--text-gray); font-size: .8rem; font-weight: bold; margin: 10px 0 0; }.empty-chart p { color: var(--text-gray); font-weight: bold; }
+
+/* =========================
 	RESPONSIVE
 ========================= */
 
@@ -372,6 +402,8 @@ button:hover {
 	.scouting-list {
 		grid-template-columns: 1fr;
 	}
+
+	.chart-heading { flex-direction: column; }
 }
 
 @media (max-width: 550px) {

@@ -1,0 +1,204 @@
+:root {
+  color-scheme: dark;
+  --black: #f7f2e8;
+  --white: #1c212d;
+  --light-gray: #080a10;
+  --mid-gray: rgba(247, 242, 232, 0.14);
+  --text-gray: #b6aea1;
+  --red: #FF3C32;
+  --orange: #F2B305;
+  --yellow: #FFE11C;
+  --green: #4CDB54;
+  --cyan: #34AADC;
+}
+
+* { -webkit-tap-highlight-color: transparent; }
+
+body {
+  background: #080a10;
+  color: var(--black);
+  letter-spacing: -0.01em;
+}
+
+.top-bar {
+  display: flex;
+  height: 7px;
+  overflow: hidden;
+}
+
+.top-bar i { flex: 1; }
+.top-bar i:nth-child(1) { background: var(--red); }
+.top-bar i:nth-child(2) { background: var(--orange); }
+.top-bar i:nth-child(3) { background: var(--yellow); }
+.top-bar i:nth-child(4) { background: var(--green); }
+.top-bar i:nth-child(5) { background: var(--cyan); }
+
+.compare-link {
+  background: #332326;
+  border-color: rgba(255, 125, 115, 0.48);
+  color: var(--red);
+}
+
+.compare-link.nav-compare { background: #3d2c22; border-color: rgba(255, 174, 109, 0.48); color: var(--orange); }
+.compare-link.nav-alliance { background: #3d3520; border-color: rgba(243, 214, 110, 0.48); color: var(--yellow); }
+.compare-link.nav-pit { background: #203d31; border-color: rgba(117, 216, 163, 0.48); color: var(--green); }
+.compare-link.nav-match { background: #332326; border-color: rgba(255, 125, 115, 0.48); color: var(--red); }
+.compare-link.nav-transfer { background: #18343e; border-color: rgba(52, 170, 220, 0.48); color: var(--cyan); }
+
+.compare-link:hover {
+  filter: brightness(1.16);
+}
+
+header {
+  background: #0e1119;
+  border-bottom: 1px solid rgba(247, 242, 232, 0.10);
+  box-shadow: 0 14px 48px rgba(0, 0, 0, 0.18);
+  color: #f7f2e8;
+}
+
+.eyebrow { color: var(--orange); font-family: Roboto, Arial, Helvetica, sans-serif; font-weight: 700; letter-spacing: 0.12em; }
+.header-description, header p { color: #c1b9ad; }
+body, input, select, textarea, button { font-family: Roboto, Arial, Helvetica, sans-serif; }
+h1, h2, h3, h4 { font-family: Roboto, Arial, Helvetica, sans-serif; letter-spacing: -0.035em; }
+
+a, .back-link, .compare-link, .external-link { color: var(--yellow); }
+
+.compare-link,
+.back-link {
+  border: 1px solid rgba(243, 214, 110, 0.30);
+  border-radius: 999px;
+  padding: 9px 14px;
+  transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+.compare-link:hover,
+.back-link:hover {
+  background: rgba(243, 214, 110, 0.13);
+  border-color: rgba(243, 214, 110, 0.55);
+  text-decoration: none;
+  transform: translateY(-1px);
+}
+
+.controls,
+.form-shell,
+.panel,
+.summary-card,
+.stat-card,
+.data-item,
+.scouting-card,
+.performance-chart,
+.chart-card,
+.individual-table-card,
+.alliance-inputs,
+.match-setup,
+.loading,
+.empty-state {
+  background: #1c212d !important;
+  border: 1px solid rgba(247, 242, 232, 0.14) !important;
+  border-radius: 20px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18) !important;
+}
+
+.stat-card:nth-child(1), .summary-card:first-child { background: #352326 !important; border-color: rgba(255, 125, 115, 0.34) !important; }
+.stat-card:nth-child(2), .summary-card:last-child { background: #3e3121 !important; border-color: rgba(255, 174, 109, 0.32) !important; }
+.stat-card:nth-child(3) { background: #203d31 !important; border-color: rgba(117, 216, 163, 0.30) !important; }
+
+.controls,
+.form-shell { border-radius: 24px; }
+.match-setup { border-radius: 16px; }
+
+input,
+select,
+textarea {
+  background: #0d1017 !important;
+  border: 1px solid rgba(247, 242, 232, 0.17) !important;
+  border-radius: 12px;
+  color: #f7f2e8 !important;
+  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+}
+
+input::placeholder,
+textarea::placeholder { color: #7f899b; }
+
+input:focus,
+select:focus,
+textarea:focus {
+  background: #10151d !important;
+  border-color: rgba(243, 214, 110, 0.9) !important;
+  box-shadow: 0 0 0 4px rgba(243, 214, 110, 0.16) !important;
+}
+
+button,
+.secondary-button {
+  background: var(--red) !important;
+  border: 1px solid rgba(255, 193, 187, 0.44) !important;
+  border-radius: 12px;
+  box-shadow: none !important;
+  color: #07101e !important;
+  font-weight: 750;
+  transition: filter 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+
+button:hover:not(:disabled),
+.secondary-button:hover:not(:disabled) {
+  box-shadow: none !important;
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+
+button:disabled { opacity: 0.48; }
+
+/* MakeShift button colours */
+.secondary-button,
+#prepareButton,
+#startCamera,
+#compareButton { background: var(--orange) !important; border-color: rgba(255, 214, 170, 0.48) !important; }
+
+#downloadButton,
+#downloadCsv,
+#downloadReceivedBackup,
+#previousFrame,
+#nextFrame,
+#autoFrame,
+.score-button { background: var(--yellow) !important; border-color: rgba(255, 236, 154, 0.5) !important; }
+
+#uploadToSheets { background: var(--green) !important; border-color: rgba(184, 255, 215, 0.46) !important; }
+
+#stopCamera { background: var(--red) !important; border-color: rgba(255, 193, 187, 0.38) !important; }
+
+/* Every submission uses coral, including match and pit scouting. */
+#submitButton,
+#button { background: var(--red) !important; border-color: rgba(255, 193, 187, 0.44) !important; }
+
+.comparison-table,
+.comparison-table thead th,
+.comparison-table td,
+.comparison-table th,
+table { border-color: rgba(247, 242, 232, 0.12) !important; }
+
+.comparison-table,
+.comparison-table thead th { background: #0e1119 !important; }
+.comparison-table thead th { color: #f7f2e8; }
+.comparison-table { border: 1px solid rgba(247, 242, 232, 0.14) !important; border-radius: 16px; overflow: hidden; }
+.comparison-table tbody tr { background: #171b25; }
+.comparison-table tbody tr:nth-child(even) { background: #1b202b; }
+.comparison-table td:first-child, .data-item-label, .chart-note, .status { color: var(--text-gray) !important; }
+.winner { background: rgba(89, 199, 151, 0.20) !important; color: #c4ffe3; }
+
+.scouting-card-header,
+.scouting-row { border-color: rgba(247, 242, 232, 0.12) !important; }
+
+.scout-true { color: var(--green); }
+.scout-false { color: var(--red); }
+
+#qrCode,
+#camera { border: 1px solid rgba(247, 242, 232, 0.22) !important; border-radius: 16px; }
+
+.chart-grid line { stroke: rgba(247, 242, 232, 0.14); }
+.chart-grid text, .chart-labels text { fill: #b6aea1 !important; }
+
+@media (max-width: 700px) {
+  .controls,
+  .form-shell,
+  .panel { border-radius: 18px; }
+}
