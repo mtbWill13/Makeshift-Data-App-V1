@@ -1,4 +1,4 @@
-const CACHE_NAME = "makeshift-scouting-v9";
+const CACHE_NAME = "makeshift-scouting-v12";
 const APP_SHELL = [
   "/scouting/",
   "/scouting/index.js",
@@ -10,6 +10,9 @@ const APP_SHELL = [
   "/transfer/",
   "/transfer/index.js",
   "/transfer/styles.css",
+  "/event/",
+  "/event/index.js",
+  "/event/styles.css",
   "/theme.css",
   "/vendor/qrcode.js"
 ];

@@ -1716,6 +1716,12 @@ setInterval(
 
 
 /* INITIAL LOAD */
+const eventFromUrl = new URL(window.location).searchParams.get("event");
+
+if ([...eventKeySelect.options].some(option => option.value === eventFromUrl)) {
+	eventKeySelect.value = eventFromUrl;
+}
+
 const teams = getTeamsFromUrl();
 
 if (teams.length == 1) {

@@ -44,6 +44,7 @@ body {
 .compare-link.nav-pit { background: #203d31; border-color: rgba(117, 216, 163, 0.48); color: var(--green); }
 .compare-link.nav-match { background: #332326; border-color: rgba(255, 125, 115, 0.48); color: var(--red); }
 .compare-link.nav-transfer { background: #18343e; border-color: rgba(52, 170, 220, 0.48); color: var(--cyan); }
+.compare-link.nav-event { background: #18343e; border-color: rgba(52, 170, 220, 0.48); color: var(--cyan); }
 
 .compare-link:hover {
   filter: brightness(1.16);
@@ -187,6 +188,19 @@ table { border-color: rgba(247, 242, 232, 0.12) !important; }
 
 .scouting-card-header,
 .scouting-row { border-color: rgba(247, 242, 232, 0.12) !important; }
+
+.team-row {
+  background: #1c212d;
+  border: 1px solid rgba(247, 242, 232, 0.14);
+  border-radius: 16px;
+  color: var(--black);
+  transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+.team-row:hover {
+  background: #252c3a;
+  border-color: rgba(52, 170, 220, 0.48);
+}
 
 .scout-true { color: var(--green); }
 .scout-false { color: var(--red); }

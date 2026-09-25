@@ -133,13 +133,7 @@ app.get("/api/scouting/:eventKey", async (req, res) => {
 	try {
 		const { eventKey } = req.params;
 
-		const sheetIds = {
-			"2026oncmp2": process.env.SCOUTING_SHEET_2026ONCMP2,
-			"2026ontor": process.env.SCOUTING_SHEET_2026ONTOR,
-			"2026onwin": process.env.SCOUTING_SHEET_2026ONWIN
-		};
-
-		const spreadsheetId = sheetIds[eventKey];
+		const spreadsheetId = spreadsheetIdForEvent(eventKey);
 
 		console.log("Spreadsheet ID:", spreadsheetId);
 
@@ -482,6 +476,32 @@ app.get("/api/statbotics/team-event/:team/:event", async (req, res) => {
 			error: "Could not contact Statbotics",
 			details: error.message
 		});
+	}
+});
+
+app.get("/api/statbotics/event-teams/:event", async (req, res) => {
+	const query = new URLSearchParams({
+		event: req.params.event,
+		limit: "1000"
+	});
+
+	try {
+		const response = await fetch(`https://api.statbotics.io/v3/team_events?${query}`, {
+			headers: { Accept: "application/json" }
+		});
+		const data = await response.json().catch(() => ({}));
+
+		if (!response.ok) {
+			return res.status(response.status).json({
+				error: `Statbotics returned ${response.status}`,
+				details: data
+			});
+		}
+
+		res.json(Array.isArray(data) ? data : []);
+	} catch (error) {
+		console.error("Statbotics event-teams connection error:", error.message);
+		res.status(502).json({ error: "Could not contact Statbotics" });
 	}
 });
 

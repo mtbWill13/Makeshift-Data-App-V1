@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Event Rankings | MakeShift Scouting Data Hub</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="/theme.css">
+  </head>
+  <body>
+    <div class="top-bar" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+    <header>
+      <div class="header-content">
+        <div class="eyebrow">MakeShift Robotics • FRC 4039</div>
+        <h1>Event<br>Rankings</h1>
+        <p>Compare every team at an event by OPR, scouting average, and EPA.</p>
+        <a class="back-link" href="/">← Back to Scouting Data Hub</a>
+      </div>
+    </header>
+    <main>
+      <section class="controls">
+        <label for="eventKey">Event
+          <select id="eventKey">
+            <option value="2026onham">McMaster</option>
+            <option value="2026onosh">Durham College</option>
+            <option value="2026onwat">Waterloo</option>
+            <option value="2026oncmp2" selected>Provincials Technology Division</option>
+            <option value="2026oncmp1">Provincials Science Division</option>
+            <option value="2026ontor">Humber</option>
+            <option value="2026onwin">Windsor</option>
+            <option value="2026test">Test Event</option>
+          </select>
+        </label>
+        <label for="sortBy">Sort by
+          <select id="sortBy">
+            <option value="rank">Rank</option>
+            <option value="opr">OPR</option>
+            <option value="scouting">Scouting average</option>
+            <option value="epa">EPA</option>
+          </select>
+        </label>
+        <button id="loadButton" type="button">Load Event</button>
+      </section>
+      <p id="status" class="status" aria-live="polite"></p>
+      <section id="teamList" class="team-list" aria-live="polite"></section>
+    </main>
+    <script src="index.js"></script>
+  </body>
+</html>
