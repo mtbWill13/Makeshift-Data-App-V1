@@ -182,6 +182,7 @@ button:hover {
 .loading {
 	font-size: 1.2rem;
 	font-weight: bold;
+	padding: 30px;
 }
 
 .team-heading {
@@ -378,9 +379,51 @@ button:hover {
 	text-transform: uppercase;
 }
 
-.chart-legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: .78rem; font-weight: bold; }
-.chart-legend span { display: inline-flex; align-items: center; gap: 5px; }.chart-legend i { width: 12px; height: 12px; display: inline-block; }
-.performance-chart svg { display: block; height: auto; margin-top: 18px; max-width: 100%; width: 100%; }.chart-grid text,.chart-labels text { fill: var(--text-gray); font: bold 13px Arial, sans-serif; }.chart-note { color: var(--text-gray); font-size: .8rem; font-weight: bold; margin: 10px 0 0; }.empty-chart p { color: var(--text-gray); font-weight: bold; }
+.chart-legend {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px;
+	font-size: .78rem;
+	font-weight: bold;
+}
+
+.chart-legend span {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+}
+
+.chart-legend i {
+	width: 12px;
+	height: 12px;
+	display: inline-block;
+}
+
+.performance-chart svg {
+	display: block;
+	height: auto;
+	margin-top: 18px;
+	max-width: 100%;
+	width: 100%;
+}
+
+.chart-grid text,
+.chart-labels text {
+	fill: var(--text-gray);
+	font: bold 13px Arial, sans-serif;
+}
+
+.chart-note {
+	color: var(--text-gray);
+	font-size: .8rem;
+	font-weight: bold;
+	margin: 10px 0 0;
+}
+
+.empty-chart p {
+	color: var(--text-gray);
+	font-weight: bold;
+}
 
 /* =========================
 	RESPONSIVE
@@ -403,7 +446,9 @@ button:hover {
 		grid-template-columns: 1fr;
 	}
 
-	.chart-heading { flex-direction: column; }
+	.chart-heading {
+		flex-direction: column;
+	}
 }
 
 @media (max-width: 550px) {

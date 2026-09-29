@@ -290,7 +290,7 @@ app.post("/api/scouting/:eventKey", async (req, res) => {
 			valueInputOption: "USER_ENTERED",
 			requestBody: {
 				values: [headers.map((header, index) =>
-					String(answers[`column-${index}`] ?? "")
+					String(answers[`column-${index}`] ?? answers[`${index}`] ?? "")
 				)]
 			}
 		});

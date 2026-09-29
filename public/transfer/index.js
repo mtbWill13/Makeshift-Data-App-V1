@@ -85,7 +85,7 @@ async function prepareTransfer() {
 		await showFrame();
 		qrPanel.hidden = false;
 		downloadButton.disabled = false;
-		sendStatus.textContent = `${preparedPackage.reports.length} report${preparedPackage.reports.length === 1 ? "" : "s"} prepared. The passcode is not included.`;
+		sendStatus.textContent = `${preparedPackage.reports.length} report${preparedPackage.reports.length === 1 ? "" : "s"} prepared.`;
 	} catch (error) {
 		sendStatus.textContent = error.message;
 	} finally {

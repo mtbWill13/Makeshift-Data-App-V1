@@ -396,6 +396,13 @@ scoutingForm.addEventListener("submit", async event => {
 		await loadForm();
 	} catch (error) {
 		if (error instanceof TypeError) {
+			// remove the "column-"" from the submission for smaller qr code sizes
+			for (let key in submission.answers) {
+				submission.answers[key.substring(7)] = submission.answers[key];
+
+				delete submission.answers[key];
+			}
+
 			await ScoutOffline.queueSubmission(submission);
 			scoutingForm.reset();
 			advanceMatchAssignment();

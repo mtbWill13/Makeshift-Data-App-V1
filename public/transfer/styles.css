@@ -179,3 +179,8 @@ button:disabled {
 		padding: 20px;
 	}
 }
+
+.panel>.controls {
+	border: none !important;
+
+}
