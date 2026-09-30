@@ -99,15 +99,16 @@ const ScoutOffline = (() => {
 	}
 
 	async function encodeTransferPackage(transferPackage) {
-		console.log(JSON.stringify(transferPackage));
-		const bytes = new TextEncoder().encode(JSON.stringify(transferPackage));
+		// const bytes = new TextEncoder().encode(transferPackage);
 
-		if ("CompressionStream" in window) {
-			const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream("gzip"));
-			return `G${bytesToBase64(new Uint8Array(await new Response(stream).arrayBuffer()))}`;
-		}
+		// TODO: this actually takes up more space with new optimizations
+		// if ("CompressionStream" in window) {
+		// 	const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream("gzip"));
+		// 	return `G${bytesToBase64(new Uint8Array(await new Response(stream).arrayBuffer()))}`;
+		// }
 
-		return `J${bytesToBase64(bytes)}`;
+		// return `J${bytesToBase64(bytes)}`;
+		return `J${transferPackage}`;
 	}
 
 	async function decodeTransferPackage(payload) {
@@ -137,18 +138,26 @@ const ScoutOffline = (() => {
 			throw new Error("There are no saved reports for this event to transfer.");
 		}
 
-		console.log(reports);
+		let answers = "";
+		let lastColumn = 0;
 
-		return {
-			format: "makeshift-scouting-transfer",
-			version: 1,
-			transferId: transferId(),
-			createdAt: new Date().toISOString(),
-			type,
-			eventKey,
-			schema: cachedSchema(type, eventKey),
-			reports
-		};
+		const qrCodes = [];
+
+		for (let report of reports) {
+			for (let column of Object.keys(report.answers).map(el => Number(el)).sort((a, b) => a > b)) {
+				for (; lastColumn < column; lastColumn++) {
+					answers += "|";
+				}
+
+				answers += report.answers[column] + "|";
+
+				lastColumn++;
+			}
+
+			qrCodes.push(`${type}|${eventKey}|${Date.now()}|${answers}`);
+		}
+
+		return qrCodes;
 	}
 
 	async function importTransferPackage(transferPackage) {

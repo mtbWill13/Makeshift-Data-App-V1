@@ -40,23 +40,11 @@ function downloadFile(name, content, type = "application/json") {
 	setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function framePayloads(encodedPackage, id) {
-	const chunks = [];
-	for (let offset = 0; offset < encodedPackage.length; offset += QR_CHUNK_SIZE) {
-		chunks.push(encodedPackage.slice(offset, offset + QR_CHUNK_SIZE));
-	}
-
-	const total = chunks.length;
-	return chunks.map((chunk, index) =>
-		`MSH1|${id}|${index + 1}|${total}|${ScoutOffline.checksum(chunk)}|${chunk}`
-	);
-}
-
 async function showFrame() {
 	if (!frames.length) return;
 
 	await QRCode.toCanvas(qrCode, frames[frameIndex], {
-		errorCorrectionLevel: "Q",
+		errorCorrectionLevel: "M",
 		margin: 1,
 		width: 360,
 		color: { dark: "#000000", light: "#ffffff" }
@@ -76,16 +64,15 @@ async function prepareTransfer() {
 	sendStatus.textContent = "Preparing saved reports…";
 
 	try {
-		preparedPackage = await ScoutOffline.createTransferPackage(sendType.value, sendEvent.value.trim());
-		frames = framePayloads(
-			await ScoutOffline.encodeTransferPackage(preparedPackage),
-			preparedPackage.transferId
-		);
+		frames = await ScoutOffline.createTransferPackage(sendType.value, sendEvent.value.trim());
+
 		frameIndex = 0;
 		await showFrame();
+
 		qrPanel.hidden = false;
 		downloadButton.disabled = false;
-		sendStatus.textContent = `${preparedPackage.reports.length} report${preparedPackage.reports.length === 1 ? "" : "s"} prepared.`;
+
+		sendStatus.textContent = `${frames.length} report${frames.length == 1 ? "" : "s"} prepared`;
 	} catch (error) {
 		sendStatus.textContent = error.message;
 	} finally {
@@ -95,22 +82,21 @@ async function prepareTransfer() {
 
 function parseFrame(value) {
 	const parts = String(value).split("|");
-	if (parts.length !== 6 || parts[0] !== "MSH1") return null;
-	const [, transferId, partNumber, totalParts, check, chunk] = parts;
-	if (!Number.isInteger(Number(partNumber)) || !Number.isInteger(Number(totalParts)) || ScoutOffline.checksum(chunk) !== check) {
-		return null;
+
+	if (parts[0] != "J") {
+		return;
 	}
-	return { transferId, partNumber: Number(partNumber), totalParts: Number(totalParts), chunk };
+
+	const [, type, eventKey, timestamp] = parts;
+
+	answers = parts.slice(4);
+
+	return { type, eventKey, timestamp, answers };
 }
 
 async function acceptFrame(value) {
 	const frame = parseFrame(value);
 	if (!frame) return;
-
-	if (scannedFrames.size && !scannedFrames.has(frame.partNumber)) {
-		const first = scannedFrames.values().next().value;
-		if (first.transferId !== frame.transferId || first.totalParts !== frame.totalParts) return;
-	}
 
 	scannedFrames.set(frame.partNumber, frame);
 	receiveStatus.textContent = `Received ${scannedFrames.size} of ${frame.totalParts} QR frames…`;
@@ -169,7 +155,7 @@ async function startScanner() {
 		const detector = new BarcodeDetector({ formats: ["qr_code"] });
 		startCamera.disabled = true;
 		stopCamera.disabled = false;
-		receiveStatus.textContent = "Point the camera at the first QR frame.";
+		receiveStatus.textContent = "Point the camera at a QR frame.";
 		scanTimer = setInterval(async () => {
 			if (camera.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
 			try {

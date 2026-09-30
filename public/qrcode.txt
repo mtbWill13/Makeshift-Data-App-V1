@@ -1,0 +1,10 @@
+before:
+{"format":"makeshift-scouting-transfer","version":1,"transferId":"5b34941c-5551-4201-bcef-68d6cf6e18b8","createdAt":"2026-09-29T19:40:59.750Z","type":"match-scouting","eventKey":"2026test","schema":{"headers":["Event","Scouter Name","Match Number","Team Number","Driver Station","No Show","Score Preloaded","Auto Scoring Points","Auto Climb","Estimated Scoring Points","Teleop Scoring Points","Shuttle Fuel","Robot was defended","End Game Climb","Robot died/had breakdown in functionality","Robot tipped/fell over","Robot received fouls or a yellow/red card","Comments","Driver Skill ranking compared to other robots on the field from 1 (best) to 6 (worst)","Defense Rating from 1 (incredible) to 5 (poor)","","","","Calculated Rows -->","Auto Scoring Points","Auto Climb","Estimated Scoring Points","Teleop Calculated Scoring Points","End Game Climb","Climb points","No Show/Died/Broke Down/Tipped Over","Was defended","","No Show","","Breakdown","","Tip/Falls","Sorting key"],"booleanColumnIndexes":[5,11,12,14,15,16]},"reports":[{"type":"match-scouting","eventKey":"2026test","answers":{"1":"Justin","2":"19","3":"2345","4":"RED1","7":"25","10":"135","11":"TRUE","12":"TRUE","13":"TRUE","17":"hkjhkjhkjhkjhkjhkjhkj","19":"3"},"createdAt":1790710729326}]}
+after:
+1790710729326,2026test,1:Justin,2:19,3:2345,4:RED1,7:25,10:135,11:TRUE,12:TRUE,13:TRUE,17:jasdklfjaslkdf
+
+after:
+type,eventKey,timestamp,answers
+answers are comma separated and follow key:value notation
+
+example:
