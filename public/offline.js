@@ -67,32 +67,6 @@ const ScoutOffline = (() => {
 		});
 	}
 
-	function transferId() {
-		return globalThis.crypto?.randomUUID?.() ||
-			`transfer-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-	}
-
-	function checksum(value) {
-		let hash = 2166136261;
-
-		for (const character of String(value)) {
-			hash ^= character.charCodeAt(0);
-			hash = Math.imul(hash, 16777619);
-		}
-
-		return (hash >>> 0).toString(36);
-	}
-
-	function bytesToBase64(bytes) {
-		let binary = "";
-
-		for (let index = 0; index < bytes.length; index += 8192) {
-			binary += String.fromCharCode(...bytes.subarray(index, index + 8192));
-		}
-
-		return btoa(binary);
-	}
-
 	function base64ToBytes(value) {
 		const binary = atob(value);
 		return Uint8Array.from(binary, character => character.charCodeAt(0));
@@ -154,7 +128,7 @@ const ScoutOffline = (() => {
 				lastColumn++;
 			}
 
-			qrCodes.push(`${type}|${eventKey}|${Date.now()}|${answers}`);
+			qrCodes.push(`MS${type}|${eventKey}|${Date.now()}|${answers}`);
 		}
 
 		return qrCodes;

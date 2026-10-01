@@ -28,7 +28,7 @@ let frameIndex = 0;
 let autoPlayTimer = null;
 let cameraStream = null;
 let scanTimer = null;
-let scannedFrames = new Map();
+let scannedFrames = new Set();
 let receivedPackage = null;
 
 function downloadFile(name, content, type = "application/json") {
@@ -81,13 +81,13 @@ async function prepareTransfer() {
 }
 
 function parseFrame(value) {
-	const parts = String(value).split("|");
-
-	if (parts[0] != "J") {
+	if (!(String(value)).startsWith("MS")) {
 		return;
 	}
 
-	const [, type, eventKey, timestamp] = parts;
+	const parts = String(value).slice(2).split("|");
+
+	const [type, eventKey, timestamp] = parts;
 
 	answers = parts.slice(4);
 
@@ -98,33 +98,8 @@ async function acceptFrame(value) {
 	const frame = parseFrame(value);
 	if (!frame) return;
 
-	scannedFrames.set(frame.partNumber, frame);
-	receiveStatus.textContent = `Received ${scannedFrames.size} of ${frame.totalParts} QR frames…`;
-
-	if (scannedFrames.size !== frame.totalParts) return;
-
-	const encoded = [...scannedFrames.values()]
-		.sort((left, right) => left.partNumber - right.partNumber)
-		.map(item => item.chunk)
-		.join("");
-
-	try {
-		await acceptTransferPackage(await ScoutOffline.decodeTransferPackage(encoded));
-		scannedFrames = new Map();
-	} catch (error) {
-		receiveStatus.textContent = `Transfer could not be verified: ${error.message}`;
-	}
-}
-
-async function acceptTransferPackage(transferPackage) {
-	if (transferPackage?.format !== "makeshift-scouting-transfer" || !Array.isArray(transferPackage.reports)) {
-		throw new Error("This is not a MakeShift scouting backup.");
-	}
-
-	receivedPackage = transferPackage;
-	await ScoutOffline.importTransferPackage(transferPackage);
-	receivedActions.hidden = false;
-	receiveStatus.textContent = `${transferPackage.reports.length} report${transferPackage.reports.length === 1 ? "" : "s"} received and verified for ${transferPackage.eventKey}.`;
+	scannedFrames.add(frame);
+	receiveStatus.textContent = `Received ${scannedFrames.size()} scouting codes.`;
 }
 
 function csvForPackage(transferPackage) {
@@ -160,8 +135,10 @@ async function startScanner() {
 			if (camera.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
 			try {
 				const codes = await detector.detect(camera);
-				if (codes[0]?.rawValue) await acceptFrame(codes[0].rawValue);
-			} catch { /* Keep scanning after a temporary camera decode failure. */ }
+				for (const code of codes) {
+					if (code?.rawValue) await acceptFrame(code.rawValue);
+				}
+			} catch { }
 		}, 400);
 	} catch (error) {
 		console.log(error);
