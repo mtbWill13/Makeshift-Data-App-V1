@@ -36,6 +36,13 @@ let scoutingData = [];
 
 let pitScoutingData = [];
 
+/* Qualification match number → YouTube links from TBA, for the report cards. */
+let matchVideos = new Map();
+
+/* Every match at the selected event, for the match list shown when a team has
+   no scouting reports. */
+let eventMatches = [];
+
 
 /* =================================
    DATA HELPERS
@@ -334,6 +341,14 @@ async function loadEventData() {
 
 	const matches =
 		await jsonOrNull(matchesResponse) ?? [];
+
+	eventMatches = matches;
+
+	matchVideos = new Map(
+		matches
+			.filter(match => match.level === "qm" && match.videos?.length)
+			.map(match => [match.number, match.videos])
+	);
 
 	const rankings =
 		await jsonOrNull(rankingsResponse) ?? [];
@@ -834,44 +849,28 @@ async function printTeamData() {
 
 	/* EPA */
 
-	let statbotics = null;
-	let statboticsMatches = [];
+	/* These three are independent, so fetch them together rather than one
+	   after another (Statbotics alone can take several seconds per request). */
+	const [statbotics, statboticsMatches, tbaTeamName] = await Promise.all([
 
+		loadStatboticsEPA(teamNumber, eventKey)
+			.catch(error => {
+				console.log("Statbotics error:", error.message);
+				return null;
+			}),
 
-	try {
+		loadStatboticsMatchHistory(teamNumber, eventKey)
+			.catch(error => {
+				console.log("Statbotics match-history error:", error.message);
+				return [];
+			}),
 
-		statbotics =
-			await loadStatboticsEPA(
-				teamNumber,
-				eventKey
-			);
+		fetch(`/api/teamName/${teamNumber}`)
+			.then(response => response.ok ? response.json() : {})
+			.then(data => data.name ?? null)
+			.catch(() => null)
 
-	} catch (error) {
-
-		console.log(
-			"Statbotics error:",
-			error.message
-		);
-
-	}
-
-
-	try {
-
-		statboticsMatches =
-			await loadStatboticsMatchHistory(
-				teamNumber,
-				eventKey
-			);
-
-	} catch (error) {
-
-		console.log(
-			"Statbotics match-history error:",
-			error.message
-		);
-
-	}
+	]);
 
 
 	const opr =
@@ -883,11 +882,6 @@ async function printTeamData() {
 			?.epa
 			?.total_points
 			?.mean ?? null;
-
-	const tbaTeamName = await fetch(`/api/teamName/${teamNumber}`)
-		.then(response => response.ok ? response.json() : {})
-		.then(data => data.name ?? null)
-		.catch(() => null);
 
 	const teamClutchFactor =
 		clutchFactor(
@@ -1578,7 +1572,7 @@ Own Score vs Prediction  </div>
         <!-- INDIVIDUAL SCOUTING -->
 
         <h3 class="section-title">
-          Individual Scouting Reports
+          ${scoutingRows.length ? "Individual Scouting Reports" : "Matches"}
         </h3>
 
 
@@ -1593,8 +1587,13 @@ Own Score vs Prediction  </div>
                   <article class="scouting-card">
 
                     <div class="scouting-card-header">
-                      Match ${escapeHtml(String(row["Match Number"] ?? "").trim() || index + 1)}
+                      <span class="scouting-card-title">
+                        Match ${escapeHtml(String(row["Match Number"] ?? "").trim() || index + 1)}
+                        ${scoutedMatchBadge(row["Match Number"], teamNumber)}
+                      </span>
+                      ${matchVideoLinks(row["Match Number"])}
                     </div>
+                    ${scoutedMatchSummary(row["Match Number"], teamNumber)}
 
                     ${Object.entries(row)
 					.map(([column, value]) => `
@@ -1628,9 +1627,7 @@ Own Score vs Prediction  </div>
 
 			: `
 
-              <div class="empty-state">
-                No scouting entries found for this team.
-              </div>
+              ${teamMatchList(teamNumber)}
 
             `
 		}
@@ -1690,6 +1687,163 @@ function dataItem(label, value, description = "") {
             <div class="data-item-value">${value}</div>
             ${description ? `<div class="data-item-description">${description}</div>` : ""}
           </div>`;
+
+}
+
+
+/* =================================
+   MATCH VIDEOS
+================================= */
+
+/* Links to a match's recordings on TBA. Most matches have two official
+   uploads, so the second is offered as a backup. */
+function videoLinks(videos) {
+
+	if (!videos?.length) {
+		return "";
+	}
+
+	return `
+                      <span class="match-videos">
+                        ${videos.map((url, index) => `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${index === 0 ? "▶ Watch match" : `Video ${index + 1}`}</a>`).join("")}
+                      </span>`;
+
+}
+
+
+function matchVideoLinks(matchNumber) {
+	return videoLinks(matchVideos.get(Number(String(matchNumber ?? "").trim())));
+}
+
+
+/* "2026oncmp2_qm12" → qualification 12, "_sf3m1" → playoff 3, "_f1m2" → final 2. */
+const MATCH_LEVEL_ORDER = { qm: 0, ef: 1, qf: 2, sf: 3, f: 4 };
+
+function matchLabel(match) {
+
+	const [, level, set, number] = String(match.key).match(/_(qm|ef|qf|sf|f)(\d+)(?:m(\d+))?$/) ?? [];
+
+	if (level === "qm") return `Qualification ${set}`;
+	if (level === "f") return `Final ${number}`;
+	if (level === "sf") return `Playoff ${set}${number > 1 ? ` (replay ${number})` : ""}`;
+	if (level) return `${level === "qf" ? "Quarterfinal" : "Eighthfinal"} ${set}-${number}`;
+
+	return match.key;
+
+}
+
+
+function matchSortKey(match) {
+	const [, level, set = 0, number = 0] = String(match.key).match(/_(qm|ef|qf|sf|f)(\d+)(?:m(\d+))?$/) ?? [];
+	return [MATCH_LEVEL_ORDER[level] ?? 9, Number(set), Number(number)];
+}
+
+
+/* One alliance's teams and score; the team being viewed is in bold. */
+function allianceRow(match, colour, teamNumber) {
+
+	const alliance = match[colour] ?? {};
+	const teams = (alliance.team_keys ?? [])
+		.map(key => key.replace(/^frc/, ""))
+		.map(team => team === String(teamNumber)
+			? `<strong>${escapeHtml(team)}</strong>`
+			: escapeHtml(team))
+		.join(" · ");
+	const played = Number.isFinite(alliance.score) && alliance.score >= 0;
+
+	return `
+                    <div class="match-alliance ${colour}${match.winner === colour ? " won" : ""}">
+                      <span>${teams}</span>
+                      <b>${played ? alliance.score : "—"}</b>
+                    </div>`;
+
+}
+
+
+/* Win / Loss / Tie / Upcoming badge from the viewed team's point of view. */
+function matchResultBadge(match, teamNumber) {
+
+	const ourColour = match.red?.team_keys?.includes(`frc${teamNumber}`) ? "red" : "blue";
+	const played = Number.isFinite(match[ourColour]?.score) && match[ourColour].score >= 0;
+	const [kind, label] = !played
+		? ["upcoming", "Upcoming"]
+		: match.winner === ourColour
+			? ["win", "Win"]
+			: match.winner
+				? ["loss", "Loss"]
+				: ["tie", "Tie"];
+
+	return `<span class="match-result ${kind}">${label}</span>`;
+
+}
+
+
+/* Who played in a scouted qualification match and the final score, shown at
+   the top of the scouting report card. Empty if TBA doesn't have the match. */
+function scoutedMatchSummary(matchNumber, teamNumber) {
+
+	const number = Number(String(matchNumber ?? "").trim());
+	const match = eventMatches.find(match => match.level === "qm" && match.number === number);
+
+	if (!match) {
+		return "";
+	}
+
+	return `
+                    <div class="scouting-match-summary">
+                      ${allianceRow(match, "red", teamNumber)}
+                      ${allianceRow(match, "blue", teamNumber)}
+                    </div>`;
+
+}
+
+
+function scoutedMatchBadge(matchNumber, teamNumber) {
+	const number = Number(String(matchNumber ?? "").trim());
+	const match = eventMatches.find(match => match.level === "qm" && match.number === number);
+	return match ? matchResultBadge(match, teamNumber) : "";
+}
+
+
+/* Shown in place of scouting reports when a team has none: every match the
+   team played (or is scheduled for) at this event, with result and videos. */
+function teamMatchList(teamNumber) {
+
+	const teamKey = `frc${teamNumber}`;
+	const matches = eventMatches
+		.filter(match => [match.red, match.blue].some(alliance => alliance?.team_keys?.includes(teamKey)))
+		.sort((a, b) => {
+			const [left, right] = [matchSortKey(a), matchSortKey(b)];
+			return left[0] - right[0] || left[1] - right[1] || left[2] - right[2];
+		});
+
+	if (!matches.length) {
+		return `
+              <div class="empty-state">
+                No scouting entries or matches found for this team.
+              </div>`;
+	}
+
+	const cards = matches.map(match => `
+                  <article class="match-card">
+                    <div class="match-card-header">
+                      <span>${escapeHtml(matchLabel(match))}</span>
+                      ${matchResultBadge(match, teamNumber)}
+                    </div>
+                    ${allianceRow(match, "red", teamNumber)}
+                    ${allianceRow(match, "blue", teamNumber)}
+                    <div class="match-card-videos">
+                      ${videoLinks(match.videos) || `<span class="no-video">No video on TBA yet</span>`}
+                    </div>
+                  </article>`).join("");
+
+	return `
+              <p class="match-list-note">
+                No scouting reports for this team yet. Here are their matches from The Blue Alliance.
+              </p>
+              <section class="match-list">
+                ${cards}
+              </section>`;
 
 }
 

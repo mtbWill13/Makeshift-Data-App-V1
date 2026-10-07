@@ -1,9 +1,12 @@
 import "dotenv/config";
 import express from "express";
+import compression from "compression";
 import { google } from "googleapis";
 import { startBehindTheBumpers, episodesForTeam } from "./behind-the-bumpers.js";
 const app = express();
 
+// Gzip responses; the scouting sheet JSON is ~500 KB uncompressed.
+app.use(compression());
 app.use(express.json({ limit: "100kb" }));
 
 app.use((req, res, next) => {
@@ -35,6 +38,25 @@ const sheets = google.sheets({
 	auth: googleAuth
 });
 
+/* Sheet reads are cached for 30 seconds so switching teams doesn't re-download
+   the whole sheet each time. Submissions through this server clear their
+   sheet's cache straight away; edits made directly in Google Sheets can take up
+   to 30 seconds to appear. Returns the same { data: { values } } shape as the API. */
+const SHEET_KEY_SEPARATOR = "\n";
+const sheetReads = cachedFetcher(30 * 1000, key => {
+	const [spreadsheetId, range] = key.split(SHEET_KEY_SEPARATOR);
+	return sheets.spreadsheets.values.get({ spreadsheetId, range })
+		.then(response => ({ data: { values: response.data.values } }));
+});
+
+function readSheet(spreadsheetId, range) {
+	return sheetReads(`${spreadsheetId}${SHEET_KEY_SEPARATOR}${range}`);
+}
+
+function forgetSheet(spreadsheetId) {
+	sheetReads.invalidate(key => key.startsWith(`${spreadsheetId}${SHEET_KEY_SEPARATOR}`));
+}
+
 const scoutingSheetIds = {
 	"2026oncmp2": process.env.SCOUTING_SHEET_2026ONCMP2,
 	"2026ontor": process.env.SCOUTING_SHEET_2026ONTOR,
@@ -59,11 +81,44 @@ function columnIndexToLetter(index) {
 	return result;
 }
 
-async function tba(path) {
+/* Remembers successful results for `ttl` ms, and lets simultaneous callers
+   for the same key share one request instead of each making their own. */
+function cachedFetcher(ttl, load) {
+	const cache = new Map();
+	const inFlight = new Map();
+
+	const get = key => {
+		const cached = cache.get(key);
+		if (cached && Date.now() - cached.time < ttl) return Promise.resolve(cached.data);
+		if (inFlight.has(key)) return inFlight.get(key);
+
+		const request = load(key)
+			.then(data => {
+				cache.set(key, { time: Date.now(), data });
+				return data;
+			})
+			.finally(() => inFlight.delete(key));
+
+		inFlight.set(key, request);
+		return request;
+	};
+
+	get.invalidate = predicate => {
+		for (const key of cache.keys()) {
+			if (predicate(key)) cache.delete(key);
+		}
+	};
+
+	return get;
+}
+
+// TBA data changes during events (new match results), so only keep it briefly.
+const tba = cachedFetcher(60 * 1000, async path => {
 	const response = await fetch(`${TBA_BASE}${path}`, {
 		headers: {
 			"X-TBA-Auth-Key": process.env.TBA_AUTH_KEY,
 		},
+		signal: AbortSignal.timeout(15000)
 	});
 
 	if (!response.ok) {
@@ -71,20 +126,17 @@ async function tba(path) {
 	}
 
 	return response.json();
-}
+});
 
-const statboticsCache = new Map();
 const STATBOTICS_CACHE_MS = 2 * 60 * 1000;
 
-async function statbotics(path) {
-	const cached = statboticsCache.get(path);
-	if (cached && Date.now() - cached.time < STATBOTICS_CACHE_MS) {
-		return cached.data;
-	}
-
-	// Statbotics often has brief 5xx errors or dropped connections, so retry a
-	// few times before giving up. 4xx errors (e.g. unknown team) fail straight away.
+const statbotics = cachedFetcher(STATBOTICS_CACHE_MS, async path => {
+	// Statbotics often has brief 502/503/504 errors or dropped connections, so
+	// retry those a few times. Anything else fails straight away: Statbotics
+	// answers "not found" (e.g. a team that wasn't at an event) with a 500 and an
+	// empty {} body, and retrying that only adds seconds of delay.
 	const maxAttempts = 4;
+	const retryable = status => status === 502 || status === 503 || status === 504;
 
 	for (let attempt = 1; ; attempt++) {
 		let response;
@@ -99,17 +151,27 @@ async function statbotics(path) {
 		}
 
 		if (response?.ok) {
-			const data = await response.json();
-			statboticsCache.set(path, { time: Date.now(), data });
-			return data;
+			return response.json();
 		}
 
-		if (response && (response.status < 500 || attempt >= maxAttempts)) {
-			throw new Error(`Statbotics request failed: ${response.status}`);
+		if (response && (!retryable(response.status) || attempt >= maxAttempts)) {
+			const error = new Error(`Statbotics request failed: ${response.status}`);
+			error.status = response.status;
+			throw error;
 		}
 
 		await new Promise(resolve => setTimeout(resolve, 500 * attempt));
 	}
+});
+
+/* Sends a Statbotics error to the browser with the same status codes as before:
+   Statbotics' own status (e.g. 500 when a team isn't at an event), or 502. */
+function sendStatboticsError(res, error) {
+	console.error("Statbotics error:", error.message);
+	res.status(error.status ?? 502).json({
+		error: error.status ? `Statbotics returned ${error.status}` : "Could not contact Statbotics",
+		details: error.message
+	});
 }
 
 function stripHtml(value) {
@@ -130,6 +192,10 @@ app.get("/api/events/:eventKey/matches", async (req, res) => {
 			blue: match.alliances.blue,
 			winner: match.winning_alliance,
 			time: match.actual_time,
+			// Match recordings linked on TBA (usually the event's official YouTube uploads)
+			videos: (match.videos ?? [])
+				.filter(video => video.type === "youtube" && video.key)
+				.map(video => `https://www.youtube.com/watch?v=${encodeURIComponent(video.key)}`),
 		})));
 	} catch (error) {
 		res.status(500).json({ error: error.message });
@@ -346,10 +412,7 @@ app.get("/api/scouting/:eventKey", async (req, res) => {
 			return res.json([]);
 		}
 
-		const response = await sheets.spreadsheets.values.get({
-			spreadsheetId,
-			range: "'Scouting Raw Data'!A:AF"
-		});
+		const response = await readSheet(spreadsheetId, "'Scouting Raw Data'!A:AF");
 
 		console.log("Google Sheets request succeeded");
 
@@ -387,10 +450,7 @@ app.get("/api/scouting/:eventKey/schema", async (req, res) => {
 			return res.status(404).json({ error: "No scouting sheet is configured for this event." });
 		}
 
-		const response = await sheets.spreadsheets.values.get({
-			spreadsheetId,
-			range: "'Scouting Raw Data'!A:ZZ"
-		});
+		const response = await readSheet(spreadsheetId, "'Scouting Raw Data'!A:ZZ");
 
 		/* Keep blank cells: array index 0 must always remain column A.
 		   Filtering blank headers shifts later columns (for example Y becomes B). */
@@ -499,6 +559,7 @@ app.post("/api/scouting/:eventKey", async (req, res) => {
 			}
 		});
 
+		forgetSheet(spreadsheetId);
 		res.status(201).json({ ok: true });
 	} catch (error) {
 		console.error("SCOUTING WRITE ERROR:", error);
@@ -522,10 +583,7 @@ app.get("/api/pitscouting/:eventKey", async (req, res) => {
 			return res.json([]);
 		}
 
-		const response = await sheets.spreadsheets.values.get({
-			spreadsheetId,
-			range: "'Pit Scouting Raw Data'!A:AL"
-		});
+		const response = await readSheet(spreadsheetId, "'Pit Scouting Raw Data'!A:AL");
 
 		console.log("Google Sheets request succeeded");
 
@@ -563,10 +621,7 @@ app.get("/api/pitscouting/:eventKey/schema", async (req, res) => {
 			return res.status(404).json({ error: "No pit-scouting sheet is configured for this event." });
 		}
 
-		const response = await sheets.spreadsheets.values.get({
-			spreadsheetId,
-			range: "'Pit Scouting Raw Data'!1:1"
-		});
+		const response = await readSheet(spreadsheetId, "'Pit Scouting Raw Data'!1:1");
 
 		/* Keep blank cells so array index 0 always remains column A,
 		   otherwise PIT_SCOUTING_COLUMNS letters point at the wrong questions. */
@@ -635,6 +690,7 @@ app.post("/api/pitscouting/:eventKey", async (req, res) => {
 			}
 		});
 
+		forgetSheet(spreadsheetId);
 		res.status(201).json({ ok: true });
 	} catch (error) {
 		console.error("PIT SCOUTING WRITE ERROR:", error);
@@ -644,107 +700,33 @@ app.post("/api/pitscouting/:eventKey", async (req, res) => {
 
 app.get("/api/statbotics/team-event/:team/:event", async (req, res) => {
 	const { team, event } = req.params;
-	const url = `https://api.statbotics.io/v3/team_event/${team}/${event}`;
 
 	try {
-		const response = await fetch(url, {
-			headers: { Accept: "application/json" }
-		});
-
-		const text = await response.text();
-
-		let data;
-		try {
-			data = JSON.parse(text);
-		} catch {
-			data = { rawResponse: text };
-		}
-
-		if (!response.ok) {
-			console.error("Statbotics response:", response.status, data);
-
-			return res.status(response.status).json({
-				error: `Statbotics returned ${response.status}`,
-				details: data
-			});
-		}
-
-		res.json(data);
+		res.json(await statbotics(`/team_event/${encodeURIComponent(team)}/${encodeURIComponent(event)}`));
 	} catch (error) {
-		console.error("Statbotics connection error:", error.message);
-
-		res.status(502).json({
-			error: "Could not contact Statbotics",
-			details: error.message
-		});
+		sendStatboticsError(res, error);
 	}
 });
 
 app.get("/api/statbotics/event-teams/:event", async (req, res) => {
-	const query = new URLSearchParams({
-		event: req.params.event,
-		limit: "1000"
-	});
+	const query = new URLSearchParams({ event: req.params.event, limit: "1000" });
 
 	try {
-		const response = await fetch(`https://api.statbotics.io/v3/team_events?${query}`, {
-			headers: { Accept: "application/json" }
-		});
-		const data = await response.json().catch(() => ({}));
-
-		if (!response.ok) {
-			return res.status(response.status).json({
-				error: `Statbotics returned ${response.status}`,
-				details: data
-			});
-		}
-
+		const data = await statbotics(`/team_events?${query}`);
 		res.json(Array.isArray(data) ? data : []);
 	} catch (error) {
-		console.error("Statbotics event-teams connection error:", error.message);
-		res.status(502).json({ error: "Could not contact Statbotics" });
+		sendStatboticsError(res, error);
 	}
 });
 
 app.get("/api/statbotics/team-matches/:team/:event", async (req, res) => {
 	const { team, event } = req.params;
-	const query = new URLSearchParams({
-		team,
-		event,
-		limit: "100"
-	});
-	const url = `https://api.statbotics.io/v3/matches?${query}`;
+	const query = new URLSearchParams({ team, event, limit: "100" });
 
 	try {
-		const response = await fetch(url, {
-			headers: { Accept: "application/json" }
-		});
-		const text = await response.text();
-
-		let data;
-		try {
-			data = JSON.parse(text);
-		} catch {
-			data = { rawResponse: text };
-		}
-
-		if (!response.ok) {
-			console.error("Statbotics match-history response:", response.status, data);
-
-			return res.status(response.status).json({
-				error: `Statbotics returned ${response.status}`,
-				details: data
-			});
-		}
-
-		res.json(data);
+		res.json(await statbotics(`/matches?${query}`));
 	} catch (error) {
-		console.error("Statbotics match-history connection error:", error.message);
-
-		res.status(502).json({
-			error: "Could not contact Statbotics",
-			details: error.message
-		});
+		sendStatboticsError(res, error);
 	}
 });
 

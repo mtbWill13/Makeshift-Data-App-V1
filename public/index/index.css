@@ -345,3 +345,152 @@
 .btb-past a:hover {
 	color: var(--ms-red);
 }
+
+/* =========================
+	MATCH VIDEO LINKS
+========================= */
+
+.scouting-card-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px 12px;
+	flex-wrap: wrap;
+}
+
+.match-videos {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+.match-videos a {
+	padding: 4px 10px;
+	border: 1px solid var(--border-strong);
+	border-radius: 999px;
+	color: var(--text-muted);
+	font-size: 0.78rem;
+	font-weight: 600;
+	text-decoration: none;
+	white-space: nowrap;
+	transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.match-videos a:first-child {
+	border-color: rgba(235, 78, 63, 0.5);
+	color: var(--text);
+}
+
+.match-videos a:hover {
+	border-color: var(--ms-red);
+	background: rgba(235, 78, 63, 0.1);
+	color: var(--text);
+}
+
+/* =========================
+	MATCH LIST (no scouting reports)
+========================= */
+
+.match-list-note {
+	margin: -4px 0 16px;
+	color: var(--text-muted);
+	font-size: 0.9rem;
+}
+
+.match-list {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+	gap: 12px;
+}
+
+.match-card {
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	background: var(--surface);
+}
+
+.match-card-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 12px 16px;
+	border-bottom: 1px solid var(--border);
+	background: var(--surface-2);
+	font-weight: 700;
+}
+
+.match-result {
+	padding: 2px 10px;
+	border-radius: 999px;
+	font-size: 0.72rem;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+}
+
+.match-result.win { background: rgba(119, 216, 102, 0.14); color: var(--ms-green); }
+.match-result.loss { background: rgba(235, 78, 63, 0.14); color: var(--ms-red); }
+.match-result.tie { background: rgba(250, 226, 81, 0.14); color: var(--ms-yellow); }
+.match-result.upcoming { background: var(--surface-3); color: var(--text-muted); }
+
+.match-alliance {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 10px 16px;
+	border-left: 3px solid var(--ms-red);
+	color: var(--text-muted);
+	font-size: 0.9rem;
+	font-variant-numeric: tabular-nums;
+}
+
+.match-alliance.blue {
+	border-left-color: var(--ms-blue);
+	border-top: 1px solid var(--border);
+}
+
+.match-alliance strong {
+	color: var(--text);
+}
+
+.match-alliance b {
+	color: var(--text-muted);
+	font-size: 1.1rem;
+}
+
+.match-alliance.won b {
+	color: var(--text);
+}
+
+.match-card-videos {
+	margin-top: auto;
+	padding: 12px 16px;
+	border-top: 1px solid var(--border);
+}
+
+.no-video {
+	color: var(--text-faint);
+	font-size: 0.8rem;
+}
+
+/* =========================
+	SCOUTING CARD MATCH SUMMARY
+========================= */
+
+.scouting-card-title {
+	display: inline-flex;
+	align-items: center;
+	gap: 10px;
+}
+
+.scouting-match-summary {
+	border-bottom: 1px solid var(--border);
+}
+
+.scouting-match-summary .match-alliance {
+	padding: 8px 20px;
+}
