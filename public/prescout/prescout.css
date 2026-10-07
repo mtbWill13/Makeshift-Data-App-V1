@@ -394,10 +394,16 @@
 	}
 
 	.toolbar-controls {
+		flex-wrap: wrap;
 		width: 100%;
 	}
 
 	.toolbar-controls select {
 		flex: 1;
+		min-width: 0;
+	}
+
+	.toolbar-controls button {
+		width: 100%;
 	}
 }

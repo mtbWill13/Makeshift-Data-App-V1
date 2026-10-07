@@ -5,6 +5,7 @@ import { mkdir, readFile, writeFile } from "fs/promises";
 import { google } from "googleapis";
 import { startBehindTheBumpers, episodesForTeam } from "./behind-the-bumpers.js";
 import { createSupabaseMirror } from "./supabase-mirror.js";
+import { registerFtcRoutes } from "./ftc.js";
 const app = express();
 
 // Gzip responses; the scouting sheet JSON is ~500 KB uncompressed.
@@ -974,6 +975,9 @@ app.get("/api/statbotics/team-matches/:team/:event", async (req, res) => {
 app.use("/", express.static("public/index"));
 app.use(express.static("public"));
 const PORT = process.env.PORT || 3000;
+
+// FTC section (/ftc/): data from FTCScout. See ftc.js.
+registerFtcRoutes(app, { cachedFetcher, mapLimit });
 
 // Whether the Supabase backup is on and when it last synced (no secrets).
 app.get("/api/supabase/status", (req, res) => {
