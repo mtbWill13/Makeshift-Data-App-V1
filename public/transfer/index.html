@@ -4,17 +4,21 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Offline Transfer | MakeShift Scouting</title>
-    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400..700&display=swap">
     <link rel="stylesheet" href="/theme.css">
+    <link rel="stylesheet" href="styles.css">
   </head>
   <body>
     <div class="top-bar" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
     <header>
       <div class="header-content">
-        <div class="eyebrow">MakeShift Robotics • FRC 4039</div>
+        <a class="brand" href="/"><img src="/images/makeshift-logo-wide.png" alt="MakeShift 4039" width="707" height="78"></a>
+        <div class="eyebrow">Tools</div>
         <h1>Offline<br>Transfer</h1>
-        <p>Move saved scouting reports to the strategy computer without internet, then export or upload them when ready.</p>
-        <a href="/">← Back to Scouting Data Hub</a>
+        <p class="header-description">Move saved scouting reports to the strategy computer without internet, then export or upload them when ready.</p>
+        <div class="header-links"><a class="back-link" href="/">← Data Hub</a></div>
       </div>
     </header>
     <main>
@@ -45,10 +49,11 @@
 
       <section class="panel">
         <h2>Receive reports on the strategy computer</h2>
-        <p>Scan every QR frame from the scout device. The transfer is accepted only after every numbered frame and its integrity check pass.</p>
+        <p>Each QR code is one complete report. Scan them in any order, several at once if they fit in view; repeats are ignored.</p>
         <div class="actions"><button id="startCamera" type="button">Start QR scanner</button><button id="stopCamera" type="button" disabled>Stop scanner</button></div>
         <video id="camera" playsinline muted hidden></video>
         <p id="receiveStatus" class="status">Or import a saved backup file below.</p>
+        <ul id="receivedList" class="received-list" hidden></ul>
         <label class="file-label">Import backup file<input id="fileInput" type="file" accept="application/json,.json"></label>
         <div id="receivedActions" class="actions" hidden>
           <button id="downloadCsv" type="button">Download CSV</button>

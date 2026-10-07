@@ -1,4 +1,145 @@
-:root { --black:#000; --white:#fff; --light-gray:#f4f4f4; --text-gray:#555; }
-* { box-sizing:border-box; }
-body { margin:0; background:var(--light-gray); color:var(--black); font-family:Arial,Helvetica,sans-serif; }
-header { background:var(--black); color:var(--white); padding:42px 7vw 48px; }.header-content,main { max-width:1100px; margin:auto; }.eyebrow { font-size:.85rem; font-weight:bold; letter-spacing:.16em; text-transform:uppercase; margin-bottom:12px; }h1 { font-size:clamp(2.5rem,6vw,5.5rem); letter-spacing:-.06em; line-height:.95; margin:0; }header p { line-height:1.6; max-width:600px; }.back-link { font-weight:bold; text-decoration:none; }main { padding:38px 7vw 80px; }.controls { align-items:end; display:grid; gap:16px; grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto; padding:22px; }label { display:flex; flex-direction:column; font-size:.78rem; font-weight:bold; gap:8px; letter-spacing:.06em; text-transform:uppercase; }select,button { font:inherit; min-height:48px; padding:0 14px; }button { cursor:pointer; font-weight:bold; }.status { min-height:1.5em; margin:22px 0; }.team-list { display:grid; gap:10px; }.team-row { align-items:center; display:grid; gap:14px; grid-template-columns:58px minmax(110px,1.2fr) repeat(4,minmax(90px,1fr)) 24px; padding:17px 20px; text-decoration:none; }.team-row:hover { filter:brightness(1.12); transform:translateY(-1px); }.rank { color:var(--text-gray); font-size:.85rem; font-weight:bold; }.team-number { font-size:1.3rem; font-weight:bold; }.metric { display:flex; flex-direction:column; gap:4px; }.metric-label { color:var(--text-gray); font-size:.68rem; font-weight:bold; letter-spacing:.07em; text-transform:uppercase; }.metric-value { font-size:1.15rem; font-weight:bold; }.arrow { font-size:1.4rem; text-align:right; }@media(max-width:700px) { .controls { grid-template-columns:1fr; }.team-row { grid-template-columns:44px 1fr 20px; }.team-row .metric { grid-column:2; display:grid; grid-template-columns:1fr auto; }.metric-label { align-self:center; }.metric-value { text-align:right; } }
+/* Event rankings layout — colours, type and components live in /theme.css */
+
+.controls {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+	gap: 16px;
+	align-items: end;
+}
+
+.controls label {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.status {
+	min-height: 1.5em;
+	margin: 20px 0 12px;
+}
+
+.team-list {
+	display: grid;
+	gap: 8px;
+}
+
+.team-row {
+	display: grid;
+	grid-template-columns: 40px minmax(90px, 1fr) repeat(4, minmax(80px, 1fr)) 20px;
+	align-items: center;
+	gap: 16px;
+	padding: 14px 20px;
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	background: var(--surface);
+	color: var(--text);
+	text-decoration: none;
+	transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+.team-row:hover {
+	background: var(--surface-2);
+	border-color: rgba(89, 168, 215, 0.45);
+	transform: translateY(-1px);
+}
+
+.rank {
+	display: grid;
+	place-items: center;
+	width: 36px;
+	height: 36px;
+	border-radius: 10px;
+	background: var(--surface-3);
+	color: var(--text-muted);
+	font-size: 0.85rem;
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+}
+
+.team-number {
+	font-size: 1.25rem;
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+}
+
+.metric {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.metric-label {
+	color: var(--text-faint);
+	font-size: 0.68rem;
+	font-weight: 600;
+	letter-spacing: 0.07em;
+	text-transform: uppercase;
+}
+
+.metric-value {
+	font-size: 1.1rem;
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+}
+
+.arrow {
+	color: var(--text-faint);
+	font-size: 1.4rem;
+	text-align: right;
+	transition: color 160ms ease, transform 160ms ease;
+}
+
+.team-row:hover .arrow {
+	color: var(--ms-blue);
+	transform: translateX(2px);
+}
+
+@media (max-width: 760px) {
+	.controls {
+		grid-template-columns: 1fr;
+	}
+
+	.team-row {
+		grid-template-columns: 36px 1fr 16px;
+		gap: 6px 14px;
+		padding: 14px 16px;
+	}
+
+	.team-number {
+		grid-column: 2;
+		margin-bottom: 4px;
+	}
+
+	.team-row .metric {
+		grid-column: 2;
+		flex-direction: row;
+		justify-content: space-between;
+		align-items: baseline;
+	}
+
+	.metric-value {
+		font-size: 1rem;
+	}
+
+	.rank {
+		grid-row: 1;
+		align-self: start;
+	}
+
+	.arrow {
+		grid-column: 3;
+		grid-row: 1;
+	}
+}
+
+/* Team arrived at from the team dashboard */
+.team-row.highlighted {
+	border-color: var(--ms-yellow);
+	background: color-mix(in srgb, var(--ms-yellow) 8%, var(--surface));
+	box-shadow: 0 0 0 1px var(--ms-yellow);
+}
+
+.team-row.highlighted .rank {
+	background: var(--ms-yellow);
+	color: var(--on-accent);
+}

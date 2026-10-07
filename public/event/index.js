@@ -59,7 +59,10 @@ function statboticsRank(row) {
 }
 
 function teamLink(team) {
-	return `/?team=${encodeURIComponent(team)}&event=${encodeURIComponent(eventKey.value)}`;
+	const params = new URLSearchParams({ team, event: eventKey.value });
+	const option = eventKey.selectedOptions[0];
+	if (option?.dataset.temporary) params.set("name", option.text.trim());
+	return `/?${params}`;
 }
 
 function sortedTeams() {
@@ -88,7 +91,7 @@ function renderTeams() {
 	const label = sortBy.selectedOptions[0].text;
 
 	teamList.innerHTML = ranked.map((team, index) => `
-		<a class="team-row" href="${teamLink(team.team)}">
+		<a class="team-row${team.team === highlightTeam ? " highlighted" : ""}" href="${teamLink(team.team)}">
 			<span class="rank">${index + 1}</span><strong class="team-number">${team.team}</strong>
 			<span class="metric"><span class="metric-label">Event rank</span><span class="metric-value">${team.rank ?? "—"}</span></span>
 			<span class="metric"><span class="metric-label">OPR</span><span class="metric-value">${format(team.opr)}</span></span>
@@ -96,6 +99,7 @@ function renderTeams() {
 			<span class="metric"><span class="metric-label">EPA</span><span class="metric-value">${format(team.epa)}</span></span><span class="arrow">›</span>
 		</a>`).join("");
 	status.textContent = `${ranked.length} teams loaded. Sorted by ${label}. Select a team to open its dashboard.`;
+	teamList.querySelector(".highlighted")?.scrollIntoView({ block: "center", behavior: "smooth" });
 }
 
 async function loadEvent() {
@@ -150,8 +154,19 @@ async function loadEvent() {
 	}
 }
 
-const eventFromUrl = new URL(window.location).searchParams.get("event");
-if ([...eventKey.options].some(option => option.value === eventFromUrl)) eventKey.value = eventFromUrl;
+const urlParams = new URL(window.location).searchParams;
+const eventFromUrl = urlParams.get("event");
+const highlightTeam = urlParams.get("team")?.trim() || null;
+
+if ([...eventKey.options].some(option => option.value === eventFromUrl)) {
+	eventKey.value = eventFromUrl;
+} else if (/^\d{4}[a-z0-9]+$/i.test(eventFromUrl ?? "")) {
+	// Events opened from the season view aren't in the dropdown; add one for this visit only.
+	const option = new Option(urlParams.get("name") || eventFromUrl, eventFromUrl);
+	option.dataset.temporary = "true";
+	eventKey.add(option);
+	eventKey.value = eventFromUrl;
+}
 loadButton.addEventListener("click", loadEvent);
 eventKey.addEventListener("change", loadEvent);
 sortBy.addEventListener("change", renderTeams);

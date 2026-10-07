@@ -22,6 +22,14 @@ const button =
 
 let eventKey = eventKeySelect.value;
 
+/* "Entire Season" option in the event dropdown */
+const SEASON_KEY = "season";
+
+const SEASON_YEAR = [...eventKeySelect.options]
+	.map(option => option.value)
+	.find(value => /^\d{4}/.test(value))
+	.slice(0, 4);
+
 const teamData = {};
 
 let scoutingData = [];
@@ -126,9 +134,16 @@ function truePercentage(rows, columnName) {
 
 function formatAverage(value) {
 
-	return value === null
-		? "Not available"
-		: value.toFixed(1);
+	return Number.isFinite(value)
+		? value.toFixed(1)
+		: "Not available";
+
+}
+
+
+function escapeHtml(value) {
+
+	return escapeChartText(value);
 
 }
 
@@ -310,14 +325,21 @@ async function loadEventData() {
 	]);
 
 
+	/* An event with no TBA data yet (or a test event) returns an error:
+	   treat that as empty so scouting data can still be shown. */
+	const jsonOrNull = async response =>
+		response.ok
+			? response.json().catch(() => null)
+			: null;
+
 	const matches =
-		await matchesResponse.json();
+		await jsonOrNull(matchesResponse) ?? [];
 
 	const rankings =
-		await rankingsResponse.json();
+		await jsonOrNull(rankingsResponse) ?? [];
 
 	stats =
-		await oprsResponse.json();
+		await jsonOrNull(oprsResponse) ?? {};
 
 
 	/* OPR / DPR / CCWM */
@@ -367,12 +389,12 @@ async function loadEventData() {
 
 	/* Matches */
 
-	for (const match of matches) {
+	for (const match of Array.isArray(matches) ? matches : []) {
 
 		const teamsInMatch = [
 
-			...match.red.team_keys,
-			...match.blue.team_keys
+			...(match.red?.team_keys ?? []),
+			...(match.blue?.team_keys ?? [])
 
 		];
 
@@ -862,7 +884,10 @@ async function printTeamData() {
 			?.total_points
 			?.mean ?? null;
 
-	const tbaTeamName = (await (await fetch(`api/teamName/${teamNumber}`)).json()).name;
+	const tbaTeamName = await fetch(`/api/teamName/${teamNumber}`)
+		.then(response => response.ok ? response.json() : {})
+		.then(data => data.name ?? null)
+		.catch(() => null);
 
 	const teamClutchFactor =
 		clutchFactor(
@@ -870,19 +895,23 @@ async function printTeamData() {
 			teamNumber
 		);
 
-	const oprValues = Object.values(stats.oprs || {})
+	const oprValues = Object.values(stats?.oprs || {})
 		.map(Number)
 		.filter(Number.isFinite);
 
 	const eventAverageOpr =
-		oprValues.reduce((sum, opr) => sum + opr, 0) / oprValues.length;
+		oprValues.length
+			? oprValues.reduce((sum, opr) => sum + opr, 0) / oprValues.length
+			: null;
 
 	const topTen = [...oprValues]
 		.sort((a, b) => b - a)
 		.slice(0, 10);
 
 	const topTenAverageOpr =
-		topTen.reduce((sum, opr) => sum + opr, 0) / topTen.length;
+		topTen.length
+			? topTen.reduce((sum, opr) => sum + opr, 0) / topTen.length
+			: null;
 
 
 
@@ -899,7 +928,7 @@ async function printTeamData() {
 	const sixteenBestMultiplier =
 		sixteenBestOpr / eventAverageOpr;
 
-	const highestOPR = sortedOprs[0];
+	const highestOPR = sortedOprs[0] ?? null;
 
 	const qualRecord = statbotics?.record?.qual ?? null;
 	const elimRecord = statbotics?.record?.elim ?? null;
@@ -988,10 +1017,10 @@ async function printTeamData() {
 	}
 
 	function determineOPRRank() {
-		let rank = 0;
+		let rank = "—";
 
 		for (let i = 0; i < sortedOprs.length; i++) {
-			if (opr == sortedOprs[i]) {
+			if (opr !== null && opr === sortedOprs[i]) {
 				rank = i + 1;
 				break;
 			}
@@ -1008,7 +1037,7 @@ async function printTeamData() {
 
         <div class="team-heading">
 			<div class="team-heading-container">
-				<h2>Team ${teamNumber}: ${teamName}</h2>
+				<h2>Team ${escapeHtml(teamNumber)}: ${escapeHtml(teamName)}</h2>
 				<img class="teamImage" src=${teamImage}></img>
 			</div>
 
@@ -1019,6 +1048,10 @@ async function printTeamData() {
 			: averagePowerRating().toFixed(2)
 		}
           </span>
+
+          <div class="team-actions">
+            <a class="back-link" href="${escapeHtml(eventRankingsUrl(teamNumber))}">View in event rankings →</a>
+          </div>
 
         </div>
 
@@ -1434,7 +1467,7 @@ Own Score vs Prediction  </div>
             </div>
 
             <div class="data-item-value">
-              ${highestOPR.toFixed(2)}
+              ${highestOPR === null ? "—" : highestOPR.toFixed(2)}
             </div>
 
           </div>
@@ -1457,7 +1490,7 @@ Own Score vs Prediction  </div>
             </div>
 
             <div class="data-item-value">
-              ${driveType === null ? "—" : driveType}
+              ${driveType === null ? "—" : escapeHtml(driveType)}
             </div>
 
           </div>
@@ -1469,7 +1502,7 @@ Own Score vs Prediction  </div>
             </div>
 
             <div class="data-item-value">
-              ${trench === null ? "—" : trench}
+              ${trench === null ? "—" : escapeHtml(trench)}
             </div>
 
           </div>
@@ -1481,7 +1514,7 @@ Own Score vs Prediction  </div>
             </div>
 
             <div class="data-item-value">
-              ${bump === null ? "—" : bump}
+              ${bump === null ? "—" : escapeHtml(bump)}
             </div>
 
           </div>
@@ -1493,7 +1526,7 @@ Own Score vs Prediction  </div>
             </div>
 
             <div class="data-item-value">
-              ${preferredStart === null ? "—" : preferredStart}
+              ${preferredStart === null ? "—" : escapeHtml(preferredStart)}
             </div>
 
           </div>
@@ -1505,7 +1538,7 @@ Own Score vs Prediction  </div>
             </div>
 
             <div class="data-item-value">
-              ${okPlayingDefence === null ? "—" : okPlayingDefence}
+              ${okPlayingDefence === null ? "—" : escapeHtml(okPlayingDefence)}
             </div>
 
           </div>
@@ -1517,7 +1550,7 @@ Own Score vs Prediction  </div>
             </div>
 
             <div class="data-item-value">
-              ${programmingLanguage === null ? "—" : programmingLanguage}
+              ${programmingLanguage === null ? "—" : escapeHtml(programmingLanguage)}
             </div>
 
           </div>
@@ -1529,7 +1562,7 @@ Own Score vs Prediction  </div>
             </div>
 
             <div class="data-item-value">
-              ${coolestThing === null ? "—" : coolestThing}
+              ${coolestThing === null ? "—" : escapeHtml(coolestThing)}
             </div>
 
           </div>
@@ -1554,7 +1587,7 @@ Own Score vs Prediction  </div>
                   <article class="scouting-card">
 
                     <div class="scouting-card-header">
-                      Match ${index + 1}
+                      Match ${escapeHtml(String(row["Match Number"] ?? "").trim() || index + 1)}
                     </div>
 
                     ${Object.entries(row)
@@ -1563,7 +1596,7 @@ Own Score vs Prediction  </div>
                         <div class="scouting-row">
 
                           <span>
-                            ${column}
+                            ${escapeHtml(column)}
                           </span>
 
                           <strong>
@@ -1571,7 +1604,7 @@ Own Score vs Prediction  </div>
 								? `<span class="scout-true">TRUE</span>`
 								: value === "FALSE"
 									? `<span class="scout-false">FALSE</span>`
-									: value ?? "—"}
+									: escapeHtml(value || "—")}
                           </strong>
 
                         </div>
@@ -1602,6 +1635,421 @@ Own Score vs Prediction  </div>
 
 
 /* =================================
+   RENDER SEASON
+================================= */
+
+const PIT_SCOUTING_QUESTIONS = [
+	["Drive Type", "What type of drive base does your robot have?"],
+	["Can drive under trench", "Can your robot drive under the trench?"],
+	["Can drive over bump", "Can your robot drive over the bump?"],
+	["Preferred start location", "Preferred Starting Location"],
+	["Would be ok playing defence", "If strategy required; would you be open to playing defense?"],
+	["Programming Language", "What language is your robot programmed in?"],
+	["Coolest thing about robot or robot cart", "What is the coolest thing about your robot or robot cart?"]
+];
+
+
+function formatNumber(value, digits = 1) {
+
+	return Number.isFinite(value)
+		? value.toFixed(digits)
+		: "—";
+
+}
+
+
+function formatRecord(record) {
+
+	return Number.isFinite(record?.wins) && Number.isFinite(record?.losses)
+		? `${record.wins}-${record.losses}-${record.ties ?? 0}`
+		: "—";
+
+}
+
+
+function formatStatboticsRank(rank) {
+
+	return Number.isFinite(rank?.rank)
+		? `${rank.rank} of ${rank.team_count}`
+		: "—";
+
+}
+
+
+function dataItem(label, value, description = "") {
+
+	return `
+          <div class="data-item">
+            <div class="data-item-label">${label}</div>
+            <div class="data-item-value">${value}</div>
+            ${description ? `<div class="data-item-description">${description}</div>` : ""}
+          </div>`;
+
+}
+
+
+/* Every event scouting sheet the team appears in; events without a sheet return []. */
+async function loadSheetRowsForEvents(events, path) {
+
+	const perEvent = await Promise.all(events.map(event =>
+		fetch(`/api/${path}/${event.key}`)
+			.then(response => response.ok ? response.json() : [])
+			.catch(() => [])
+	));
+
+	return events.map((event, index) => ({
+		event,
+		rows: Array.isArray(perEvent[index]) ? perEvent[index] : []
+	}));
+
+}
+
+
+async function printSeasonData() {
+
+	const teamNumber =
+		teamNumberInput.value.trim();
+
+	if (!teamNumber) {
+		results.innerHTML = `
+          <div class="empty-state">
+            Enter a team number, then press "View Team" to see their whole season.
+          </div>
+        `;
+
+		return;
+	}
+
+	saveTeamsInUrl(teamNumber);
+
+	const response = await fetch(`/api/teams/${teamNumber}/season/${SEASON_YEAR}`);
+	const season = await response.json().catch(() => ({}));
+
+	if (!response.ok) {
+		throw new Error(season.error || "Could not load season data");
+	}
+
+	const events = season.events ?? [];
+
+	const [scoutingByEvent, pitByEvent] = await Promise.all([
+		loadSheetRowsForEvents(events, "scouting"),
+		loadSheetRowsForEvents(events, "pitscouting")
+	]);
+
+	const scoutingRowsByEvent = scoutingByEvent.map(({ event, rows }) => ({
+		event,
+		rows: rows.filter(row =>
+			String(row["Team Number"] ?? "").trim() === teamNumber
+		)
+	}));
+
+	const scoutingRows =
+		scoutingRowsByEvent.flatMap(({ rows }) => rows);
+
+	/* Most recent event with a pit-scouting entry wins. */
+	const latestPit = pitByEvent
+		.map(({ event, rows }) => ({
+			event,
+			rows: rows.filter(row =>
+				String(row["Team Number of Team Being Scouted"] ?? "").trim() === teamNumber
+			)
+		}))
+		.reverse()
+		.find(({ rows }) => rows.length);
+
+	const scoutingAverageFor = rows => {
+		const totals = performanceTrendPoints(rows).map(point => point.scouting);
+
+		return totals.length
+			? totals.reduce((sum, total) => sum + total, 0) / totals.length
+			: null;
+	};
+
+	const averageAuto =
+		averageColumn(scoutingRows, "Auto Scoring Points");
+
+	const averageTeleop =
+		averageColumn(scoutingRows, "Teleop Scoring Points");
+
+	const averageTotalPoints =
+		averageAuto !== null && averageTeleop !== null
+			? averageAuto + averageTeleop
+			: null;
+
+	const playedRows = scoutingRows.filter(row =>
+		String(row["No Show"] ?? "").trim().toUpperCase() !== "TRUE"
+	);
+
+	/* % of played matches where a numeric column was above zero (e.g. any climb). */
+	const nonZeroPercentage = columnName => {
+		const values = playedRows
+			.map(row => String(row[columnName] ?? "").trim())
+			.filter(value => value !== "")
+			.map(Number)
+			.filter(Number.isFinite);
+
+		return values.length
+			? values.filter(value => value > 0).length / values.length * 100
+			: null;
+	};
+
+	const answerPercentage = (columnName, answer) => {
+		const values = playedRows
+			.map(row => String(row[columnName] ?? "").trim().toLowerCase())
+			.filter(value => value !== "" && value !== "x");
+
+		return values.length
+			? values.filter(value => value === answer).length / values.length * 100
+			: null;
+	};
+
+	const formatPercentage = value =>
+		value === null ? "—" : `${value.toFixed(0)}%`;
+
+	const matchTotals = performanceTrendPoints(scoutingRows)
+		.map(point => point.scouting);
+
+	const bestMatchTotal = matchTotals.length
+		? Math.max(...matchTotals)
+		: null;
+
+	const matchTotalSpread = (() => {
+		if (matchTotals.length < 2) return null;
+		const mean = matchTotals.reduce((sum, total) => sum + total, 0) / matchTotals.length;
+		return Math.sqrt(matchTotals.reduce((sum, total) => sum + (total - mean) ** 2, 0) / matchTotals.length);
+	})();
+
+	const averageClimbPoints =
+		averageColumn(scoutingRows, "Climb points");
+
+	const eventOprs = events
+		.filter(event => Number.isFinite(event.opr));
+
+	const averageOpr = eventOprs.length
+		? eventOprs.reduce((sum, event) => sum + event.opr, 0) / eventOprs.length
+		: null;
+
+	const bestOprEvent = [...eventOprs]
+		.sort((a, b) => b.opr - a.opr)[0];
+
+	const seasonEpa = finiteNumberOrNull(season.epa?.total_points?.mean ?? season.epa?.total_points);
+	const peakEpa = finiteNumberOrNull(season.epa?.stats?.max);
+	const winRate = finiteNumberOrNull(season.record?.winrate);
+	const teamImage = `https://www.thebluealliance.com/avatar/${SEASON_YEAR}/frc${teamNumber}.png`;
+
+	const eventCards = events.map(event => {
+		const eventScouting = scoutingRowsByEvent
+			.find(entry => entry.event.key === event.key).rows;
+		const scoutingAverage = scoutingAverageFor(eventScouting);
+		const notes = [event.allianceStatus, event.playoffStatus].filter(Boolean);
+
+		return `
+          <article class="data-item season-event">
+            <div class="season-event-header">
+              <div>
+                <h4>${escapeHtml(event.name)}</h4>
+                <div class="data-item-description">${escapeHtml(event.startDate ?? "")}</div>
+              </div>
+              <button class="secondary-button season-event-button" type="button" data-event-key="${escapeHtml(event.key)}" data-event-name="${escapeHtml(event.name)}">
+                Event details →
+              </button>
+            </div>
+
+            <div class="season-event-stats">
+              <div><span>Rank</span><strong>${event.rank ? `${event.rank}${event.numTeams ? ` / ${event.numTeams}` : ""}` : "—"}</strong></div>
+              <div><span>Quals</span><strong>${formatRecord(event.qualRecord)}</strong></div>
+              <div><span>Playoffs</span><strong>${formatRecord(event.playoffRecord)}</strong></div>
+              <div><span>OPR</span><strong>${formatNumber(event.opr)}</strong></div>
+              <div><span>EPA</span><strong>${formatNumber(event.epa)}</strong></div>
+              <div><span>Scouting avg</span><strong>${formatNumber(scoutingAverage)}</strong></div>
+            </div>
+
+            <div class="data-item-description">
+              ${eventScouting.length} scouting report${eventScouting.length === 1 ? "" : "s"}${notes.length ? ` • ${escapeHtml(notes.join(" • "))}` : ""}
+            </div>
+          </article>`;
+	}).join("");
+
+	results.innerHTML = `
+
+        <div class="team-heading">
+			<div class="team-heading-container">
+				<h2>Team ${escapeHtml(teamNumber)}: ${escapeHtml(season.name ?? "")}</h2>
+				<img class="teamImage" src="${teamImage}" alt="">
+			</div>
+
+          <span>
+            ${SEASON_YEAR} season • ${events.length} event${events.length === 1 ? "" : "s"} • ${scoutingRows.length} scouting matches recorded
+          </span>
+
+        </div>
+
+        <!-- TOP STATISTICS -->
+
+        <section class="top-stats">
+
+          <div class="stat-card">
+            <div class="stat-label">Season EPA</div>
+            <div class="stat-value">${formatNumber(seasonEpa, 2)}</div>
+            <div class="stat-description">
+              Statbotics season EPA${peakEpa !== null ? ` • peak ${peakEpa.toFixed(1)}` : ""}
+            </div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-label">Season Record</div>
+            <div class="stat-value">${formatRecord(season.record)}</div>
+            <div class="stat-description">
+              ${winRate !== null ? `${(winRate * 100).toFixed(0)}% win rate over ${season.record.count} matches` : "No completed matches yet"}
+            </div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-label">Average OPR</div>
+            <div class="stat-value">${formatNumber(averageOpr, 2)}</div>
+            <div class="stat-description">
+              ${bestOprEvent ? `Best: ${bestOprEvent.opr.toFixed(1)} at ${escapeHtml(bestOprEvent.name)}` : "No OPR data yet"}
+            </div>
+          </div>
+
+        </section>
+
+        <!-- EVENTS -->
+
+        <h3 class="section-title">Event by Event</h3>
+
+        ${events.length
+			? `<section class="season-events">${eventCards}</section>`
+			: `<div class="empty-state">Team ${escapeHtml(teamNumber)} has no ${SEASON_YEAR} events on The Blue Alliance.</div>`
+		}
+
+        <!-- STATBOTICS -->
+
+        <h3 class="section-title">
+          <a href="https://www.statbotics.io/team/${encodeURIComponent(teamNumber)}"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="external-link">Statbotics</a> Season Statistics
+        </h3>
+
+        <section class="data-grid">
+          ${dataItem("Auto EPA", formatNumber(finiteNumberOrNull(season.epa?.breakdown?.auto_points)))}
+          ${dataItem("Teleop EPA", formatNumber(finiteNumberOrNull(season.epa?.breakdown?.teleop_points)))}
+          ${dataItem("Endgame EPA", formatNumber(finiteNumberOrNull(season.epa?.breakdown?.endgame_points)))}
+          ${dataItem("World Rank", formatStatboticsRank(season.epa?.ranks?.total))}
+          ${dataItem("Country Rank", formatStatboticsRank(season.epa?.ranks?.country))}
+          ${dataItem("District Rank", formatStatboticsRank(season.epa?.ranks?.district))}
+        </section>
+
+        <!-- SCOUTING AVERAGES -->
+
+        <h3 class="section-title">Season Scouting Averages</h3>
+
+        ${scoutingRows.length
+			? `<section class="data-grid">
+          ${dataItem("Scouting Reports", scoutingRows.length, `From ${scoutingRowsByEvent.filter(({ rows }) => rows.length).length} event(s) with scouting sheets`)}
+          ${dataItem("Auto Points", formatAverage(averageAuto))}
+          ${dataItem("Teleop Points", formatAverage(averageTeleop))}
+          ${dataItem("Average Points", formatAverage(averageTotalPoints), "Average auto + teleop points from scouting")}
+          ${dataItem("Climb Points", formatAverage(averageClimbPoints), "Average auto + endgame climb points")}
+          ${dataItem("Average With Climb", averageTotalPoints !== null && averageClimbPoints !== null ? (averageTotalPoints + averageClimbPoints).toFixed(1) : "—", "Auto + teleop + climb points")}
+          ${dataItem("Best Match", formatNumber(bestMatchTotal), "Highest single-match scouting total")}
+          ${dataItem("Match-to-Match Spread", formatNumber(matchTotalSpread), "Standard deviation of match totals; lower is more consistent")}
+        </section>
+
+        <h3 class="section-title">Climbing, Driving &amp; Defence</h3>
+
+        <section class="data-grid">
+          ${dataItem("Auto Climb Rate", formatPercentage(nonZeroPercentage("Auto Climb")), "Played matches with an auto climb")}
+          ${dataItem("Endgame Climb Rate", formatPercentage(nonZeroPercentage("End Game Climb")), "Played matches with an endgame climb")}
+          ${dataItem("Scored All Preload", formatPercentage(answerPercentage("Score Preloaded", "all")), `Partial: ${formatPercentage(answerPercentage("Score Preloaded", "partial"))} • None: ${formatPercentage(answerPercentage("Score Preloaded", "none"))}`)}
+          ${dataItem("Shuttled Fuel", formatPercentage(truePercentage(scoutingRows, "Shuttle Fuel")), "Matches where they shuttled fuel")}
+          ${dataItem("Driver Skill", formatAverage(averageColumn(scoutingRows, "Driver Skill ranking compared to other robots on the field from 1 (best) to 6 (worst)")), "1 (best) to 6 (worst) vs robots on the field")}
+          ${dataItem("Defence Score", formatAverage(averageColumn(scoutingRows, "Defense Rating from 1 (incredible) to 5 (poor)")), `1 (incredible) to 5 (poor) • played defence in ${defenceMatchesPlayed(scoutingRows, "Defense Rating from 1 (incredible) to 5 (poor)")} matches`)}
+          ${dataItem("Was Defended", formatPercentage(truePercentage(scoutingRows, "Robot was defended")))}
+        </section>
+
+        <h3 class="section-title">Reliability</h3>
+
+        <section class="data-grid">
+          ${dataItem("No Shows", formatPercentage(truePercentage(scoutingRows, "No Show")))}
+          ${dataItem("Died / Broke Down", formatPercentage(truePercentage(scoutingRows, "Robot died/had breakdown in functionality")))}
+          ${dataItem("Tipped Over", formatPercentage(truePercentage(scoutingRows, "Robot tipped/fell over")))}
+          ${dataItem("Fouls / Cards", formatPercentage(truePercentage(scoutingRows, "Robot received fouls or a yellow/red card")))}
+        </section>`
+			: `<div class="empty-state">No scouting entries found for this team this season.</div>`
+		}
+
+        <!-- PIT SCOUTING -->
+
+        <h3 class="section-title">
+          Pit Scouting${latestPit ? ` (${escapeHtml(latestPit.event.name)})` : ""}
+        </h3>
+
+        ${latestPit
+			? `<section class="data-grid">${PIT_SCOUTING_QUESTIONS.map(([label, question]) => {
+				const answer = latestPit.rows
+					.map(row => String(row[question] ?? "").trim())
+					.find(Boolean);
+				return dataItem(label, answer ? escapeHtml(answer) : "—");
+			}).join("")}</section>`
+			: `<div class="empty-state">No pit scouting found for this team this season.</div>`
+		}
+      `;
+
+}
+
+
+/* Selects an event, adding it to the dropdown for this visit only if it isn't
+   one of the built-in options (e.g. an event opened from the season view). */
+function selectEvent(key, name) {
+
+	if (![...eventKeySelect.options].some(option => option.value === key)) {
+		const option = new Option(name || key, key);
+		option.dataset.temporary = "true";
+		eventKeySelect.add(option);
+	}
+
+	eventKeySelect.value = key;
+
+}
+
+
+/* Link to the event rankings page for the selected event, carrying the event
+   name so the rankings page can show events that aren't in its dropdown. */
+function eventRankingsUrl(teamNumber) {
+
+	const option = eventKeySelect.selectedOptions[0];
+	const params = new URLSearchParams({ event: eventKeySelect.value, team: teamNumber });
+
+	if (option?.dataset.temporary) {
+		params.set("name", option.text.trim());
+	}
+
+	return `/event/?${params}`;
+
+}
+
+
+/* "Event details" on a season card switches the dropdown to that event. */
+results.addEventListener("click", event => {
+
+	const eventButton = event.target.closest("[data-event-key]");
+
+	if (!eventButton) {
+		return;
+	}
+
+	const { eventKey: key, eventName } = eventButton.dataset;
+
+	selectEvent(key, eventName);
+	reloadData();
+	window.scrollTo({ top: 0, behavior: "smooth" });
+
+});
+
+
+/* =================================
    RELOAD EVERYTHING
 ================================= */
 
@@ -1613,15 +2061,31 @@ async function reloadData() {
 
 	resetTeamData();
 
+	const url = new URL(window.location);
+	url.searchParams.set("event", eventKey);
+
+	if (eventKeySelect.selectedOptions[0]?.dataset.temporary) {
+		url.searchParams.set("name", eventKeySelect.selectedOptions[0].text.trim());
+	} else {
+		url.searchParams.delete("name");
+	}
+
+	window.history.replaceState({}, "", url);
+
 
 	results.innerHTML = `
         <div class="loading">
-          Loading event data…
+          ${eventKey === SEASON_KEY ? "Loading season data…" : "Loading event data…"}
         </div>
       `;
 
 
 	try {
+
+		if (eventKey === SEASON_KEY) {
+			await printSeasonData();
+			return;
+		}
 
 		await Promise.all([
 			loadEventData(),
@@ -1691,6 +2155,11 @@ setInterval(
 
 	async () => {
 
+		/* Season view pulls from every event; refresh it with "View Team" instead. */
+		if (eventKey === SEASON_KEY) {
+			return;
+		}
+
 		try {
 
 			await loadScoutingData();
@@ -1716,10 +2185,13 @@ setInterval(
 
 
 /* INITIAL LOAD */
-const eventFromUrl = new URL(window.location).searchParams.get("event");
+const initialParams = new URL(window.location).searchParams;
+const eventFromUrl = initialParams.get("event");
 
 if ([...eventKeySelect.options].some(option => option.value === eventFromUrl)) {
 	eventKeySelect.value = eventFromUrl;
+} else if (/^\d{4}[a-z0-9]+$/i.test(eventFromUrl ?? "")) {
+	selectEvent(eventFromUrl, initialParams.get("name"));
 }
 
 const teams = getTeamsFromUrl();

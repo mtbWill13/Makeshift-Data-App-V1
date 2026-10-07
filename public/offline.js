@@ -72,66 +72,93 @@ const ScoutOffline = (() => {
 			`transfer-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 	}
 
-	function checksum(value) {
-		let hash = 2166136261;
+  /*
+    One QR code per report:  type|eventKey|timestamp|answer|answer|...
+    Answer N is sheet column N (A, B, C...), trailing blank columns are
+    dropped. "%" and "|" inside answers are escaped as %25 and %7C.
+  */
+  const QR_TYPES = ["match-scouting", "pit-scouting"];
 
-		for (const character of String(value)) {
-			hash ^= character.charCodeAt(0);
-			hash = Math.imul(hash, 16777619);
-		}
+  function escapeQrField(value) {
+    return String(value ?? "").replace(/%/g, "%25").replace(/\|/g, "%7C");
+  }
 
-		return (hash >>> 0).toString(36);
-	}
+  function unescapeQrField(value) {
+    return value.replace(/%(25|7C)/gi, code => code === "%25" ? "%" : "|");
+  }
 
-	function bytesToBase64(bytes) {
-		let binary = "";
+  /* Answers are part of the key so two reports saved in the same millisecond
+     (e.g. by two scouts) are never mistaken for duplicates. */
+  function reportKey(report) {
+    const answers = Object.entries(report.answers || {})
+      .filter(([, value]) => String(value ?? "") !== "")
+      .sort(([left], [right]) => left.localeCompare(right));
 
-		for (let index = 0; index < bytes.length; index += 8192) {
-			binary += String.fromCharCode(...bytes.subarray(index, index + 8192));
-		}
+    return `${report.type}|${report.eventKey}|${report.createdAt}|${JSON.stringify(answers)}`;
+  }
 
-		return btoa(binary);
-	}
+  /* Match answers are keyed "column-N"; pit answers are keyed by header text. */
+  function reportColumns(report, headers = []) {
+    const columns = [];
 
-	function base64ToBytes(value) {
-		const binary = atob(value);
-		return Uint8Array.from(binary, character => character.charCodeAt(0));
-	}
+    for (const [key, value] of Object.entries(report.answers || {})) {
+      const columnMatch = /^column-(\d+)$/.exec(key);
+      const index = columnMatch ? Number(columnMatch[1]) : headers.indexOf(key);
 
-	async function encodeTransferPackage(transferPackage) {
-		console.log(JSON.stringify(transferPackage));
-		const bytes = new TextEncoder().encode(JSON.stringify(transferPackage));
+      if (index >= 0) {
+        columns[index] = String(value ?? "");
+      } else if (String(value ?? "").trim()) {
+        throw new Error(`"${key}" is not in the cached sheet header row. Open the form online once, then try again.`);
+      }
+    }
 
-		if ("CompressionStream" in window) {
-			const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream("gzip"));
-			return `G${bytesToBase64(new Uint8Array(await new Response(stream).arrayBuffer()))}`;
-		}
+    const flattened = Array.from(columns, value => value ?? "");
 
-		return `J${bytesToBase64(bytes)}`;
-	}
+    while (flattened.length && flattened[flattened.length - 1] === "") {
+      flattened.pop();
+    }
 
-	async function decodeTransferPackage(payload) {
-		const encoding = payload.slice(0, 1);
-		let bytes = base64ToBytes(payload.slice(1));
+    return flattened;
+  }
 
-		if (encoding === "G") {
-			if (!("DecompressionStream" in window)) {
-				throw new Error("This browser cannot open compressed scouting transfers.");
-			}
+  function encodeReportQr(report, headers = []) {
+    return [report.type, report.eventKey, report.createdAt, ...reportColumns(report, headers)]
+      .map(escapeQrField)
+      .join("|");
+  }
 
-			const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
-			bytes = new Uint8Array(await new Response(stream).arrayBuffer());
-		} else if (encoding !== "J") {
-			throw new Error("This is not a MakeShift scouting transfer.");
-		}
+  function decodeReportQr(text) {
+    const [type, eventKey, timestamp, ...columns] = String(text).split("|").map(unescapeQrField);
 
-		return JSON.parse(new TextDecoder().decode(bytes));
-	}
+    if (!QR_TYPES.includes(type) || !/^\d{4}[a-z0-9]+$/i.test(eventKey ?? "") || !/^\d+$/.test(timestamp ?? "")) {
+      return null;
+    }
 
-	async function createTransferPackage(type, eventKey) {
-		const reports = (await queuedSubmissions(type, true))
-			.filter(report => report.eventKey === eventKey)
-			.map(({ submissionToken, id, transferOnly, ...report }) => report);
+    const answers = {};
+    columns.forEach((value, index) => {
+      if (value !== "") answers[`column-${index}`] = value;
+    });
+
+    return { type, eventKey, createdAt: Number(timestamp), answers };
+  }
+
+  /* Store a received report once, however many times its QR code is scanned. */
+  async function importReport(report) {
+    const key = reportKey(report);
+    const existing = await queuedSubmissions(report.type, true);
+
+    if (existing.some(item => item.transferKey === key)) {
+      return false;
+    }
+
+    await queueSubmission({ ...report, transferOnly: true, transferKey: key });
+    return true;
+  }
+
+  async function createTransferPackage(type, eventKey) {
+    const reports = (await queuedSubmissions(type, true))
+      .filter(report => report.eventKey === eventKey)
+      .map(({ submissionToken, id, transferOnly, transferKey, ...report }) => report);
 
 		if (!reports.length) {
 			throw new Error("There are no saved reports for this event to transfer.");
@@ -158,29 +185,23 @@ const ScoutOffline = (() => {
 			throw new Error("This backup file is not a supported scouting transfer.");
 		}
 
-		const existing = await queuedSubmissions(transferPackage.type, true);
-		const alreadyImported = new Set(existing.map(report => report.transferKey).filter(Boolean));
-		let imported = 0;
+    const reports = transferPackage.reports.map(report => ({
+      ...report,
+      type: report.type ?? transferPackage.type,
+      eventKey: report.eventKey ?? transferPackage.eventKey
+    }));
+    let imported = 0;
 
-		if (!alreadyImported.has(transferPackage.transferId)) {
-			for (const report of transferPackage.reports) {
-				await queueSubmission({
-					...report,
-					type: transferPackage.type,
-					eventKey: transferPackage.eventKey,
-					transferOnly: true,
-					transferKey: transferPackage.transferId
-				});
-				imported += 1;
-			}
-		}
+    for (const report of reports) {
+      if (await importReport(report)) imported += 1;
+    }
 
 		if (transferPackage.schema) {
 			saveSchema(transferPackage.type, transferPackage.eventKey, transferPackage.schema);
 		}
 
-		return { imported, duplicate: alreadyImported.has(transferPackage.transferId) };
-	}
+    return { imported, reports };
+  }
 
 	function schemaKey(type, eventKey) {
 		return `makeshift-schema-${type}-${eventKey}`;
@@ -228,17 +249,18 @@ const ScoutOffline = (() => {
 		}
 	}
 
-	return {
-		cachedSchema,
-		checksum,
-		createTransferPackage,
-		decodeTransferPackage,
-		encodeTransferPackage,
-		importTransferPackage,
-		queueSubmission,
-		queuedSubmissions,
-		registerServiceWorker,
-		saveSchema,
-		sync
-	};
+  return {
+    cachedSchema,
+    createTransferPackage,
+    decodeReportQr,
+    encodeReportQr,
+    importReport,
+    importTransferPackage,
+    queueSubmission,
+    queuedSubmissions,
+    registerServiceWorker,
+    reportKey,
+    saveSchema,
+    sync
+  };
 })();

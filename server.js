@@ -72,6 +72,22 @@ async function tba(path) {
 	return response.json();
 }
 
+async function statbotics(path) {
+	const response = await fetch(`https://api.statbotics.io/v3${path}`, {
+		headers: { Accept: "application/json" }
+	});
+
+	if (!response.ok) {
+		throw new Error(`Statbotics request failed: ${response.status}`);
+	}
+
+	return response.json();
+}
+
+function stripHtml(value) {
+	return String(value ?? "").replace(/<[^>]*>/g, "");
+}
+
 // All results for an event, such as "2026onott"
 app.get("/api/events/:eventKey/matches", async (req, res) => {
 	try {
@@ -94,15 +110,21 @@ app.get("/api/events/:eventKey/matches", async (req, res) => {
 
 // TBA team data
 app.get(`/api/teamName/:teamNumber`, async (req, res) => {
-	const team = await tba(`/team/frc${req.params.teamNumber}`);
+	try {
+		const team = await tba(`/team/frc${req.params.teamNumber}`);
 
-	res.json({ name: team.nickname });
+		res.json({ name: team.nickname });
+	} catch (error) {
+		res.status(404).json({ error: error.message });
+	}
 });
 
 // Event rankings
 app.get("/api/events/:eventKey/rankings", async (req, res) => {
 	try {
-		res.json(await tba(`/event/${req.params.eventKey}/rankings`));
+		// TBA wraps the list as { rankings: [...] }; pages expect the array itself.
+		const data = await tba(`/event/${req.params.eventKey}/rankings`);
+		res.json(data?.rankings ?? []);
 	} catch (error) {
 		res.status(500).json({ error: error.message });
 	}
@@ -122,6 +144,80 @@ app.get("/api/teams/:teamKey/events/:year", async (req, res) => {
 	try {
 		res.json(await tba(`/team/${req.params.teamKey}/events/${req.params.year}`));
 	} catch (error) {
+		res.status(500).json({ error: error.message });
+	}
+});
+
+// A team's whole season: every event they attended with rank, OPR and EPA
+app.get("/api/teams/:teamNumber/season/:year", async (req, res) => {
+	const { teamNumber, year } = req.params;
+	const teamKey = `frc${teamNumber}`;
+
+	let team;
+	let events;
+
+	try {
+		[team, events] = await Promise.all([
+			tba(`/team/${teamKey}`),
+			tba(`/team/${teamKey}/events/${year}`)
+		]);
+	} catch (error) {
+		return res.status(404).json({ error: `Team ${teamNumber} was not found on The Blue Alliance.` });
+	}
+
+	try {
+		const [statuses, teamYear, teamEvents, eventOprs] = await Promise.all([
+			tba(`/team/${teamKey}/events/${year}/statuses`).catch(() => ({})),
+			statbotics(`/team_year/${teamNumber}/${year}`).catch(() => null),
+			statbotics(`/team_events?team=${teamNumber}&year=${year}`).catch(() => []),
+			Promise.all(events.map(event =>
+				tba(`/event/${event.key}/oprs`).catch(() => null)
+			))
+		]);
+
+		const epaByEvent = new Map(
+			(Array.isArray(teamEvents) ? teamEvents : []).map(row => [row.event, row])
+		);
+
+		const seasonEvents = events
+			.map((event, index) => {
+				const status = statuses?.[event.key];
+				const ranking = status?.qual?.ranking;
+				const oprs = eventOprs[index];
+				const teamEvent = epaByEvent.get(event.key);
+				const breakdown = teamEvent?.epa?.breakdown;
+
+				return {
+					key: event.key,
+					name: event.short_name || event.name,
+					startDate: event.start_date,
+					rank: ranking?.rank ?? teamEvent?.record?.qual?.rank ?? null,
+					numTeams: status?.qual?.num_teams ?? teamEvent?.record?.qual?.num_teams ?? null,
+					qualRecord: ranking?.record ?? null,
+					playoffRecord: status?.playoff?.record ?? null,
+					allianceStatus: stripHtml(status?.alliance_status_str) || null,
+					playoffStatus: stripHtml(status?.playoff_status_str) || null,
+					opr: oprs?.oprs?.[teamKey] ?? null,
+					dpr: oprs?.dprs?.[teamKey] ?? null,
+					ccwm: oprs?.ccwms?.[teamKey] ?? null,
+					epa: teamEvent?.epa?.total_points?.mean ?? teamEvent?.epa?.total_points ?? null,
+					autoEpa: breakdown?.auto_points ?? null,
+					teleopEpa: breakdown?.teleop_points ?? null,
+					endgameEpa: breakdown?.endgame_points ?? null
+				};
+			})
+			.sort((a, b) => String(a.startDate).localeCompare(String(b.startDate)));
+
+		res.json({
+			team: Number(teamNumber),
+			year: Number(year),
+			name: teamYear?.name ?? team.nickname,
+			epa: teamYear?.epa ?? null,
+			record: teamYear?.record ?? null,
+			events: seasonEvents
+		});
+	} catch (error) {
+		console.error("SEASON ERROR:", error);
 		res.status(500).json({ error: error.message });
 	}
 });
@@ -309,14 +405,7 @@ app.get("/api/pitscouting/:eventKey", async (req, res) => {
 	try {
 		const { eventKey } = req.params;
 
-		const sheetIds = {
-			"2026oncmp2": process.env.SCOUTING_SHEET_2026ONCMP2,
-			"2026ontor": process.env.SCOUTING_SHEET_2026ONTOR,
-			"2026onwin": process.env.SCOUTING_SHEET_2026ONWIN,
-			"2026test": process.env.SCOUTING_SHEET_2026TEST
-		};
-
-		const spreadsheetId = sheetIds[eventKey];
+		const spreadsheetId = spreadsheetIdForEvent(eventKey);
 
 		console.log("Spreadsheet ID:", spreadsheetId);
 
@@ -371,11 +460,12 @@ app.get("/api/pitscouting/:eventKey/schema", async (req, res) => {
 			range: "'Pit Scouting Raw Data'!1:1"
 		});
 
+		/* Keep blank cells so array index 0 always remains column A,
+		   otherwise PIT_SCOUTING_COLUMNS letters point at the wrong questions. */
 		const headers = (response.data.values?.[0] ?? [])
-			.map(header => String(header).trim())
-			.filter(Boolean);
+			.map(header => String(header).trim());
 
-		if (!headers.length) {
+		if (!headers.some(Boolean)) {
 			return res.status(500).json({ error: "The pit-scouting sheet has no header row." });
 		}
 
@@ -430,7 +520,10 @@ app.post("/api/pitscouting/:eventKey", async (req, res) => {
 			valueInputOption: "USER_ENTERED",
 			insertDataOption: "INSERT_ROWS",
 			requestBody: {
-				values: [headers.map(header => String(answers[header] ?? ""))]
+				/* Pit forms key answers by header; QR transfers key them by column. */
+				values: [headers.map((header, index) =>
+					String(answers[`column-${index}`] ?? answers[header] ?? "")
+				)]
 			}
 		});
 

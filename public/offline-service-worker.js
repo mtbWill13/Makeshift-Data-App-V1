@@ -1,4 +1,4 @@
-const CACHE_NAME = "makeshift-scouting-v12";
+const CACHE_NAME = "makeshift-scouting-v15";
 const APP_SHELL = [
   "/scouting/",
   "/scouting/index.js",
@@ -14,6 +14,7 @@ const APP_SHELL = [
   "/event/index.js",
   "/event/styles.css",
   "/theme.css",
+  "/images/makeshift-logo-wide.png",
   "/vendor/qrcode.js"
 ];
 
@@ -33,6 +34,23 @@ self.addEventListener("activate", event => {
 
 self.addEventListener("fetch", event => {
   if (event.request.method !== "GET") return;
+
+  /* Live data must be fresh: try the network first and only fall back to
+     the last cached copy (e.g. the match schedule) when offline. */
+  if (new URL(event.request.url).pathname.startsWith("/api/")) {
+    event.respondWith(
+      fetch(event.request)
+        .then(response => {
+          if (response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
+          }
+          return response;
+        })
+        .catch(() => caches.match(event.request).then(cached => cached || Response.error()))
+    );
+    return;
+  }
 
   event.respondWith(
     caches.match(event.request).then(cached => {

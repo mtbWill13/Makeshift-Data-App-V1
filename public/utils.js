@@ -53,7 +53,7 @@ function performanceTrendChart(points, label = "Scouting average by match") {
 		return `<section class="performance-chart empty-chart"><h3>${escapeChartText(label)}</h3><p>Match-by-match data will appear after scouting reports or completed matches are available.</p></section>`;
 	}
 
-	const series = [{ key: "scouting", label: "Scouting average", color: "#34aadc" }];
+	const series = [{ key: "scouting", label: "Scouting average", color: "#59a8d7" }];
 	const values = usable.map(point => Number(point.scouting)).filter(Number.isFinite);
 
 	if (!values.length) {
@@ -93,7 +93,7 @@ function performanceTrendChart(points, label = "Scouting average by match") {
 		.map(match => `<text x="${x(match)}" y="${height - 17}" text-anchor="middle">${match}</text>`)
 		.join("");
 
-	return `<section class="performance-chart"><div class="chart-heading"><h3>${escapeChartText(label)}</h3><div class="chart-legend">${series.map(line => `<span><i style="background:${line.color}"></i>${line.label}</span>`).join("")}</div></div><svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeChartText(label)}"><g class="chart-grid">${grid}</g><line x1="${left}" x2="${width - right}" y1="${height - bottom}" y2="${height - bottom}" stroke="#000" stroke-width="2"/>${paths}<g class="chart-labels">${labels}<text x="${width / 2}" y="${height - 2}" text-anchor="middle">Qualification match</text></g></svg><p class="chart-note">Each point is that match’s average report score: auto + teleop + endgame points. Multiple reports for one match are averaged together.</p></section>`;
+	return `<section class="performance-chart"><div class="chart-heading"><h3>${escapeChartText(label)}</h3><div class="chart-legend">${series.map(line => `<span><i style="background:${line.color}"></i>${line.label}</span>`).join("")}</div></div><svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeChartText(label)}"><g class="chart-grid">${grid}</g><line x1="${left}" x2="${width - right}" y1="${height - bottom}" y2="${height - bottom}" class="chart-axis" stroke-width="1.5"/>${paths}<g class="chart-labels">${labels}<text x="${width / 2}" y="${height - 2}" text-anchor="middle">Qualification match</text></g></svg><p class="chart-note">Each point is that match’s average report score: auto + teleop + endgame points. Multiple reports for one match are averaged together.</p></section>`;
 }
 
 function performanceTrendPoints(scoutingRows) {

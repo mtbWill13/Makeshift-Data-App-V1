@@ -19,17 +19,17 @@ const downloadCsv = document.getElementById("downloadCsv");
 const downloadReceivedBackup = document.getElementById("downloadReceivedBackup");
 const receiverPasscode = document.getElementById("receiverPasscode");
 const uploadToSheets = document.getElementById("uploadToSheets");
+const receivedList = document.getElementById("receivedList");
 
-/* Smaller, high-error-correction frames scan more reliably from a phone screen. */
-const QR_CHUNK_SIZE = 220;
+const UPLOADED_STORAGE_KEY = "makeshift-uploaded-report-keys";
 let preparedPackage = null;
 let frames = [];
+let frameLabels = [];
 let frameIndex = 0;
 let autoPlayTimer = null;
 let cameraStream = null;
 let scanTimer = null;
-let scannedFrames = new Map();
-let receivedPackage = null;
+let receivedReports = new Map();
 
 function downloadFile(name, content, type = "application/json") {
 	const url = URL.createObjectURL(new Blob([content], { type }));
@@ -40,28 +40,43 @@ function downloadFile(name, content, type = "application/json") {
 	setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function framePayloads(encodedPackage, id) {
-	const chunks = [];
-	for (let offset = 0; offset < encodedPackage.length; offset += QR_CHUNK_SIZE) {
-		chunks.push(encodedPackage.slice(offset, offset + QR_CHUNK_SIZE));
-	}
+function escapeHtml(value) {
+	return String(value ?? "").replace(/[&<>"']/g, character => ({
+		"&": "&amp;",
+		"<": "&lt;",
+		">": "&gt;",
+		'"': "&quot;",
+		"'": "&#39;"
+	})[character]);
+}
 
-	const total = chunks.length;
-	return chunks.map((chunk, index) =>
-		`MSH1|${id}|${index + 1}|${total}|${ScoutOffline.checksum(chunk)}|${chunk}`
-	);
+/* "2026oncmp2 • Match 12 • Team 4039" when the cached sheet headers are known. */
+function reportLabel(report) {
+	const headers = ScoutOffline.cachedSchema(report.type, report.eventKey)?.headers || [];
+	const answerFor = expression => {
+		const index = headers.findIndex(header => expression.test(header));
+		return index < 0 ? "" : report.answers?.[`column-${index}`] ?? report.answers?.[headers[index]] ?? "";
+	};
+	const match = answerFor(/^match number$/i);
+	const team = answerFor(/team number/i);
+	return [
+		report.type === "pit-scouting" ? "Pit scouting" : "",
+		report.eventKey,
+		match && `Match ${match}`,
+		team && `Team ${team}`
+	].filter(Boolean).join(" • ");
 }
 
 async function showFrame() {
 	if (!frames.length) return;
 
 	await QRCode.toCanvas(qrCode, frames[frameIndex], {
-		errorCorrectionLevel: "Q",
+		errorCorrectionLevel: "M",
 		margin: 1,
 		width: 360,
 		color: { dark: "#000000", light: "#ffffff" }
 	});
-	frameStatus.textContent = `Frame ${frameIndex + 1} of ${frames.length}`;
+	frameStatus.textContent = `Report ${frameIndex + 1} of ${frames.length} • ${frameLabels[frameIndex]}`;
 }
 
 function stopAutoPlay() {
@@ -77,15 +92,14 @@ async function prepareTransfer() {
 
 	try {
 		preparedPackage = await ScoutOffline.createTransferPackage(sendType.value, sendEvent.value.trim());
-		frames = framePayloads(
-			await ScoutOffline.encodeTransferPackage(preparedPackage),
-			preparedPackage.transferId
-		);
+		const headers = preparedPackage.schema?.headers || [];
+		frames = preparedPackage.reports.map(report => ScoutOffline.encodeReportQr(report, headers));
+		frameLabels = preparedPackage.reports.map(reportLabel);
 		frameIndex = 0;
 		await showFrame();
 		qrPanel.hidden = false;
 		downloadButton.disabled = false;
-		sendStatus.textContent = `${preparedPackage.reports.length} report${preparedPackage.reports.length === 1 ? "" : "s"} prepared.`;
+		sendStatus.textContent = `${frames.length} report${frames.length === 1 ? "" : "s"} prepared, one QR code each. The passcode is not included.`;
 	} catch (error) {
 		sendStatus.textContent = error.message;
 	} finally {
@@ -93,41 +107,45 @@ async function prepareTransfer() {
 	}
 }
 
-function parseFrame(value) {
-	const parts = String(value).split("|");
-	if (parts.length !== 6 || parts[0] !== "MSH1") return null;
-	const [, transferId, partNumber, totalParts, check, chunk] = parts;
-	if (!Number.isInteger(Number(partNumber)) || !Number.isInteger(Number(totalParts)) || ScoutOffline.checksum(chunk) !== check) {
-		return null;
+function uploadedKeys() {
+	try {
+		return new Set(JSON.parse(localStorage.getItem(UPLOADED_STORAGE_KEY) || "[]"));
+	} catch {
+		return new Set();
 	}
-	return { transferId, partNumber: Number(partNumber), totalParts: Number(totalParts), chunk };
 }
 
-async function acceptFrame(value) {
-	const frame = parseFrame(value);
-	if (!frame) return;
+function renderReceived(latest = "") {
+	const uploaded = uploadedKeys();
+	const reports = [...receivedReports.values()];
 
-	if (scannedFrames.size && !scannedFrames.has(frame.partNumber)) {
-		const first = scannedFrames.values().next().value;
-		if (first.transferId !== frame.transferId || first.totalParts !== frame.totalParts) return;
-	}
-
-	scannedFrames.set(frame.partNumber, frame);
-	receiveStatus.textContent = `Received ${scannedFrames.size} of ${frame.totalParts} QR frames…`;
-
-	if (scannedFrames.size !== frame.totalParts) return;
-
-	const encoded = [...scannedFrames.values()]
-		.sort((left, right) => left.partNumber - right.partNumber)
-		.map(item => item.chunk)
+	receivedActions.hidden = !reports.length;
+	receivedList.hidden = !reports.length;
+	receivedList.innerHTML = reports
+		.sort((left, right) => left.createdAt - right.createdAt)
+		.map(report => `<li>${escapeHtml(reportLabel(report))}${uploaded.has(ScoutOffline.reportKey(report)) ? " • uploaded" : ""}</li>`)
 		.join("");
+	receiveStatus.textContent = `${reports.length} report${reports.length === 1 ? "" : "s"} received.${latest ? ` Latest: ${latest}.` : ""}`;
+}
 
-	try {
-		await acceptTransferPackage(await ScoutOffline.decodeTransferPackage(encoded));
-		scannedFrames = new Map();
-	} catch (error) {
-		receiveStatus.textContent = `Transfer could not be verified: ${error.message}`;
+async function acceptReports(reports) {
+	let latest = "";
+
+	for (const report of reports) {
+		const key = ScoutOffline.reportKey(report);
+		if (receivedReports.has(key)) continue;
+
+		receivedReports.set(key, report);
+		await ScoutOffline.importReport(report);
+		latest = reportLabel(report);
 	}
+
+	if (latest) renderReceived(latest);
+}
+
+/* Every QR code in view is read, so several reports can be scanned at once. */
+async function acceptCodes(values) {
+	await acceptReports(values.map(ScoutOffline.decodeReportQr).filter(Boolean));
 }
 
 async function acceptTransferPackage(transferPackage) {
@@ -135,24 +153,41 @@ async function acceptTransferPackage(transferPackage) {
 		throw new Error("This is not a MakeShift scouting backup.");
 	}
 
-	receivedPackage = transferPackage;
-	await ScoutOffline.importTransferPackage(transferPackage);
-	receivedActions.hidden = false;
-	receiveStatus.textContent = `${transferPackage.reports.length} report${transferPackage.reports.length === 1 ? "" : "s"} received and verified for ${transferPackage.eventKey}.`;
+	const { reports } = await ScoutOffline.importTransferPackage(transferPackage);
+	await acceptReports(reports);
+	renderReceived();
 }
 
-function csvForPackage(transferPackage) {
-	const headers = transferPackage.schema?.headers || [];
-	const columnHeaders = headers.length
-		? headers
-		: [...new Set(transferPackage.reports.flatMap(report => Object.keys(report.answers || {})))];
-	const csvCell = value => `"${String(value ?? "").replaceAll('"', '""')}"`;
-	const rows = transferPackage.reports.map(report => columnHeaders.map((header, index) => {
-		const columnKey = `column-${index}`;
-		return report.answers?.[columnKey] ?? report.answers?.[header] ?? "";
-	}));
+function columnLetter(index) {
+	let result = "";
+	for (let current = index + 1; current > 0; current = Math.floor((current - 1) / 26)) {
+		result = String.fromCharCode(65 + (current - 1) % 26) + result;
+	}
+	return result;
+}
 
-	return [columnHeaders, ...rows].map(row => row.map(csvCell).join(",")).join("\n");
+function receivedCsv() {
+	const reports = [...receivedReports.values()].sort((left, right) => left.createdAt - right.createdAt);
+	const groups = new Set(reports.map(report => `${report.type}|${report.eventKey}`));
+	const headers = groups.size === 1
+		? ScoutOffline.cachedSchema(reports[0].type, reports[0].eventKey)?.headers || []
+		: [];
+	const columnCount = Math.max(
+		headers.length,
+		...reports.flatMap(report => Object.keys(report.answers || {})
+			.map(key => /^column-(\d+)$/.exec(key))
+			.filter(Boolean)
+			.map(match => Number(match[1]) + 1))
+	);
+	const columnHeaders = Array.from({ length: columnCount }, (_, index) => headers[index] || `Column ${columnLetter(index)}`);
+	const csvCell = value => `"${String(value ?? "").replaceAll('"', '""')}"`;
+	const rows = reports.map(report => [
+		report.type,
+		report.eventKey,
+		...columnHeaders.map((header, index) => report.answers?.[`column-${index}`] ?? report.answers?.[header] ?? "")
+	]);
+
+	return [["Type", "Event", ...columnHeaders], ...rows].map(row => row.map(csvCell).join(",")).join("\n");
 }
 
 async function startScanner() {
@@ -169,12 +204,12 @@ async function startScanner() {
 		const detector = new BarcodeDetector({ formats: ["qr_code"] });
 		startCamera.disabled = true;
 		stopCamera.disabled = false;
-		receiveStatus.textContent = "Point the camera at the first QR frame.";
+		receiveStatus.textContent = "Point the camera at one or more report QR codes.";
 		scanTimer = setInterval(async () => {
 			if (camera.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
 			try {
 				const codes = await detector.detect(camera);
-				if (codes[0]?.rawValue) await acceptFrame(codes[0].rawValue);
+				await acceptCodes(codes.map(code => code.rawValue).filter(Boolean));
 			} catch { /* Keep scanning after a temporary camera decode failure. */ }
 		}, 400);
 	} catch (error) {
@@ -211,13 +246,24 @@ fileInput.addEventListener("change", async () => {
 	try { await acceptTransferPackage(JSON.parse(await file.text())); } catch (error) { receiveStatus.textContent = error.message; }
 });
 downloadCsv.addEventListener("click", () => {
-	if (receivedPackage) downloadFile(`makeshift-${receivedPackage.eventKey}-reports.csv`, csvForPackage(receivedPackage), "text/csv");
+	if (receivedReports.size) downloadFile("makeshift-received-reports.csv", receivedCsv(), "text/csv");
 });
 downloadReceivedBackup.addEventListener("click", () => {
-	if (receivedPackage) downloadFile(`makeshift-${receivedPackage.eventKey}-received-backup.json`, JSON.stringify(receivedPackage));
+	const reports = [...receivedReports.values()];
+	if (!reports.length) return;
+
+	downloadFile("makeshift-received-backup.json", JSON.stringify({
+		format: "makeshift-scouting-transfer",
+		version: 1,
+		transferId: `received-${Date.now()}`,
+		createdAt: new Date().toISOString(),
+		type: reports[0].type,
+		eventKey: reports[0].eventKey,
+		reports
+	}));
 });
 uploadToSheets.addEventListener("click", async () => {
-	if (!receivedPackage) return;
+	if (!receivedReports.size) return;
 	if (!receiverPasscode.value) {
 		receiveStatus.textContent = "Enter the scout passcode before uploading to Google Sheets.";
 		return;
@@ -226,18 +272,18 @@ uploadToSheets.addEventListener("click", async () => {
 	uploadToSheets.disabled = true;
 	let uploaded = 0;
 	let alreadyUploaded = 0;
-	const endpoint = receivedPackage.type === "pit-scouting" ? "/api/pitscouting" : "/api/scouting";
-	const uploadKey = `makeshift-transfer-uploaded-${receivedPackage.transferId}`;
-	const uploadedIndexes = new Set(JSON.parse(localStorage.getItem(uploadKey) || "[]"));
+	const uploadedReportKeys = uploadedKeys();
 
 	try {
-		for (const [index, report] of receivedPackage.reports.entries()) {
-			if (uploadedIndexes.has(index)) {
+		for (const report of receivedReports.values()) {
+			const key = ScoutOffline.reportKey(report);
+			if (uploadedReportKeys.has(key)) {
 				alreadyUploaded += 1;
 				continue;
 			}
 
-			const response = await fetch(`${endpoint}/${receivedPackage.eventKey}`, {
+			const endpoint = report.type === "pit-scouting" ? "/api/pitscouting" : "/api/scouting";
+			const response = await fetch(`${endpoint}/${report.eventKey}`, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ submissionToken: receiverPasscode.value, answers: report.answers })
@@ -245,11 +291,13 @@ uploadToSheets.addEventListener("click", async () => {
 			const body = await response.json().catch(() => ({}));
 			if (!response.ok) throw new Error(body.error || "Google Sheets upload failed.");
 			uploaded += 1;
-			uploadedIndexes.add(index);
-			localStorage.setItem(uploadKey, JSON.stringify([...uploadedIndexes]));
+			uploadedReportKeys.add(key);
+			localStorage.setItem(UPLOADED_STORAGE_KEY, JSON.stringify([...uploadedReportKeys]));
 		}
-		receiveStatus.textContent = `${uploaded} verified report${uploaded === 1 ? "" : "s"} uploaded to Google Sheets${alreadyUploaded ? `; ${alreadyUploaded} already uploaded earlier.` : "."}`;
+		renderReceived();
+		receiveStatus.textContent = `${uploaded} report${uploaded === 1 ? "" : "s"} uploaded to Google Sheets${alreadyUploaded ? `; ${alreadyUploaded} already uploaded earlier.` : "."}`;
 	} catch (error) {
+		renderReceived();
 		receiveStatus.textContent = `${uploaded} report${uploaded === 1 ? "" : "s"} uploaded before: ${error.message}`;
 	} finally {
 		uploadToSheets.disabled = false;

@@ -244,7 +244,7 @@ function render(red, blue) {
 			["Combined OPR", red.opr, blue.opr, { digits: 2 }],
 			["Combined DPR", red.dpr, blue.dpr, { digits: 2, lower: true }],
 			["Combined CCWM", red.ccwm, blue.ccwm, { digits: 2 }],
-			['Combined total EPA', red.autoEpa + red.teleopEpa + red.endgameEpa, blue.autoEpa + blue.teleopEpa + blue.endgameEpa],
+			['Combined total EPA', sum([red.autoEpa, red.teleopEpa, red.endgameEpa]), sum([blue.autoEpa, blue.teleopEpa, blue.endgameEpa])],
 			['Combined auto EPA', red.autoEpa, blue.autoEpa],
 			['Combined teleop EPA', red.teleopEpa, blue.teleopEpa],
 		],
