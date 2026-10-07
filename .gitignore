@@ -2,3 +2,5 @@ node_modules
 .env
 google-service-account.json
 .DS_Store
+# Generated caches
+data/

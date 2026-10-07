@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import { google } from "googleapis";
+import { startBehindTheBumpers, episodesForTeam } from "./behind-the-bumpers.js";
 const app = express();
 
 app.use(express.json({ limit: "100kb" }));
@@ -143,6 +144,86 @@ app.get(`/api/teamName/:teamNumber`, async (req, res) => {
 		res.json({ name: team.nickname });
 	} catch (error) {
 		res.status(404).json({ error: error.message });
+	}
+});
+
+// A team's robot photo for a year, if one is posted on TBA (preferred photo first)
+const ROBOT_PHOTO_TYPES = new Set(["imgur", "cdphotothread", "instagram-image"]);
+
+// Video titles from YouTube's public oEmbed endpoint (no API key). Titles don't
+// change, so successful lookups are kept for the life of the server.
+const youtubeInfoCache = new Map();
+
+async function youtubeInfo(videoId) {
+	if (youtubeInfoCache.has(videoId)) return youtubeInfoCache.get(videoId);
+
+	const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
+	const info = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(watchUrl)}&format=json`, {
+		signal: AbortSignal.timeout(5000)
+	})
+		.then(response => response.ok ? response.json() : null)
+		.catch(() => null);
+
+	if (info) youtubeInfoCache.set(videoId, info);
+	return info;
+}
+
+// TBA's YouTube media mixes Behind the Bumpers episodes (FUN Robotics Network,
+// titled "2056 OP Robotics | Behind the Bumpers | ...") with teams' own reveal
+// videos, so only accept a title that names the series and this team.
+async function behindTheBumpers(media, teamNumber) {
+	const videoIds = media
+		.filter(item => item.type === "youtube" && /^[\w-]{11}$/.test(item.foreign_key ?? ""))
+		.map(item => item.foreign_key);
+	const infos = await Promise.all(videoIds.map(youtubeInfo));
+	const teamPattern = new RegExp(`(^|\\D)${teamNumber}(\\D|$)`);
+	const index = infos.findIndex(info =>
+		/behind the bumpers/i.test(info?.title ?? "") && teamPattern.test(info.title)
+	);
+
+	return index === -1
+		? null
+		: { url: `https://www.youtube.com/watch?v=${videoIds[index]}`, title: infos[index].title };
+}
+
+// A team's robot photo and Behind the Bumpers video for a year, if TBA has them
+app.get("/api/teams/:teamNumber/media/:year", async (req, res) => {
+	const { teamNumber, year } = req.params;
+
+	if (!/^\d+$/.test(teamNumber)) {
+		return res.status(400).json({ error: "Invalid team number." });
+	}
+
+	try {
+		const media = await tba(`/team/frc${teamNumber}/media/${year}`);
+		const items = Array.isArray(media) ? media : [];
+		const photos = items.filter(item => ROBOT_PHOTO_TYPES.has(item.type) && item.direct_url);
+		const photo = photos.find(item => item.preferred) ?? photos[0];
+
+		// Behind the Bumpers from the YouTube index (one episode per season, the
+		// first being the robot overview), falling back to TBA's links this season.
+		const episodes = new Map();
+		for (const episode of episodesForTeam(teamNumber)) {
+			if (!episodes.has(episode.season)) episodes.set(episode.season, episode);
+		}
+		const link = episode => ({
+			season: episode.season,
+			url: `https://www.youtube.com/watch?v=${episode.id}`,
+			title: episode.title
+		});
+		const thisSeason = episodes.get(Number(year));
+
+		res.json({
+			url: photo?.direct_url ?? null,
+			viewUrl: photo?.view_url ?? null,
+			behindTheBumpers: thisSeason ? link(thisSeason) : await behindTheBumpers(items, teamNumber),
+			pastBehindTheBumpers: [...episodes.values()]
+				.filter(episode => episode.season < Number(year))
+				.sort((a, b) => b.season - a.season)
+				.map(link)
+		});
+	} catch (error) {
+		res.status(500).json({ error: error.message });
 	}
 });
 
@@ -678,3 +759,5 @@ app.get("/health", (req, res) => {
 app.listen(PORT, "0.0.0.0", () => {
 	console.log(`Open http://localhost:${PORT}`);
 });
+
+startBehindTheBumpers(process.env.YOUTUBE_API_KEY);

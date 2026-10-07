@@ -1031,10 +1031,13 @@ async function printTeamData() {
 
 	const teamImage = `https://www.thebluealliance.com/avatar/2026/frc${teamNumber}.png`;
 
+	showTeamMedia(teamNumber, eventKey.slice(0, 4));
+
 	/* RENDER */
 
 	results.innerHTML = `
 
+      <div class="team-hero">
         <div class="team-heading">
 			<div class="team-heading-container">
 				<h2>Team ${escapeHtml(teamNumber)}: ${escapeHtml(teamName)}</h2>
@@ -1051,9 +1054,12 @@ async function printTeamData() {
 
           <div class="team-actions">
             <a class="back-link" href="${escapeHtml(eventRankingsUrl(teamNumber))}">View in event rankings →</a>
+            ${BTB_LINK_SLOT}
           </div>
 
         </div>
+        ${ROBOT_PHOTO_SLOT}
+      </div>
 
         <!-- TOP STATISTICS -->
 
@@ -1688,6 +1694,78 @@ function dataItem(label, value, description = "") {
 }
 
 
+/* =================================
+   ROBOT PHOTO + BEHIND THE BUMPERS
+================================= */
+
+const ROBOT_PHOTO_SLOT = `
+        <a class="robot-photo" target="_blank" rel="noopener noreferrer" hidden>
+          <img alt="">
+          <span>Robot photo • The Blue Alliance</span>
+        </a>`;
+
+const BTB_LINK_SLOT = `
+            <a class="back-link btb-link" target="_blank" rel="noopener noreferrer" hidden>▶ Behind the Bumpers</a>
+            <span class="btb-past" hidden></span>`;
+
+/* Fills in the team's TBA robot photo and Behind the Bumpers video for that
+   year. Each stays hidden if TBA doesn't have it, the photo fails to load, or
+   the user has since moved on to another team. */
+async function showTeamMedia(teamNumber, year) {
+
+	try {
+		const response = await fetch(`/api/teams/${encodeURIComponent(teamNumber)}/media/${year}`);
+		const media = await response.json();
+
+		if (!response.ok) {
+			return;
+		}
+
+		/* Wait for the results to render, then make sure they're still this team's. */
+		await new Promise(resolve => setTimeout(resolve));
+
+		if (teamNumberInput.value.trim() !== String(teamNumber)) {
+			return;
+		}
+
+		const photoSlot = results.querySelector(".robot-photo");
+
+		if (photoSlot && media.url) {
+			const image = photoSlot.querySelector("img");
+			image.alt = `Team ${teamNumber}'s ${year} robot`;
+			image.addEventListener("load", () => { photoSlot.hidden = false; }, { once: true });
+			image.src = media.url;
+
+			if (media.viewUrl) {
+				photoSlot.href = media.viewUrl;
+			}
+		}
+
+		const videoLink = results.querySelector(".btb-link");
+
+		if (videoLink && media.behindTheBumpers) {
+			videoLink.href = media.behindTheBumpers.url;
+			videoLink.title = media.behindTheBumpers.title;
+			videoLink.hidden = false;
+		}
+
+		/* Earlier seasons' episodes, newest first, e.g. "Past seasons: 2025 · 2024". */
+		const pastLinks = results.querySelector(".btb-past");
+		const past = media.pastBehindTheBumpers ?? [];
+
+		if (pastLinks && past.length) {
+			pastLinks.innerHTML = `${media.behindTheBumpers ? "Past seasons:" : "▶ Behind the Bumpers:"} ${past
+				.map(episode => `<a href="${escapeHtml(episode.url)}" title="${escapeHtml(episode.title)}" target="_blank" rel="noopener noreferrer">${escapeHtml(episode.season)}</a>`)
+				.join(" · ")}`;
+			pastLinks.hidden = false;
+		}
+	} catch {
+		/* Media is optional; the page works without it. */
+	}
+
+}
+
+
 /* Every event scouting sheet the team appears in; events without a sheet return []. */
 async function loadSheetRowsForEvents(events, path) {
 
@@ -1837,6 +1915,8 @@ async function printSeasonData() {
 	const winRate = finiteNumberOrNull(season.record?.winrate);
 	const teamImage = `https://www.thebluealliance.com/avatar/${SEASON_YEAR}/frc${teamNumber}.png`;
 
+	showTeamMedia(teamNumber, SEASON_YEAR);
+
 	const eventCards = events.map(event => {
 		const eventScouting = scoutingRowsByEvent
 			.find(entry => entry.event.key === event.key).rows;
@@ -1872,6 +1952,7 @@ async function printSeasonData() {
 
 	results.innerHTML = `
 
+      <div class="team-hero">
         <div class="team-heading">
 			<div class="team-heading-container">
 				<h2>Team ${escapeHtml(teamNumber)}: ${escapeHtml(season.name ?? "")}</h2>
@@ -1882,7 +1963,13 @@ async function printSeasonData() {
             ${SEASON_YEAR} season • ${events.length} event${events.length === 1 ? "" : "s"} • ${scoutingRows.length} scouting matches recorded
           </span>
 
+          <div class="team-actions">
+            ${BTB_LINK_SLOT}
+          </div>
+
         </div>
+        ${ROBOT_PHOTO_SLOT}
+      </div>
 
         <!-- TOP STATISTICS -->
 

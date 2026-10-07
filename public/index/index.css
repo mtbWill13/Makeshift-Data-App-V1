@@ -240,3 +240,108 @@
 	gap: 10px;
 	margin-top: 8px;
 }
+
+/* =========================
+	TEAM HERO + ROBOT PHOTO
+========================= */
+
+.team-hero {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	align-items: stretch;
+	gap: 24px;
+	margin-bottom: 24px;
+}
+
+/* Title and subtitle sit at the top; the action button is pushed to the bottom. */
+.team-hero .team-heading {
+	justify-content: flex-start;
+	margin-bottom: 0;
+}
+
+.team-hero .team-actions {
+	margin-top: auto;
+	padding-top: 8px;
+}
+
+.robot-photo {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	width: clamp(200px, 26vw, 300px);
+	color: var(--text-faint);
+	font-size: 0.75rem;
+	text-decoration: none;
+}
+
+.robot-photo[hidden] {
+	display: none;
+}
+
+.robot-photo img {
+	display: block;
+	width: 100%;
+	aspect-ratio: 4 / 3;
+	object-fit: cover;
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	background: var(--surface-2);
+	transition: border-color 160ms ease;
+}
+
+.robot-photo:hover img {
+	border-color: rgba(89, 168, 215, 0.6);
+}
+
+.robot-photo:hover span {
+	color: var(--text-muted);
+}
+
+@media (max-width: 700px) {
+	.team-hero {
+		grid-template-columns: 1fr;
+	}
+
+	.robot-photo {
+		width: 100%;
+	}
+}
+
+/* Behind the Bumpers link — hidden until a verified video is found */
+.btb-link[hidden],
+.team-actions:not(:has(> :not([hidden]))) {
+	display: none;
+}
+
+.btb-link {
+	border-color: rgba(235, 78, 63, 0.45);
+}
+
+.btb-link:hover {
+	border-color: var(--ms-red);
+	background: rgba(235, 78, 63, 0.1);
+}
+
+.btb-past {
+	display: inline-flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+	color: var(--text-muted);
+	font-size: 0.9rem;
+}
+
+.btb-past[hidden] {
+	display: none;
+}
+
+.btb-past a {
+	color: var(--text);
+	font-weight: 600;
+	text-decoration-color: rgba(235, 78, 63, 0.6);
+	text-underline-offset: 3px;
+}
+
+.btb-past a:hover {
+	color: var(--ms-red);
+}
