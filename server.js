@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import compression from "compression";
+import { mkdir, readFile, writeFile } from "fs/promises";
 import { google } from "googleapis";
 import { startBehindTheBumpers, episodesForTeam } from "./behind-the-bumpers.js";
 const app = express();
@@ -313,6 +314,192 @@ app.get("/api/events/:eventKey/oprs", async (req, res) => {
 	}
 });
 
+/* =================================
+   PRESCOUTING
+================================= */
+
+/* Runs fn over items with at most `limit` running at once. */
+async function mapLimit(items, limit, fn) {
+	const results = new Array(items.length);
+	let next = 0;
+	await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+		while (next < items.length) {
+			const index = next++;
+			results[index] = await fn(items[index], index);
+		}
+	}));
+	return results;
+}
+
+/* Every team's season summary (EPA, breakdown, world ranks, record, name) from
+   Statbotics' bulk endpoint: ~4 pages of 1,000 instead of one request per team.
+   Statbotics is slow and often 503s on these pages, so the result is saved to
+   data/ and served from there straight away, including after a restart. It is
+   refreshed in the background once it's 30 minutes old. */
+const STATBOTICS_PAGE = 1000;
+const TEAM_YEARS_REFRESH_MS = 30 * 60 * 1000;
+const teamYearsState = new Map();
+
+const teamYearsFile = year => new URL(`./data/statbotics-team-years-${year}.json`, import.meta.url);
+
+/* Only what prescouting uses, so the saved file stays small. */
+function trimTeamYear(row) {
+	const epa = row.epa ?? {};
+	const breakdown = epa.breakdown ?? {};
+	return {
+		team: Number(row.team),
+		name: row.name ?? null,
+		epa: {
+			total_points: epa.total_points ?? null,
+			breakdown: {
+				auto_points: breakdown.auto_points ?? null,
+				teleop_points: breakdown.teleop_points ?? null,
+				endgame_points: breakdown.endgame_points ?? null
+			},
+			stats: epa.stats ?? null,
+			ranks: { total: epa.ranks?.total ?? null }
+		},
+		record: row.record ?? null
+	};
+}
+
+async function downloadTeamYears(year) {
+	const rows = [];
+	const page = offset => statbotics(`/team_years?year=${year}&limit=${STATBOTICS_PAGE}&offset=${offset}`)
+		.then(data => (Array.isArray(data) ? data : []).map(trimTeamYear));
+
+	// ~3,700 teams compete each year, so fetch the first four pages together.
+	const pages = await Promise.all([0, 1, 2, 3].map(index => page(index * STATBOTICS_PAGE)));
+	pages.forEach(rowsOnPage => rows.push(...rowsOnPage));
+
+	for (let offset = 4 * STATBOTICS_PAGE, last = pages.at(-1); last.length === STATBOTICS_PAGE; offset += STATBOTICS_PAGE) {
+		last = await page(offset);
+		rows.push(...last);
+	}
+
+	return rows;
+}
+
+function refreshTeamYears(year, state) {
+	if (state.refreshing) return state.refreshing;
+
+	state.refreshing = downloadTeamYears(year)
+		.then(async rows => {
+			state.byTeam = new Map(rows.map(row => [row.team, row]));
+			state.time = Date.now();
+			await mkdir(new URL("./data/", import.meta.url), { recursive: true });
+			await writeFile(teamYearsFile(year), JSON.stringify({ time: state.time, rows }));
+			console.log(`Prescouting: saved ${rows.length} Statbotics team seasons for ${year}.`);
+		})
+		.catch(error => console.error(`Prescouting: Statbotics ${year} refresh failed:`, error.message))
+		.finally(() => { state.refreshing = null; });
+
+	return state.refreshing;
+}
+
+async function teamYears(year) {
+	if (!teamYearsState.has(year)) {
+		const state = { byTeam: null, time: 0, refreshing: null };
+		state.loading = readFile(teamYearsFile(year), "utf8")
+			.then(text => {
+				const saved = JSON.parse(text);
+				state.byTeam = new Map(saved.rows.map(row => [row.team, row]));
+				state.time = saved.time;
+			})
+			.catch(() => { /* Not saved yet. */ });
+		teamYearsState.set(year, state);
+	}
+
+	const state = teamYearsState.get(year);
+	await state.loading;
+
+	if (Date.now() - state.time > TEAM_YEARS_REFRESH_MS) {
+		refreshTeamYears(year, state);
+	}
+
+	// Serve the saved copy right away; only wait if there's nothing saved yet.
+	if (!state.byTeam) await state.refreshing;
+	if (!state.byTeam) throw new Error("Statbotics is unavailable right now. Try again in a minute.");
+
+	return state.byTeam;
+}
+
+/* Season summaries for a list of teams, in the same shape as the season
+   endpoint's (name, epa, record, events) so the page can treat them alike. */
+app.get("/api/prescout", async (req, res) => {
+	const year = String(req.query.year ?? "");
+	const teams = [...new Set(String(req.query.teams ?? "").match(/\d{1,5}/g) ?? [])]
+		.map(Number)
+		.slice(0, 80);
+
+	if (!/^\d{4}$/.test(year) || !teams.length) {
+		return res.status(400).json({ error: "Provide a year and a list of team numbers." });
+	}
+
+	try {
+		const [seasons, events] = await Promise.all([
+			teamYears(year),
+			tba(`/events/${year}`).catch(() => [])
+		]);
+		const eventsByKey = new Map(events.map(event => [event.key, event]));
+
+		// Each team's finish and rank at every event they attended.
+		const statuses = await mapLimit(teams, 8, team =>
+			tba(`/team/frc${team}/events/${year}/statuses`).catch(() => ({}))
+		);
+
+		// OPRs per event, shared by every team at that event.
+		const eventKeys = [...new Set(statuses.flatMap(status => Object.keys(status ?? {})))];
+		const oprs = new Map(await mapLimit(eventKeys, 8, async key =>
+			[key, await tba(`/event/${key}/oprs`).catch(() => null)]
+		));
+
+		const results = teams.map((team, index) => {
+			const season = seasons.get(team);
+			const teamKey = `frc${team}`;
+			const teamEvents = Object.entries(statuses[index] ?? {})
+				.map(([key, status]) => {
+					const event = eventsByKey.get(key) ?? {};
+					const ranking = status?.qual?.ranking;
+
+					return {
+						key,
+						name: event.short_name || event.name || key,
+						startDate: event.start_date ?? null,
+						eventType: event.event_type ?? null,
+						official: event.event_type !== 99 && event.event_type !== 100,
+						rank: ranking?.rank ?? null,
+						numTeams: status?.qual?.num_teams ?? null,
+						qualRecord: ranking?.record ?? null,
+						allianceStatus: stripHtml(status?.alliance_status_str) || null,
+						playoffStatus: stripHtml(status?.playoff_status_str) || null,
+						opr: oprs.get(key)?.oprs?.[teamKey] ?? null
+					};
+				})
+				.sort((a, b) => String(a.startDate).localeCompare(String(b.startDate)));
+
+			return season
+				? { team, name: season.name, epa: season.epa ?? null, record: season.record ?? null, events: teamEvents }
+				: { team, name: null, epa: null, record: null, events: teamEvents };
+		});
+
+		res.json(results);
+	} catch (error) {
+		console.error("PRESCOUT ERROR:", error);
+		res.status(500).json({ error: error.message });
+	}
+});
+
+// Team numbers registered for an event (published on TBA before the event starts)
+app.get("/api/events/:eventKey/teams", async (req, res) => {
+	try {
+		const keys = await tba(`/event/${encodeURIComponent(req.params.eventKey)}/teams/keys`);
+		res.json(keys.map(key => Number(key.replace(/^frc/, ""))).sort((a, b) => a - b));
+	} catch (error) {
+		res.status(404).json({ error: `Event ${req.params.eventKey} was not found on The Blue Alliance.` });
+	}
+});
+
 // A team's events in a given year
 app.get("/api/teams/:teamKey/events/:year", async (req, res) => {
 	try {
@@ -365,6 +552,9 @@ app.get("/api/teams/:teamNumber/season/:year", async (req, res) => {
 					key: event.key,
 					name: event.short_name || event.name,
 					startDate: event.start_date,
+					// TBA event types: 99 = offseason, 100 = preseason; everything else is official
+					eventType: event.event_type,
+					official: event.event_type !== 99 && event.event_type !== 100,
 					rank: ranking?.rank ?? teamEvent?.record?.qual?.rank ?? null,
 					numTeams: status?.qual?.num_teams ?? teamEvent?.record?.qual?.num_teams ?? null,
 					qualRecord: ranking?.record ?? null,
@@ -743,3 +933,8 @@ app.listen(PORT, "0.0.0.0", () => {
 });
 
 startBehindTheBumpers(process.env.YOUTUBE_API_KEY);
+
+// Warm the prescouting cache so the first prescout doesn't wait on Statbotics.
+teamYears(String(new Date().getFullYear())).catch(error =>
+	console.error("Prescout warm-up failed:", error.message)
+);

@@ -72,9 +72,15 @@
 .nav-event { --accent: var(--ms-red); }
 .nav-compare { --accent: var(--ms-orange); }
 .nav-alliance { --accent: var(--ms-yellow); }
-.nav-match { --accent: var(--ms-green); }
-.nav-pit { --accent: var(--ms-blue); }
+.nav-prescout { --accent: var(--ms-green); }
+.nav-match { --accent: var(--ms-blue); }
+.nav-pit { --accent: var(--ms-red); }
 .nav-transfer { --accent: var(--ms-neutral); }
+
+/* An odd tile out (e.g. 7 tiles in 2 columns) spans the full row. */
+.nav-tile:last-child:nth-child(odd) {
+	grid-column: 1 / -1;
+}
 
 /* =========================
 	CONTROLS
