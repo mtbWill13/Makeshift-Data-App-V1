@@ -3,6 +3,9 @@ const teamAInput = document.getElementById("teamA");
 const teamBInput = document.getElementById("teamB");
 const compareButton = document.getElementById("compareButton");
 const results = document.getElementById("results");
+const SEASON_OPTION = "season";
+/* Season comparisons are slow, so ignore any result that finishes after a newer request. */
+let latestRequest = 0;
 
 function escapeHtml(value) {
 	return String(value ?? "—").replace(
@@ -159,7 +162,9 @@ function buildProfile(teamNumber, data) {
 			pitRows,
 			"What language is your robot programmed in?",
 		),
-		trendPoints: performanceTrendPoints(scoutingRows),
+		trendPoints: data.isSeason
+			? seasonTrendPoints(scoutingRows)
+			: performanceTrendPoints(scoutingRows),
 	};
 }
 
@@ -184,6 +189,8 @@ function textRow(label, a, b) {
 }
 
 function renderComparison(a, b) {
+	const isSeason = eventSelect.value === SEASON_OPTION;
+	const trendAxis = isSeason ? "Scouted match (season, in order)" : "Qualification match";
 	const aTotal =
 		Number.isFinite(a.auto) && Number.isFinite(a.teleop)
 			? a.auto + a.teleop
@@ -208,11 +215,12 @@ function renderComparison(a, b) {
         <div class="comparison-heading"><div><h2 class="team-name">Team ${escapeHtml(a.number)}</h2><p class="team-detail">${a.scoutingCount} scouting reports</p></div><div class="vs">VS</div><div><h2 class="team-name right">Team ${escapeHtml(b.number)}</h2><p class="team-detail right">${b.scoutingCount} scouting reports</p></div></div>
         <section class="summary"><div class="summary-card"><div class="summary-label">Comparison edge</div><div class="summary-value">${summary}</div><div class="summary-note">Based on available OPR, CCWM, and scouting scoring data.</div></div><div class="summary-card"><div class="summary-label">Event</div><div class="summary-value">${escapeHtml(eventSelect.selectedOptions[0].text)}</div><div class="summary-note">Green cells indicate the stronger numeric value.</div></div></section>
         <h3 class="section-title">Scouting average over matches</h3>
-        <section class="trend-grid">${performanceTrendChart(a.trendPoints, `Team ${a.number}: scouting average`)}${performanceTrendChart(b.trendPoints, `Team ${b.number}: scouting average`)}</section>
-        <h3 class="section-title">Event performance</h3>
+        <section class="trend-grid">${performanceTrendChart(a.trendPoints, `Team ${a.number}: scouting average`, trendAxis)}${performanceTrendChart(b.trendPoints, `Team ${b.number}: scouting average`, trendAxis)}</section>
+        <h3 class="section-title">${isSeason ? "Season performance" : "Event performance"}</h3>
         <table class="comparison-table"><thead><tr><th>Stat</th><th>Team ${escapeHtml(a.number)}</th><th>Team ${escapeHtml(b.number)}</th></tr></thead><tbody>
           ${numericRow("OPR", a.opr, b.opr, { digits: 2 })}${numericRow("DPR", a.dpr, b.dpr, { digits: 2, lowerIsBetter: true })}${numericRow("CCWM", a.ccwm, b.ccwm, { digits: 2 })}${numericRow("Total EPA", a.totalEpa, b.totalEpa)}${numericRow("Auto EPA", a.autoEpa, b.autoEpa)}${numericRow("Teleop EPA", a.teleopEpa, b.teleopEpa)}${numericRow("Endgame EPA", a.endgameEpa, b.endgameEpa)}${numericRow("Matches played", a.matches, b.matches, { digits: 0 })}
         </tbody></table>
+        ${isSeason ? '<p class="note">OPR, DPR and CCWM are averaged across each team\'s events. EPA is the Statbotics season EPA and matches played is the season total.</p>' : ""}
         <h3 class="section-title">Match scouting</h3>
         <table class="comparison-table"><thead><tr><th>Stat</th><th>Team ${escapeHtml(a.number)}</th><th>Team ${escapeHtml(b.number)}</th></tr></thead><tbody>
           ${numericRow("Average auto points", a.auto, b.auto)}${numericRow("Average teleop points", a.teleop, b.teleop)}${numericRow("Average total points", aTotal, bTotal)}${numericRow("Defense rating", a.defense, b.defense, { lowerIsBetter: true })}${numericRow("Defense consistency", a.defenseConsistency, b.defenseConsistency, { suffix: "%" })}${numericRow("Was Defended in matches", a.defended, b.defended, { suffix: "%" })}${numericRow("Scouting reports", a.scoutingCount, b.scoutingCount, { digits: 0 })}
@@ -242,7 +250,27 @@ async function compareTeams() {
 
 	results.innerHTML =
 		'<div class="loading">Loading team comparison…</div>';
+	const request = ++latestRequest;
 	try {
+		if (eventKey === SEASON_OPTION) {
+			const season = await loadSeasonData([teamA, teamB], seasonYearFrom(eventSelect));
+			const teams = {
+				[`frc${teamA}`]: seasonTeamStats(season.seasons[teamA]),
+				[`frc${teamB}`]: seasonTeamStats(season.seasons[teamB]),
+			};
+			if (request !== latestRequest) return;
+			const seasonProfile = (team) =>
+				buildProfile(team, {
+					teams,
+					scouting: season.scouting,
+					pit: season.pit,
+					statbotics: { epa: season.seasons[team].epa },
+					isSeason: true,
+				});
+			renderComparison(seasonProfile(teamA), seasonProfile(teamB));
+			return;
+		}
+
 		const [
 			matches,
 			rankings,
@@ -260,6 +288,7 @@ async function compareTeams() {
 			fetchStatbotics(teamA, eventKey),
 			fetchStatbotics(teamB, eventKey),
 		]);
+		if (request !== latestRequest) return;
 		const teams = {};
 		for (const [teamKey, opr] of Object.entries(stats.oprs || {}))
 			teams[teamKey] = {
@@ -298,6 +327,7 @@ async function compareTeams() {
 			}),
 		);
 	} catch (error) {
+		if (request !== latestRequest) return;
 		results.innerHTML = `<div class="empty-state">Could not load comparison: ${escapeHtml(error.message)}</div>`;
 	}
 }

@@ -72,16 +72,43 @@ async function tba(path) {
 	return response.json();
 }
 
-async function statbotics(path) {
-	const response = await fetch(`https://api.statbotics.io/v3${path}`, {
-		headers: { Accept: "application/json" }
-	});
+const statboticsCache = new Map();
+const STATBOTICS_CACHE_MS = 2 * 60 * 1000;
 
-	if (!response.ok) {
-		throw new Error(`Statbotics request failed: ${response.status}`);
+async function statbotics(path) {
+	const cached = statboticsCache.get(path);
+	if (cached && Date.now() - cached.time < STATBOTICS_CACHE_MS) {
+		return cached.data;
 	}
 
-	return response.json();
+	// Statbotics often has brief 5xx errors or dropped connections, so retry a
+	// few times before giving up. 4xx errors (e.g. unknown team) fail straight away.
+	const maxAttempts = 4;
+
+	for (let attempt = 1; ; attempt++) {
+		let response;
+
+		try {
+			response = await fetch(`https://api.statbotics.io/v3${path}`, {
+				headers: { Accept: "application/json" },
+				signal: AbortSignal.timeout(10000)
+			});
+		} catch (error) {
+			if (attempt >= maxAttempts) throw error;
+		}
+
+		if (response?.ok) {
+			const data = await response.json();
+			statboticsCache.set(path, { time: Date.now(), data });
+			return data;
+		}
+
+		if (response && (response.status < 500 || attempt >= maxAttempts)) {
+			throw new Error(`Statbotics request failed: ${response.status}`);
+		}
+
+		await new Promise(resolve => setTimeout(resolve, 500 * attempt));
+	}
 }
 
 function stripHtml(value) {

@@ -6,6 +6,9 @@ const blueInputs = ["blue1", "blue2", "blue3"].map((id) =>
 	document.getElementById(id),
 );
 const results = document.getElementById("results");
+const SEASON_OPTION = "season";
+/* Season comparisons are slow, so ignore any result that finishes after a newer request. */
+let latestRequest = 0;
 function escapeHtml(value) {
 	return String(value ?? "—").replace(
 		/[&<>'"]/g,
@@ -236,8 +239,12 @@ function render(red, blue) {
 			suffix: "%",
 		}),
 	].join("");
+	const isSeason = eventSelect.value === SEASON_OPTION;
+	const seasonNote = isSeason
+		? '<p class="note">OPR, DPR and CCWM are averaged across each team\'s events, and EPA is the Statbotics season EPA. Scouting covers every event this season.</p>'
+		: "";
 	results.innerHTML = `<div class="heading"><div><h2 class="alliance-name">Red Alliance</h2><p class="team-list">${red.teamNumbers.map(escapeHtml).join(" • ")}</p></div><div class="vs">VS</div><div><h2 class="alliance-name blue">Blue Alliance</h2><p class="team-list blue">${blue.teamNumbers.map(escapeHtml).join(" • ")}</p></div></div>${table(
-		"Event performance",
+		isSeason ? "Season performance" : "Event performance",
 		red,
 		blue,
 		[
@@ -248,7 +255,7 @@ function render(red, blue) {
 			['Combined auto EPA', red.autoEpa, blue.autoEpa],
 			['Combined teleop EPA', red.teleopEpa, blue.teleopEpa],
 		],
-	)}${table("Match scouting projection", red, blue, [
+	)}${seasonNote}${table("Match scouting projection", red, blue, [
 		["Expected auto points", red.auto, blue.auto],
 		["Expected teleop points", red.teleop, blue.teleop],
 		["Expected total points", red.total, blue.total],
@@ -284,13 +291,29 @@ async function compare() {
 	results.innerHTML =
 		'<div class="loading">Loading alliance comparison…</div>';
 	saveTeamsInUrl(...red, ...blue);
+	const request = ++latestRequest;
 	try {
 		const event = eventSelect.value;
+		if (event === SEASON_OPTION) {
+			const allTeams = [...red, ...blue];
+			const season = await loadSeasonData(allTeams, seasonYearFrom(eventSelect));
+			if (request !== latestRequest) return;
+			const teams = Object.fromEntries(
+				allTeams.map((team) => [`frc${team}`, seasonTeamStats(season.seasons[team])]),
+			);
+			const epaMap = Object.fromEntries(
+				allTeams.map((team) => [team, { epa: season.seasons[team].epa }]),
+			);
+			currentData = { teams, scouting: season.scouting, epas: epaMap };
+			render(alliance(red, currentData), alliance(blue, currentData));
+			return;
+		}
 		const [stats, scouting, ...epas] = await Promise.all([
 			fetchJson(`/api/events/${event}/oprs`),
 			fetchJson(`/api/scouting/${event}`),
 			...[...red, ...blue].map((team) => fetchEpa(team, event)),
 		]);
+		if (request !== latestRequest) return;
 		const teams = {};
 		for (const [key, opr] of Object.entries(stats.oprs || {}))
 			teams[key] = {
@@ -304,6 +327,7 @@ async function compare() {
 		currentData = { teams, scouting, epas: epaMap };
 		render(alliance(red, currentData), alliance(blue, currentData));
 	} catch (error) {
+		if (request !== latestRequest) return;
 		results.innerHTML = `<div class="empty-state">Could not load alliance comparison: ${escapeHtml(error.message)}</div>`;
 	}
 }

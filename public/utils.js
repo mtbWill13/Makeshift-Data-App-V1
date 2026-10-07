@@ -46,7 +46,7 @@ function escapeChartText(value) {
 	})[character]);
 }
 
-function performanceTrendChart(points, label = "Scouting average by match") {
+function performanceTrendChart(points, label = "Scouting average by match", xLabel = "Qualification match") {
 	const usable = points.filter(point => Number.isFinite(point.match));
 
 	if (!usable.length) {
@@ -93,7 +93,7 @@ function performanceTrendChart(points, label = "Scouting average by match") {
 		.map(match => `<text x="${x(match)}" y="${height - 17}" text-anchor="middle">${match}</text>`)
 		.join("");
 
-	return `<section class="performance-chart"><div class="chart-heading"><h3>${escapeChartText(label)}</h3><div class="chart-legend">${series.map(line => `<span><i style="background:${line.color}"></i>${line.label}</span>`).join("")}</div></div><svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeChartText(label)}"><g class="chart-grid">${grid}</g><line x1="${left}" x2="${width - right}" y1="${height - bottom}" y2="${height - bottom}" class="chart-axis" stroke-width="1.5"/>${paths}<g class="chart-labels">${labels}<text x="${width / 2}" y="${height - 2}" text-anchor="middle">Qualification match</text></g></svg><p class="chart-note">Each point is that match’s average report score: auto + teleop + endgame points. Multiple reports for one match are averaged together.</p></section>`;
+	return `<section class="performance-chart"><div class="chart-heading"><h3>${escapeChartText(label)}</h3><div class="chart-legend">${series.map(line => `<span><i style="background:${line.color}"></i>${line.label}</span>`).join("")}</div></div><svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeChartText(label)}"><g class="chart-grid">${grid}</g><line x1="${left}" x2="${width - right}" y1="${height - bottom}" y2="${height - bottom}" class="chart-axis" stroke-width="1.5"/>${paths}<g class="chart-labels">${labels}<text x="${width / 2}" y="${height - 2}" text-anchor="middle">${escapeChartText(xLabel)}</text></g></svg><p class="chart-note">Each point is that match’s average report score: auto + teleop + endgame points. Multiple reports for one match are averaged together.</p></section>`;
 }
 
 function performanceTrendPoints(scoutingRows) {
@@ -148,4 +148,90 @@ function performanceTrendPoints(scoutingRows) {
 			scouting: scores.reduce((sum, score) => sum + score, 0) / scores.length
 		};
 	});
+}
+
+
+/* =================================
+   SEASON-WIDE DATA
+   Used by the compare pages when "Entire Season" is selected.
+================================= */
+
+/* The season year, taken from the first real event key in a dropdown. */
+function seasonYearFrom(select) {
+	return [...select.options]
+		.map(option => option.value)
+		.find(value => /^\d{4}/.test(value))
+		.slice(0, 4);
+}
+
+function seasonAverage(values) {
+	const usable = values
+		.filter(value => value !== null && value !== undefined && value !== "")
+		.map(Number)
+		.filter(Number.isFinite);
+
+	return usable.length
+		? usable.reduce((total, value) => total + value, 0) / usable.length
+		: null;
+}
+
+/* Loads each team's season summary plus every scouting and pit-scouting row
+   from all of their events. Rows are tagged with their event key and ordered
+   oldest event first; pit rows are newest first so the latest answer wins. */
+async function loadSeasonData(teamNumbers, year) {
+	const seasons = await Promise.all(teamNumbers.map(async team => {
+		const response = await fetch(`/api/teams/${team}/season/${year}`);
+		const data = await response.json().catch(() => ({}));
+		if (!response.ok) throw new Error(data.error || `Could not load team ${team}'s season.`);
+		return data;
+	}));
+
+	const events = new Map();
+	for (const season of seasons) {
+		for (const event of season.events ?? []) events.set(event.key, event);
+	}
+	const eventKeys = [...events.values()]
+		.sort((a, b) => String(a.startDate).localeCompare(String(b.startDate)))
+		.map(event => event.key);
+
+	const loadSheet = path => Promise.all(eventKeys.map(key =>
+		fetch(`/api/${path}/${key}`)
+			.then(response => response.ok ? response.json() : [])
+			.catch(() => [])
+			.then(rows => (Array.isArray(rows) ? rows : []).map(row => ({ ...row, __event: key })))
+	));
+
+	const [scouting, pit] = await Promise.all([loadSheet("scouting"), loadSheet("pitscouting")]);
+
+	return {
+		seasons: Object.fromEntries(teamNumbers.map((team, index) => [team, seasons[index]])),
+		scouting: scouting.flat(),
+		pit: pit.reverse().flat()
+	};
+}
+
+/* Season OPR/DPR/CCWM are the average of the team's per-event values. */
+function seasonTeamStats(season) {
+	const events = season?.events ?? [];
+
+	return {
+		opr: seasonAverage(events.map(event => event.opr)),
+		dpr: seasonAverage(events.map(event => event.dpr)),
+		ccwm: seasonAverage(events.map(event => event.ccwm)),
+		matches: season?.record?.count ?? 0
+	};
+}
+
+/* Match numbers repeat between events, so number scouted matches 1..n in
+   event order instead. */
+function seasonTrendPoints(scoutingRows) {
+	const byEvent = new Map();
+	for (const row of scoutingRows) {
+		if (!byEvent.has(row.__event)) byEvent.set(row.__event, []);
+		byEvent.get(row.__event).push(row);
+	}
+
+	return [...byEvent.values()]
+		.flatMap(rows => performanceTrendPoints(rows))
+		.map((point, index) => ({ ...point, match: index + 1 }));
 }
