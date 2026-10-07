@@ -4,6 +4,7 @@ import compression from "compression";
 import { mkdir, readFile, writeFile } from "fs/promises";
 import { google } from "googleapis";
 import { startBehindTheBumpers, episodesForTeam } from "./behind-the-bumpers.js";
+import { createSupabaseMirror } from "./supabase-mirror.js";
 const app = express();
 
 // Gzip responses; the scouting sheet JSON is ~500 KB uncompressed.
@@ -68,6 +69,20 @@ const scoutingSheetIds = {
 function spreadsheetIdForEvent(eventKey) {
 	return scoutingSheetIds[eventKey];
 }
+
+/* Backup copy of every scouting sheet in Supabase (see supabase-mirror.js).
+   Optional: with no keys, placeholder keys or no connection it does nothing and
+   never affects requests. Google Sheets stays the primary store. */
+const supabaseMirror = createSupabaseMirror({
+	url: process.env.SUPABASE_URL,
+	key: process.env.SUPABASE_SERVICE_ROLE_KEY,
+	eventKeys: () => Object.keys(scoutingSheetIds).filter(spreadsheetIdForEvent),
+	loadSheet: async (eventKey, kind) => {
+		const tab = kind === "pit" ? "Pit Scouting Raw Data" : "Scouting Raw Data";
+		const response = await readSheet(spreadsheetIdForEvent(eventKey), `'${tab}'!A:ZZ`);
+		return response.data.values ?? [];
+	}
+});
 
 function columnIndexToLetter(index) {
 	let result = "";
@@ -335,9 +350,10 @@ async function mapLimit(items, limit, fn) {
    Statbotics' bulk endpoint: ~4 pages of 1,000 instead of one request per team.
    Statbotics is slow and often 503s on these pages, so the result is saved to
    data/ and served from there straight away, including after a restart. It is
-   refreshed in the background once it's 30 minutes old. */
+   refreshed in the background once it's 6 hours old. */
 const STATBOTICS_PAGE = 1000;
-const TEAM_YEARS_REFRESH_MS = 30 * 60 * 1000;
+// Season EPA moves slowly, and each refresh is a heavy download, so keep it rare.
+const TEAM_YEARS_REFRESH_MS = 6 * 60 * 60 * 1000;
 const teamYearsState = new Map();
 
 const teamYearsFile = year => new URL(`./data/statbotics-team-years-${year}.json`, import.meta.url);
@@ -363,21 +379,40 @@ function trimTeamYear(row) {
 	};
 }
 
+/* One ~1 MB page of team seasons. These are big and slow, so they get a longer
+   timeout than normal lookups and a pause before retrying a 502/503/504. */
+async function teamYearsPage(year, offset) {
+	const url = `https://api.statbotics.io/v3/team_years?year=${year}&limit=${STATBOTICS_PAGE}&offset=${offset}`;
+
+	for (let attempt = 1; ; attempt++) {
+		const response = await fetch(url, {
+			headers: { Accept: "application/json" },
+			signal: AbortSignal.timeout(45 * 1000)
+		});
+
+		if (response.ok) {
+			const data = await response.json();
+			return (Array.isArray(data) ? data : []).map(trimTeamYear);
+		}
+
+		if (![502, 503, 504].includes(response.status) || attempt >= 3) {
+			throw new Error(`Statbotics team_years request failed: ${response.status}`);
+		}
+
+		await new Promise(resolve => setTimeout(resolve, 3000 * attempt));
+	}
+}
+
+/* Downloads the pages ONE AT A TIME. Fetching them together floods Statbotics,
+   which then slows every other lookup (team pages took 40+ s while it ran). */
 async function downloadTeamYears(year) {
 	const rows = [];
-	const page = offset => statbotics(`/team_years?year=${year}&limit=${STATBOTICS_PAGE}&offset=${offset}`)
-		.then(data => (Array.isArray(data) ? data : []).map(trimTeamYear));
 
-	// ~3,700 teams compete each year, so fetch the first four pages together.
-	const pages = await Promise.all([0, 1, 2, 3].map(index => page(index * STATBOTICS_PAGE)));
-	pages.forEach(rowsOnPage => rows.push(...rowsOnPage));
-
-	for (let offset = 4 * STATBOTICS_PAGE, last = pages.at(-1); last.length === STATBOTICS_PAGE; offset += STATBOTICS_PAGE) {
-		last = await page(offset);
-		rows.push(...last);
+	for (let offset = 0; ; offset += STATBOTICS_PAGE) {
+		const page = await teamYearsPage(year, offset);
+		rows.push(...page);
+		if (page.length < STATBOTICS_PAGE) return rows;
 	}
-
-	return rows;
 }
 
 function refreshTeamYears(year, state) {
@@ -391,13 +426,24 @@ function refreshTeamYears(year, state) {
 			await writeFile(teamYearsFile(year), JSON.stringify({ time: state.time, rows }));
 			console.log(`Prescouting: saved ${rows.length} Statbotics team seasons for ${year}.`);
 		})
-		.catch(error => console.error(`Prescouting: Statbotics ${year} refresh failed:`, error.message))
+		.catch(error => {
+			// Don't start another heavy download on the very next request.
+			state.retryAfter = Date.now() + 10 * 60 * 1000;
+			console.error(`Prescouting: Statbotics ${year} refresh failed (will retry in 10 min):`, error.message);
+		})
 		.finally(() => { state.refreshing = null; });
 
 	return state.refreshing;
 }
 
-async function teamYears(year) {
+/* Loads the saved copy (if any) without downloading. Resolves true if found. */
+async function loadSavedTeamYears(year) {
+	teamYearsStateFor(year);
+	await teamYearsState.get(year).loading;
+	return Boolean(teamYearsState.get(year).byTeam);
+}
+
+function teamYearsStateFor(year) {
 	if (!teamYearsState.has(year)) {
 		const state = { byTeam: null, time: 0, refreshing: null };
 		state.loading = readFile(teamYearsFile(year), "utf8")
@@ -409,11 +455,14 @@ async function teamYears(year) {
 			.catch(() => { /* Not saved yet. */ });
 		teamYearsState.set(year, state);
 	}
+	return teamYearsState.get(year);
+}
 
-	const state = teamYearsState.get(year);
+async function teamYears(year) {
+	const state = teamYearsStateFor(year);
 	await state.loading;
 
-	if (Date.now() - state.time > TEAM_YEARS_REFRESH_MS) {
+	if (Date.now() - state.time > TEAM_YEARS_REFRESH_MS && Date.now() > (state.retryAfter ?? 0)) {
 		refreshTeamYears(year, state);
 	}
 
@@ -750,6 +799,7 @@ app.post("/api/scouting/:eventKey", async (req, res) => {
 		});
 
 		forgetSheet(spreadsheetId);
+		supabaseMirror.scheduleSync(req.params.eventKey);
 		res.status(201).json({ ok: true });
 	} catch (error) {
 		console.error("SCOUTING WRITE ERROR:", error);
@@ -881,6 +931,7 @@ app.post("/api/pitscouting/:eventKey", async (req, res) => {
 		});
 
 		forgetSheet(spreadsheetId);
+		supabaseMirror.scheduleSync(req.params.eventKey);
 		res.status(201).json({ ok: true });
 	} catch (error) {
 		console.error("PIT SCOUTING WRITE ERROR:", error);
@@ -924,6 +975,11 @@ app.use("/", express.static("public/index"));
 app.use(express.static("public"));
 const PORT = process.env.PORT || 3000;
 
+// Whether the Supabase backup is on and when it last synced (no secrets).
+app.get("/api/supabase/status", (req, res) => {
+	res.json(supabaseMirror.status());
+});
+
 app.get("/health", (req, res) => {
 	res.json({ ok: true });
 });
@@ -933,8 +989,17 @@ app.listen(PORT, "0.0.0.0", () => {
 });
 
 startBehindTheBumpers(process.env.YOUTUBE_API_KEY);
+supabaseMirror.start();
 
-// Warm the prescouting cache so the first prescout doesn't wait on Statbotics.
-teamYears(String(new Date().getFullYear())).catch(error =>
-	console.error("Prescout warm-up failed:", error.message)
-);
+// Prescouting: load the saved Statbotics copy from disk now. Only download if
+// there's no saved copy at all, and wait a minute first so it doesn't compete
+// with the first people using the site. (A stale copy refreshes the next time
+// the prescout page is used.)
+loadSavedTeamYears(String(new Date().getFullYear())).then(hasCopy => {
+	if (hasCopy) return;
+	setTimeout(() => {
+		teamYears(String(new Date().getFullYear())).catch(error =>
+			console.error("Prescouting: first Statbotics download failed:", error.message)
+		);
+	}, 60 * 1000).unref();
+});
