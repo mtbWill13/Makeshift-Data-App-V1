@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Event Overview | MakeShift Scouting Data Hub</title>
+    <link rel="preload" href="/fonts/dm-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="/theme.css">
+    <link rel="stylesheet" href="overview.css">
+  </head>
+  <body>
+    <div class="top-bar" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+    <header>
+      <div class="header-content">
+        <a class="brand" href="/"><img src="/images/makeshift-logo-wide.png" alt="MakeShift 4039" width="707" height="78"></a>
+        <div class="eyebrow">Analysis</div>
+        <h1>Event<br>Overview</h1>
+        <p class="header-description">Event-wide graphs from our scouting, plus a chart builder for any stat and any set of teams.</p>
+        <div class="header-links">
+          <a class="back-link" href="/">← Data Hub</a>
+          <a class="back-link" href="#builder">Chart builder ↓</a>
+        </div>
+      </div>
+    </header>
+    <main>
+      <section class="controls overview-controls">
+        <label for="eventKey">Event
+          <select id="eventKey">
+            <option value="2026onham">McMaster</option>
+            <option value="2026onosh">Durham College</option>
+            <option value="2026onwat">Waterloo</option>
+            <option value="2026oncmp2" selected>Provincials Technology Division</option>
+            <option value="2026oncmp1">Provincials Science Division</option>
+            <option value="2026ontor">Humber</option>
+            <option value="2026onwin">Windsor</option>
+            <option value="2026test">Test Event</option>
+          </select>
+        </label>
+        <p class="overview-hint">Hover a bar or box for details. Click one to open that team.</p>
+      </section>
+
+      <section id="summary" class="overview-summary"></section>
+
+      <h2 class="section-title">Event graphs</h2>
+      <section id="dashboard" class="overview-grid"></section>
+
+      <h2 class="section-title" id="builder">Chart builder</h2>
+      <section class="controls builder-controls">
+        <label for="builderStat">Stat
+          <select id="builderStat"></select>
+        </label>
+        <label for="builderChart">Chart type
+          <select id="builderChart"></select>
+        </label>
+        <label for="builderAggregate" id="aggregateGroup">Per team
+          <select id="builderAggregate"></select>
+        </label>
+        <label for="builderX" id="xGroup" hidden>Against (x axis)
+          <select id="builderX"></select>
+        </label>
+        <label for="builderTeams" class="builder-teams">Teams
+          <input id="builderTeams" type="text" inputmode="numeric" placeholder="All teams, or e.g. 4039, 1114, 2056" autocomplete="off">
+        </label>
+        <label for="builderShow">Show
+          <select id="builderShow">
+            <option value="all">All</option>
+            <option value="top10">Top 10</option>
+            <option value="top20">Top 20</option>
+            <option value="bottom10">Bottom 10</option>
+          </select>
+        </label>
+        <label for="builderSort">Order
+          <select id="builderSort">
+            <option value="best">Best first</option>
+            <option value="high">Highest first</option>
+            <option value="low">Lowest first</option>
+            <option value="team">Team number</option>
+          </select>
+        </label>
+      </section>
+      <section id="builderOutput" class="builder-output"></section>
+    </main>
+    <script src="charts.js"></script>
+    <script src="overview.js"></script>
+  </body>
+</html>

@@ -1,11 +1,108 @@
 import "dotenv/config";
 import express from "express";
 import compression from "compression";
-import { mkdir, readFile, writeFile } from "fs/promises";
+import { mkdir, readFile, rename, writeFile } from "fs/promises";
+import { readFileSync } from "fs";
 import { google } from "googleapis";
 import { startBehindTheBumpers, episodesForTeam } from "./behind-the-bumpers.js";
 import { createSupabaseMirror } from "./supabase-mirror.js";
 const app = express();
+
+/* =================================
+   API CACHE
+   Every upstream lookup (TBA, Statbotics, Google Sheets) goes through this.
+   - Fresh results (younger than `ttl`) are returned straight away.
+   - Older results are STILL returned straight away, and a fresh copy is fetched
+     in the background ("stale-while-revalidate"), so nobody waits on a slow or
+     failing upstream once something has been loaded before.
+   - Simultaneous callers for the same key share one request.
+   - Named caches are saved to data/api-cache.json, so a restart (or an outage
+     at TBA/Statbotics, or no internet at an event) still serves the last good data.
+================================= */
+
+const API_CACHE_FILE = new URL("./data/api-cache.json", import.meta.url);
+const API_CACHE_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // keep serving data up to a week old if needed
+const persistedCaches = new Map();
+let apiCacheDirty = false;
+
+/* Load what was saved last time (synchronously, before any request arrives). */
+let savedApiCache = {};
+try {
+	savedApiCache = JSON.parse(readFileSync(API_CACHE_FILE, "utf8")).caches ?? {};
+} catch {
+	/* First run or unreadable: start empty. */
+}
+
+function cachedFetcher(ttl, load, { name = null } = {}) {
+	const cache = new Map(name ? (savedApiCache[name] ?? []) : []);
+	const inFlight = new Map();
+
+	const refresh = key => {
+		if (inFlight.has(key)) return inFlight.get(key);
+
+		const request = load(key)
+			.then(data => {
+				cache.set(key, { time: Date.now(), data });
+				if (name) apiCacheDirty = true;
+				return data;
+			})
+			.finally(() => inFlight.delete(key));
+
+		inFlight.set(key, request);
+		return request;
+	};
+
+	const get = key => {
+		const cached = cache.get(key);
+		const age = cached ? Date.now() - cached.time : Infinity;
+
+		if (age < ttl) return Promise.resolve(cached.data);
+
+		if (age < API_CACHE_MAX_AGE) {
+			// Serve the last good copy now and refresh behind the scenes.
+			refresh(key).catch(() => { /* keep serving the old copy */ });
+			return Promise.resolve(cached.data);
+		}
+
+		return refresh(key);
+	};
+
+	get.invalidate = predicate => {
+		for (const key of cache.keys()) {
+			if (predicate(key)) cache.delete(key);
+		}
+		if (name) apiCacheDirty = true;
+	};
+
+	if (name) persistedCaches.set(name, cache);
+	return get;
+}
+
+/* Save named caches every 30 s when something changed (write to a temp file,
+   then rename, so a crash mid-write can't corrupt the saved copy). */
+async function saveApiCache() {
+	if (!apiCacheDirty) return;
+	apiCacheDirty = false;
+
+	const cutoff = Date.now() - API_CACHE_MAX_AGE;
+	const caches = Object.fromEntries([...persistedCaches].map(([name, cache]) => [
+		name,
+		[...cache].filter(([, entry]) => entry.time > cutoff)
+	]));
+
+	try {
+		await mkdir(new URL("./data/", import.meta.url), { recursive: true });
+		const temp = new URL("./data/api-cache.json.tmp", import.meta.url);
+		await writeFile(temp, JSON.stringify({ savedAt: Date.now(), caches }));
+		await rename(temp, API_CACHE_FILE);
+	} catch (error) {
+		apiCacheDirty = true;
+		console.error("Couldn't save the API cache:", error.message);
+	}
+}
+
+setInterval(saveApiCache, 30 * 1000).unref();
+
 
 // Gzip responses; the scouting sheet JSON is ~500 KB uncompressed.
 app.use(compression());
@@ -40,16 +137,18 @@ const sheets = google.sheets({
 	auth: googleAuth
 });
 
-/* Sheet reads are cached for 30 seconds so switching teams doesn't re-download
-   the whole sheet each time. Submissions through this server clear their
-   sheet's cache straight away; edits made directly in Google Sheets can take up
-   to 30 seconds to appear. Returns the same { data: { values } } shape as the API. */
+/* Sheet reads are cached (fresh for 30 seconds, then refreshed in the background)
+   so switching teams doesn't re-download the whole sheet each time. Submissions
+   through this server clear their sheet's cache straight away; edits made
+   directly in Google Sheets show up within about 30 seconds (one page load may
+   still show the previous copy while the new one downloads).
+   Returns the same { data: { values } } shape as the API. */
 const SHEET_KEY_SEPARATOR = "\n";
 const sheetReads = cachedFetcher(30 * 1000, key => {
 	const [spreadsheetId, range] = key.split(SHEET_KEY_SEPARATOR);
 	return sheets.spreadsheets.values.get({ spreadsheetId, range })
 		.then(response => ({ data: { values: response.data.values } }));
-});
+}, { name: "sheets" });
 
 function readSheet(spreadsheetId, range) {
 	return sheetReads(`${spreadsheetId}${SHEET_KEY_SEPARATOR}${range}`);
@@ -97,36 +196,6 @@ function columnIndexToLetter(index) {
 	return result;
 }
 
-/* Remembers successful results for `ttl` ms, and lets simultaneous callers
-   for the same key share one request instead of each making their own. */
-function cachedFetcher(ttl, load) {
-	const cache = new Map();
-	const inFlight = new Map();
-
-	const get = key => {
-		const cached = cache.get(key);
-		if (cached && Date.now() - cached.time < ttl) return Promise.resolve(cached.data);
-		if (inFlight.has(key)) return inFlight.get(key);
-
-		const request = load(key)
-			.then(data => {
-				cache.set(key, { time: Date.now(), data });
-				return data;
-			})
-			.finally(() => inFlight.delete(key));
-
-		inFlight.set(key, request);
-		return request;
-	};
-
-	get.invalidate = predicate => {
-		for (const key of cache.keys()) {
-			if (predicate(key)) cache.delete(key);
-		}
-	};
-
-	return get;
-}
 
 // TBA data changes during events (new match results), so only keep it briefly.
 const tba = cachedFetcher(60 * 1000, async path => {
@@ -142,43 +211,71 @@ const tba = cachedFetcher(60 * 1000, async path => {
 	}
 
 	return response.json();
-});
+}, { name: "tba" });
 
 const STATBOTICS_CACHE_MS = 2 * 60 * 1000;
 
+/* When Statbotics is having an outage it often fails slowly (5+ s per request).
+   After 3 outage-like failures in a row, skip it for a minute so pages render
+   straight away (cached data is still served; only cold lookups go without EPA).
+   Its normal "not found" answer is a quick 500, which doesn't count. */
+const statboticsHealth = { failures: 0, skipUntil: 0 };
+
+function statboticsFailed(slow) {
+	if (!slow) return;
+	statboticsHealth.failures += 1;
+	if (statboticsHealth.failures >= 3 && Date.now() > statboticsHealth.skipUntil) {
+		statboticsHealth.skipUntil = Date.now() + 60 * 1000;
+		statboticsHealth.failures = 0;
+		console.warn("Statbotics looks down: skipping it for 1 minute (cached EPA is still served).");
+	}
+}
+
 const statbotics = cachedFetcher(STATBOTICS_CACHE_MS, async path => {
-	// Statbotics often has brief 502/503/504 errors or dropped connections, so
-	// retry those a few times. Anything else fails straight away: Statbotics
-	// answers "not found" (e.g. a team that wasn't at an event) with a 500 and an
-	// empty {} body, and retrying that only adds seconds of delay.
-	const maxAttempts = 4;
+	if (Date.now() < statboticsHealth.skipUntil) {
+		const error = new Error("Statbotics request skipped: it's currently down");
+		error.status = 503;
+		throw error;
+	}
+
+	// Retry brief 502/503/504s once. Anything else fails straight away:
+	// Statbotics answers "not found" (e.g. a team that wasn't at an event) with a
+	// 500 and an empty {} body, and retrying that only adds delay.
+	const maxAttempts = 2;
 	const retryable = status => status === 502 || status === 503 || status === 504;
 
 	for (let attempt = 1; ; attempt++) {
+		const started = Date.now();
 		let response;
 
 		try {
 			response = await fetch(`https://api.statbotics.io/v3${path}`, {
 				headers: { Accept: "application/json" },
-				signal: AbortSignal.timeout(10000)
+				signal: AbortSignal.timeout(8000)
 			});
 		} catch (error) {
-			if (attempt >= maxAttempts) throw error;
+			statboticsFailed(true);
+			if (attempt >= maxAttempts || Date.now() < statboticsHealth.skipUntil) throw error;
 		}
 
 		if (response?.ok) {
+			statboticsHealth.failures = 0;
 			return response.json();
 		}
 
-		if (response && (!retryable(response.status) || attempt >= maxAttempts)) {
-			const error = new Error(`Statbotics request failed: ${response.status}`);
-			error.status = response.status;
-			throw error;
+		if (response) {
+			statboticsFailed(retryable(response.status) || Date.now() - started > 3000);
+
+			if (!retryable(response.status) || attempt >= maxAttempts) {
+				const error = new Error(`Statbotics request failed: ${response.status}`);
+				error.status = response.status;
+				throw error;
+			}
 		}
 
 		await new Promise(resolve => setTimeout(resolve, 500 * attempt));
 	}
-});
+}, { name: "statbotics" });
 
 /* Sends a Statbotics error to the browser with the same status codes as before:
    Statbotics' own status (e.g. 500 when a team isn't at an event), or 502. */
@@ -373,7 +470,7 @@ function trimTeamYear(row) {
 				endgame_points: breakdown.endgame_points ?? null
 			},
 			stats: epa.stats ?? null,
-			ranks: { total: epa.ranks?.total ?? null }
+			ranks: epa.ranks ?? null
 		},
 		record: row.record ?? null
 	};
@@ -558,6 +655,15 @@ app.get("/api/teams/:teamKey/events/:year", async (req, res) => {
 	}
 });
 
+/* A team's season EPA/record/name. Uses the saved bulk Statbotics download when
+   it has full ranks (instant), otherwise asks Statbotics for just this team. */
+async function seasonSummary(teamNumber, year) {
+	const state = teamYearsState.get(String(year));
+	const saved = state?.byTeam?.get(Number(teamNumber));
+	if (saved?.epa?.ranks?.country) return saved;
+	return statbotics(`/team_year/${teamNumber}/${year}`).catch(() => saved ?? null);
+}
+
 // A team's whole season: every event they attended with rank, OPR and EPA
 app.get("/api/teams/:teamNumber/season/:year", async (req, res) => {
 	const { teamNumber, year } = req.params;
@@ -565,6 +671,12 @@ app.get("/api/teams/:teamNumber/season/:year", async (req, res) => {
 
 	let team;
 	let events;
+
+	// Start everything that doesn't need the event list right away, in parallel
+	// with the team + event lookups (only the per-event OPRs have to wait).
+	const statusesRequest = tba(`/team/${teamKey}/events/${year}/statuses`).catch(() => ({}));
+	const teamYearRequest = seasonSummary(teamNumber, year);
+	const teamEventsRequest = statbotics(`/team_events?team=${teamNumber}&year=${year}`).catch(() => []);
 
 	try {
 		[team, events] = await Promise.all([
@@ -577,9 +689,9 @@ app.get("/api/teams/:teamNumber/season/:year", async (req, res) => {
 
 	try {
 		const [statuses, teamYear, teamEvents, eventOprs] = await Promise.all([
-			tba(`/team/${teamKey}/events/${year}/statuses`).catch(() => ({})),
-			statbotics(`/team_year/${teamNumber}/${year}`).catch(() => null),
-			statbotics(`/team_events?team=${teamNumber}&year=${year}`).catch(() => []),
+			statusesRequest,
+			teamYearRequest,
+			teamEventsRequest,
 			Promise.all(events.map(event =>
 				tba(`/event/${event.key}/oprs`).catch(() => null)
 			))
@@ -971,8 +1083,17 @@ app.get("/api/statbotics/team-matches/:team/:event", async (req, res) => {
 	}
 });
 
-app.use("/", express.static("public/index"));
-app.use(express.static("public"));
+// Fonts and images never change, so browsers can keep them for 30 days.
+// Pages, scripts and styles still re-check every load so updates show straight away.
+const staticOptions = {
+	setHeaders: (res, filePath) => {
+		if (/[\\/](fonts|images)[\\/]/.test(filePath)) {
+			res.setHeader("Cache-Control", "public, max-age=2592000");
+		}
+	}
+};
+app.use("/", express.static("public/index", staticOptions));
+app.use(express.static("public", staticOptions));
 const PORT = process.env.PORT || 3000;
 
 // Whether the Supabase backup is on and when it last synced (no secrets).

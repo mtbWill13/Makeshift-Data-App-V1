@@ -711,6 +711,37 @@ function formatOwnScoreDelta(clutch) {
    RENDER TEAM
 ================================= */
 
+/* How long the team page waits for Statbotics before drawing without it. */
+const SLOW_LOOKUP_MS = 2500;
+
+/* Statbotics EPA, Statbotics match history and the TBA team name for one team at
+   one event. Kept per load so reloadData() can start them early. */
+const teamExtras = new Map();
+
+function teamExtrasFor(teamNumber, event) {
+	const key = `${teamNumber}|${event}`;
+
+	if (!teamExtras.has(key)) {
+		teamExtras.set(key, {
+			epa: loadStatboticsEPA(teamNumber, event).catch(error => {
+				console.log("Statbotics error:", error.message);
+				return null;
+			}),
+			matches: loadStatboticsMatchHistory(teamNumber, event).catch(error => {
+				console.log("Statbotics match-history error:", error.message);
+				return [];
+			}),
+			name: fetch(`/api/teamName/${teamNumber}`)
+				.then(response => response.ok ? response.json() : {})
+				.then(data => data.name ?? null)
+				.catch(() => null)
+		});
+	}
+
+	return teamExtras.get(key);
+}
+
+
 async function printTeamData() {
 	const teamNumber =
 		teamNumberInput.value.trim();
@@ -851,28 +882,30 @@ async function printTeamData() {
 
 	/* EPA */
 
-	/* These three are independent, so fetch them together rather than one
-	   after another (Statbotics alone can take several seconds per request). */
-	const [statbotics, statboticsMatches, tbaTeamName] = await Promise.all([
-
-		loadStatboticsEPA(teamNumber, eventKey)
-			.catch(error => {
-				console.log("Statbotics error:", error.message);
-				return null;
-			}),
-
-		loadStatboticsMatchHistory(teamNumber, eventKey)
-			.catch(error => {
-				console.log("Statbotics match-history error:", error.message);
-				return [];
-			}),
-
-		fetch(`/api/teamName/${teamNumber}`)
-			.then(response => response.ok ? response.json() : {})
-			.then(data => data.name ?? null)
-			.catch(() => null)
-
+	/* Started alongside the event data in reloadData(), so usually already done.
+	   Statbotics can be slow or down: wait at most a couple of seconds, show the
+	   page without EPA, then redraw once Statbotics answers. */
+	const extras = teamExtrasFor(teamNumber, eventKey);
+	const LATE = Symbol("late");
+	const atMost = promise => Promise.race([promise, new Promise(resolve => setTimeout(() => resolve(LATE), SLOW_LOOKUP_MS))]);
+	const [epaResult, matchesResult, tbaTeamName] = await Promise.all([
+		atMost(extras.epa),
+		atMost(extras.matches),
+		extras.name
 	]);
+
+	if (epaResult === LATE || matchesResult === LATE) {
+		const shownEvent = eventKey;
+		Promise.all([extras.epa, extras.matches]).then(() => {
+			const stillShowing = teamExtras.get(`${teamNumber}|${shownEvent}`) === extras
+				&& teamNumberInput.value.trim() === teamNumber
+				&& eventKey === shownEvent;
+			if (stillShowing) printTeamData();
+		});
+	}
+
+	const statbotics = epaResult === LATE ? null : epaResult;
+	const statboticsMatches = matchesResult === LATE ? [] : matchesResult;
 
 
 	const opr =
@@ -1923,13 +1956,24 @@ async function showTeamMedia(teamNumber, year) {
 
 
 /* Every event scouting sheet the team appears in; events without a sheet return []. */
+/* Sheet requests for the season view, keyed "path/eventKey". printSeasonData()
+   starts these for every dropdown event at the same time as the season lookup,
+   instead of waiting to learn which events the team attended. */
+const sheetRequests = new Map();
+
+function sheetRequest(path, eventKey) {
+	const key = `${path}/${eventKey}`;
+	if (!sheetRequests.has(key)) {
+		sheetRequests.set(key, fetch(`/api/${path}/${eventKey}`)
+			.then(response => response.ok ? response.json() : [])
+			.catch(() => []));
+	}
+	return sheetRequests.get(key);
+}
+
 async function loadSheetRowsForEvents(events, path) {
 
-	const perEvent = await Promise.all(events.map(event =>
-		fetch(`/api/${path}/${event.key}`)
-			.then(response => response.ok ? response.json() : [])
-			.catch(() => [])
-	));
+	const perEvent = await Promise.all(events.map(event => sheetRequest(path, event.key)));
 
 	return events.map((event, index) => ({
 		event,
@@ -1955,6 +1999,14 @@ async function printSeasonData() {
 	}
 
 	saveTeamsInUrl(teamNumber);
+
+	sheetRequests.clear();
+	for (const option of eventKeySelect.options) {
+		if (/^\d{4}/.test(option.value)) {
+			sheetRequest("scouting", option.value);
+			sheetRequest("pitscouting", option.value);
+		}
+	}
 
 	const response = await fetch(`/api/teams/${teamNumber}/season/${SEASON_YEAR}`);
 	const season = await response.json().catch(() => ({}));
@@ -2329,6 +2381,12 @@ async function reloadData() {
 			await printSeasonData();
 			return;
 		}
+
+		/* Team-only lookups (Statbotics, team name) don't need the event data,
+		   so start them now instead of after it. */
+		const teamNumber = teamNumberInput.value.trim();
+		teamExtras.clear();
+		if (teamNumber) teamExtrasFor(teamNumber, eventKey);
 
 		await Promise.all([
 			loadEventData(),

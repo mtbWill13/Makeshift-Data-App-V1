@@ -1,0 +1,310 @@
+/* Event overview layout + chart styling — colours and components live in /theme.css */
+
+/* =========================
+	CONTROLS
+========================= */
+
+.controls label {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.overview-controls {
+	display: grid;
+	grid-template-columns: minmax(0, 360px) minmax(0, 1fr);
+	gap: 16px 24px;
+	align-items: end;
+}
+
+.overview-hint {
+	margin: 0 0 12px;
+	color: var(--text-faint);
+	font-size: 0.85rem;
+}
+
+.builder-controls {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+	gap: 16px;
+	align-items: end;
+}
+
+.builder-controls label[hidden] {
+	display: none;
+}
+
+.builder-teams {
+	grid-column: span 2;
+}
+
+/* =========================
+	SUMMARY
+========================= */
+
+.overview-summary {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	gap: 12px;
+	margin-top: 24px;
+}
+
+.overview-summary:empty {
+	display: none;
+}
+
+.overview-summary .stat-card {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 20px;
+}
+
+.overview-summary .stat-card:nth-child(4) {
+	--accent: var(--ms-green);
+}
+
+.overview-summary .stat-value {
+	font-size: clamp(1.9rem, 3.4vw, 2.6rem);
+}
+
+/* =========================
+	CHART CARDS
+========================= */
+
+.overview-grid {
+	display: grid;
+	gap: 16px;
+}
+
+.overview-chart {
+	min-width: 0;
+	padding: 20px 20px 16px;
+	border: 1px solid var(--border);
+	border-radius: var(--radius-lg);
+	background: var(--surface);
+}
+
+.overview-chart-heading {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 12px 20px;
+	flex-wrap: wrap;
+	margin-bottom: 8px;
+}
+
+.overview-chart h3 {
+	margin: 0;
+	font-size: 1.15rem;
+}
+
+.overview-chart-heading p {
+	margin: 4px 0 0;
+	color: var(--text-muted);
+	font-size: 0.88rem;
+}
+
+.download-chart {
+	min-height: 36px;
+	padding: 0 14px;
+	font-size: 0.82rem;
+}
+
+/* Wide charts (many teams) scroll sideways instead of squashing labels. */
+.chart-scroll {
+	overflow-x: auto;
+	padding-bottom: 4px;
+}
+
+.builder-output {
+	margin-top: 16px;
+}
+
+/* =========================
+	SVG CHART ELEMENTS
+========================= */
+
+.chart-svg {
+	display: block;
+	max-width: none;
+	font-family: var(--font);
+}
+
+.chart-svg a {
+	cursor: pointer;
+}
+
+.chart-gridline {
+	stroke: rgba(255, 255, 255, 0.07);
+}
+
+.chart-baseline {
+	stroke: rgba(255, 255, 255, 0.3);
+}
+
+.chart-tick {
+	fill: var(--text-muted);
+	font-size: 12px;
+	font-weight: 600;
+}
+
+.chart-category {
+	font-size: 12px;
+}
+
+.chart-svg a:hover .chart-category {
+	fill: var(--text);
+}
+
+.chart-axis-label {
+	fill: var(--text);
+	font-size: 13px;
+	font-weight: 700;
+}
+
+.chart-bar {
+	stroke: rgba(0, 0, 0, 0.55);
+	stroke-width: 1;
+	transition: opacity 120ms ease;
+}
+
+.chart-svg a:hover .chart-bar,
+.chart-svg a:hover .chart-box-body {
+	opacity: 0.8;
+}
+
+.chart-box-body {
+	stroke: rgba(0, 0, 0, 0.55);
+	stroke-width: 1;
+	opacity: 0.92;
+}
+
+.chart-whisker {
+	stroke: var(--text-muted);
+	stroke-width: 1.2;
+}
+
+.chart-median {
+	stroke: #111;
+	stroke-width: 1.6;
+}
+
+.chart-outlier {
+	fill: none;
+	stroke: var(--text-muted);
+	stroke-width: 1.2;
+}
+
+.chart-mean {
+	fill: rgba(20, 20, 20, 0.75);
+	stroke: var(--text);
+	stroke-width: 1;
+}
+
+.chart-line {
+	fill: none;
+	stroke-width: 2.5;
+	stroke-linejoin: round;
+	stroke-linecap: round;
+}
+
+.chart-point {
+	stroke: var(--bg);
+	stroke-width: 1.5;
+}
+
+.chart-point-label {
+	fill: var(--text-muted);
+	font-size: 11px;
+	font-weight: 600;
+}
+
+.chart-trend {
+	stroke: var(--text-faint);
+	stroke-width: 1.5;
+	stroke-dasharray: 6 5;
+}
+
+.chart-legend-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px 16px;
+	margin-top: 10px;
+	color: var(--text-muted);
+	font-size: 0.8rem;
+	font-weight: 600;
+}
+
+.chart-legend-row span {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.chart-legend-row i {
+	display: inline-block;
+	width: 11px;
+	height: 11px;
+	border-radius: 3px;
+}
+
+.chart-legend-row i.legend-diamond {
+	width: 9px;
+	height: 9px;
+	border: 1.5px solid var(--text);
+	border-radius: 1px;
+	background: rgba(20, 20, 20, 0.75);
+	transform: rotate(45deg);
+}
+
+.chart-legend-row i.legend-circle {
+	border: 1.5px solid var(--text-muted);
+	border-radius: 50%;
+}
+
+.chart-legend-row i.legend-box {
+	width: 14px;
+	border: 1px solid rgba(0, 0, 0, 0.55);
+	background: linear-gradient(90deg, var(--ms-red), var(--ms-yellow), var(--ms-blue));
+}
+
+.chart-caption {
+	margin: 8px 0 0;
+	color: var(--text-faint);
+	font-size: 0.8rem;
+}
+
+.chart-empty-state {
+	padding: 40px 16px;
+	color: var(--text-faint);
+	text-align: center;
+}
+
+/* =========================
+	RESPONSIVE
+========================= */
+
+@media (max-width: 860px) {
+	.overview-summary {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	.overview-controls {
+		grid-template-columns: 1fr;
+	}
+
+	.overview-hint {
+		margin: 0;
+	}
+}
+
+@media (max-width: 560px) {
+	.builder-teams {
+		grid-column: auto;
+	}
+
+	.overview-chart {
+		padding: 16px 12px 12px;
+	}
+}
