@@ -731,7 +731,9 @@ async function printTeamData() {
 		`frc${teamNumber}`;
 
 	const team =
-		teamData[teamKey];
+		teamData[teamKey]
+
+	team.matches = team.matches.filter(el => el.level === "qm");
 
 
 	const scoutingRows = scoutingData.filter(row =>
@@ -1130,7 +1132,7 @@ async function printTeamData() {
            <div class="data-item">
 
             <div class="data-item-label">
-              Matches Played
+              Qual Matches Played
             </div>
 
             <div class="data-item-value">
@@ -1606,10 +1608,10 @@ Own Score vs Prediction  </div>
 
                           <strong>
 							${value === "TRUE"
-								? `<span class="scout-true">TRUE</span>`
-								: value === "FALSE"
-									? `<span class="scout-false">FALSE</span>`
-									: escapeHtml(value || "—")}
+							? `<span class="scout-true">TRUE</span>`
+							: value === "FALSE"
+								? `<span class="scout-false">FALSE</span>`
+								: escapeHtml(value || "—")}
                           </strong>
 
                         </div>

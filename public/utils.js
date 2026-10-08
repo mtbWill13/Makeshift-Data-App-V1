@@ -61,8 +61,16 @@ function performanceTrendChart(points, label = "Scouting average by match", xLab
 	}
 
 	const matches = usable.map(point => point.match);
-	const minMatch = Math.min(...matches);
-	const maxMatch = Math.max(...matches);
+	const absoluteToRelative = new Map();
+
+	let numMatches = 1;
+
+	for (let match of matches) {
+		absoluteToRelative[match] = numMatches++;
+	}
+
+	const minMatch = 1;
+	const maxMatch = numMatches - 1;
 	const minValue = Math.min(0, ...values);
 	const maxValue = Math.max(...values);
 	const range = Math.max(1, maxValue - minValue);
@@ -77,7 +85,9 @@ function performanceTrendChart(points, label = "Scouting average by match", xLab
 	const paths = series.map(line => {
 		const coordinates = usable
 			.filter(point => Number.isFinite(Number(point[line.key])))
-			.map(point => `${x(point.match).toFixed(1)},${y(Number(point[line.key])).toFixed(1)}`);
+			.map(point =>
+				`${x(absoluteToRelative[point.match]).toFixed(1)},${y(Number(point[line.key])).toFixed(1)}`
+			);
 		return coordinates.length > 1
 			? `<polyline points="${coordinates.join(" ")}" fill="none" stroke="${line.color}" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>`
 			: coordinates.length === 1
@@ -89,8 +99,8 @@ function performanceTrendChart(points, label = "Scouting average by match", xLab
 		const vertical = y(value);
 		return `<line x1="${left}" x2="${width - right}" y1="${vertical}" y2="${vertical}" stroke="#d9d9d9"/><text x="${left - 8}" y="${vertical + 4}" text-anchor="end">${value.toFixed(0)}</text>`;
 	}).join("");
-	const labels = [...new Set([minMatch, Math.round((minMatch + maxMatch) / 2), maxMatch])]
-		.map(match => `<text x="${x(match)}" y="${height - 17}" text-anchor="middle">${match}</text>`)
+	const labels = [...new Set([minMatch, Math.round((maxMatch - minMatch) / 2), maxMatch])]
+		.map((match, index) => `<text x="${x(match)}" y="${height - 17}" text-anchor="middle">${match}</text>`)
 		.join("");
 
 	return `<section class="performance-chart"><div class="chart-heading"><h3>${escapeChartText(label)}</h3><div class="chart-legend">${series.map(line => `<span><i style="background:${line.color}"></i>${line.label}</span>`).join("")}</div></div><svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeChartText(label)}"><g class="chart-grid">${grid}</g><line x1="${left}" x2="${width - right}" y1="${height - bottom}" y2="${height - bottom}" class="chart-axis" stroke-width="1.5"/>${paths}<g class="chart-labels">${labels}<text x="${width / 2}" y="${height - 2}" text-anchor="middle">${escapeChartText(xLabel)}</text></g></svg><p class="chart-note">Each point is that match’s average report score: auto + teleop + endgame points. Multiple reports for one match are averaged together.</p></section>`;
@@ -235,3 +245,9 @@ function seasonTrendPoints(scoutingRows) {
 		.flatMap(rows => performanceTrendPoints(rows))
 		.map((point, index) => ({ ...point, match: index + 1 }));
 }
+
+document.addEventListener("wheel", event => {
+	if (document.activeElement.type == "number") {
+		document.activeElement.blur();
+	}
+});
