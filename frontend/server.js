@@ -1,18 +1,11 @@
-import dotenv from "dotenv";
+import "dotenv/config";
 import express from "express";
 import compression from "compression";
 import { mkdir, readFile, rename, writeFile } from "fs/promises";
 import { readFileSync } from "fs";
-import { fileURLToPath } from "url";
 import { google } from "googleapis";
 import { startBehindTheBumpers, episodesForTeam } from "./behind-the-bumpers.js";
 import { createSupabaseMirror } from "./supabase-mirror.js";
-/* Paths relative to this file, so the server works no matter which folder it's
-   started from (e.g. `node frontend/server.js` from the project root). */
-const fromHere = relativePath => fileURLToPath(new URL(relativePath, import.meta.url));
-
-dotenv.config({ path: fromHere("./.env") });
-
 const app = express();
 
 /* =================================
@@ -126,7 +119,7 @@ const googleAuth = new google.auth.GoogleAuth({
 		: undefined,
 	keyFile: process.env.GOOGLE_SERVICE_ACCOUNT_JSON
 		? undefined
-		: fromHere("./google-service-account.json"),
+		: "./google-service-account.json",
 	scopes: ["https://www.googleapis.com/auth/spreadsheets"]
 });
 
@@ -1099,8 +1092,8 @@ const staticOptions = {
 		}
 	}
 };
-app.use("/", express.static(fromHere("./public/index"), staticOptions));
-app.use(express.static(fromHere("./public"), staticOptions));
+app.use("/", express.static("public/index", staticOptions));
+app.use(express.static("public", staticOptions));
 const PORT = process.env.PORT || 3000;
 
 // Whether the Supabase backup is on and when it last synced (no secrets).
