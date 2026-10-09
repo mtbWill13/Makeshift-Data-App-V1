@@ -1089,6 +1089,8 @@ const staticOptions = {
 	setHeaders: (res, filePath) => {
 		if (/[\\/](fonts|images)[\\/]/.test(filePath)) {
 			res.setHeader("Cache-Control", "public, max-age=2592000");
+		} else {
+			res.setHeader("Cache-Control", "no-cache");
 		}
 	}
 };

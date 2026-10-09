@@ -10,6 +10,7 @@ const eventKey = document.getElementById("eventKey");
 const status = document.getElementById("status");
 const listsEl = document.getElementById("lists");
 const poolEl = document.getElementById("pool");
+const poolHead = document.getElementById("poolHead");
 const poolCount = document.getElementById("poolCount");
 const filtersEl = document.getElementById("filters");
 const columnsEl = document.getElementById("columns");
@@ -47,6 +48,10 @@ let stats = new Map();   // key → { label, title, group, digits, percent, lowe
 let state = loadLists(eventKey.value);
 let prefs = loadPrefs();
 let loadId = 0;
+const expanded = new Set(); // teams whose detail panel is open
+const parking = document.createElement("div"); // holds open panels during a redraw
+parking.hidden = true;
+document.body.append(parking);
 
 
 /* =================================
@@ -517,6 +522,7 @@ function teamLink(number) {
 
 function renderPool() {
 	if (!teams.length) {
+		poolHead.innerHTML = "";
 		poolEl.innerHTML = `<div class="empty-state">${loadId ? "No teams to show yet." : "Loading…"}</div>`;
 		poolCount.textContent = "";
 		return;
@@ -542,7 +548,7 @@ function renderPool() {
 		</div>`;
 
 	const rows = shown.map((team, index) => `
-		<div class="pool-row${team.number === OUR_TEAM ? " is-us" : ""}" data-drag data-team="${team.number}">
+		<div class="pool-row${team.number === OUR_TEAM ? " is-us" : ""}${expanded.has(team.number) ? " expanded" : ""}" data-drag data-team="${team.number}">
 			<span class="grip" aria-hidden="true">⠿</span>
 			<span class="pool-position">${index + 1}</span>
 			<div class="pool-team">
@@ -555,13 +561,56 @@ function renderPool() {
 				const classes = ["stat", stat?.pit ? "text-stat" : "", team.top?.[key] ? "good" : "", value === "—" ? "empty" : ""].filter(Boolean).join(" ");
 				return `<span class="${classes}" title="${escapeHtml(stat?.label ?? "")}: ${escapeHtml(value)}">${escapeHtml(value)}</span>`;
 			}).join("")}
+			<button class="expand-button" type="button" data-expand="${team.number}" aria-expanded="${expanded.has(team.number)}" aria-label="Show details for ${team.number}" title="Show team details">▾</button>
 			<button class="add-button" type="button" data-menu="${team.number}" aria-label="Add ${team.number} to a list" title="Add to a list">+</button>
-		</div>`).join("");
+		</div>
+		${expanded.has(team.number) ? teamDetails(team) : ""}`).join("");
 
 	const empty = available
 		? `<div class="empty-state">No teams match these filters.</div>`
 		: `<div class="empty-state">Every team has been placed in a list.</div>`;
-	poolEl.innerHTML = `<div class="pool-table">${header}${rows || empty}</div>`;
+	/* Keep open detail panels instead of reloading them on every redraw.
+	   moveBefore() moves an iframe without reloading it (Chrome); elsewhere the
+	   panel reloads, which still works. */
+	const keep = Element.prototype.moveBefore ? new Map() : null;
+	if (keep) {
+		for (const panel of poolEl.querySelectorAll(".team-details")) {
+			if (!expanded.has(panel.dataset.details)) continue;
+			parking.moveBefore(panel, null);
+			keep.set(panel.dataset.details, panel);
+		}
+	}
+
+	/* The column names live in their own bar so they stay in view while the
+	   page scrolls (the list's sideways scroll would stop them sticking). */
+	poolHead.innerHTML = `<div class="pool-table">${header}</div>`;
+	poolEl.innerHTML = `<div class="pool-table">${rows || empty}</div>`;
+	poolHead.scrollLeft = poolEl.scrollLeft;
+
+	if (keep) {
+		for (const fresh of poolEl.querySelectorAll(".team-details")) {
+			const old = keep.get(fresh.dataset.details);
+			if (!old) continue;
+			fresh.parentNode.moveBefore(old, fresh);
+			fresh.remove();
+			keep.delete(fresh.dataset.details);
+		}
+		for (const old of keep.values()) old.remove();
+	}
+}
+
+/* The main team page, framed in its compact ?embed=1 layout. */
+function teamDetails(team) {
+	const embed = `/?${new URLSearchParams({ event: eventKey.value, team: team.number, embed: "1" })}`;
+	return `
+		<div class="team-details" data-details="${team.number}">
+			<div class="details-bar">
+				<strong>${team.number}${team.name ? ` · ${escapeHtml(team.name)}` : ""}</strong>
+				<a href="${teamLink(team.number)}" target="_blank" rel="noopener">Open full page ↗</a>
+				<button class="secondary-button small" type="button" data-expand="${team.number}">Close</button>
+			</div>
+			<iframe src="${embed}" title="Team ${team.number} details" loading="lazy"></iframe>
+		</div>`;
 }
 
 function renderColumns() {
@@ -890,18 +939,35 @@ window.addEventListener("scroll", closeMenu, { passive: true });
    EVENTS
 ================================= */
 
-poolEl.addEventListener("click", event => {
-	const sort = event.target.closest("[data-sort]");
-	const menuButton = event.target.closest("[data-menu]");
+/* Clicking a column name sorts by it; clicking again flips the order.
+   First click sorts best-first (lowest first for rank, team number and text). */
+function sortBy(key) {
+	const lowerFirst = key === "team" || stats.get(key)?.lower || stats.get(key)?.pit;
+	prefs.sort = prefs.sort.key === key
+		? { key, dir: -prefs.sort.dir }
+		: { key, dir: lowerFirst ? 1 : -1 };
+	savePrefs();
+	renderPool();
+}
 
-	if (sort) {
-		const key = sort.dataset.sort;
-		/* First click sorts best-first (lowest first for rank, team number and text). */
-		const lowerFirst = key === "team" || stats.get(key)?.lower || stats.get(key)?.pit;
-		prefs.sort = prefs.sort.key === key
-			? { key, dir: -prefs.sort.dir }
-			: { key, dir: lowerFirst ? 1 : -1 };
-		savePrefs();
+/* On narrow screens the list scrolls sideways; keep the column names lined up. */
+poolEl.addEventListener("scroll", () => {
+	poolHead.scrollLeft = poolEl.scrollLeft;
+}, { passive: true });
+
+poolHead.addEventListener("click", event => {
+	const sort = event.target.closest("[data-sort]");
+	if (sort) sortBy(sort.dataset.sort);
+});
+
+poolEl.addEventListener("click", event => {
+	const menuButton = event.target.closest("[data-menu]");
+	const expandButton = event.target.closest("[data-expand]");
+
+	if (expandButton) {
+		const team = expandButton.dataset.expand;
+		if (expanded.has(team)) expanded.delete(team);
+		else expanded.add(team);
 		renderPool();
 	} else if (menuButton) {
 		if (!menu.hidden && menu.dataset.team === menuButton.dataset.menu) closeMenu();
@@ -1034,6 +1100,7 @@ document.getElementById("reloadButton").addEventListener("click", loadEvent);
 eventKey.addEventListener("change", () => {
 	state = loadLists(eventKey.value);
 	teams = [];
+	expanded.clear();
 	render();
 	loadEvent();
 });
@@ -1050,6 +1117,65 @@ function download(name, type, text) {
 	link.click();
 	URL.revokeObjectURL(link.href);
 }
+
+/* Printable picklist: every list as a table with the stats currently shown,
+   notes and a box to tick off picks. Print, or "Save as PDF" in the dialog. */
+function renderPrintView() {
+	const printView = document.getElementById("printView");
+	const columns = prefs.columns.filter(key => stats.has(key));
+	/* Numbers right-aligned; pit-scouting answers are text, so left-aligned. */
+	const cellClass = key => (stats.get(key).pit ? "text" : "num");
+	/* Column names can wrap on paper, so pit questions are printed in full. */
+	const printLabel = key => (stats.get(key).pit ? stats.get(key).title : stats.get(key).label);
+	const eventName = eventKey.selectedOptions[0]?.text.trim() ?? eventKey.value;
+	const printed = new Date().toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+	const lists = state.lists.filter(list => list.entries.length);
+
+	/* One table for every list, so columns line up down the page while each
+	   column is sized to fit its longest word (no words split mid-way). */
+	const columnNames = `
+		<tr class="column-names">
+			<th class="num">#</th>
+			<th>Team</th>
+			${columns.map(key => `<th class="${cellClass(key)}"><span>${escapeHtml(printLabel(key))}</span></th>`).join("")}
+			<th class="notes">Notes</th>
+			<th class="check">Picked</th>
+		</tr>`;
+
+	const sections = lists.map(list => `
+		<tbody class="print-list color-${list.color}">
+			<tr class="list-heading">
+				<th colspan="${columns.length + 4}">${escapeHtml(list.name)} <span>${list.entries.length} team${list.entries.length === 1 ? "" : "s"}</span></th>
+			</tr>
+			${columnNames}
+			${list.entries.map((entry, index) => {
+				const team = teamByNumber(entry.team);
+				return `
+				<tr class="team-row${isTaken(entry.team) ? " taken" : ""}">
+					<td class="num position">${index + 1}</td>
+					<td class="team"><strong>${escapeHtml(entry.team)}</strong>${team?.name ? `<small>${escapeHtml(team.name)}</small>` : ""}</td>
+					${columns.map(key => `<td class="${cellClass(key)}">${team ? escapeHtml(formatStat(team, key)) : "—"}</td>`).join("")}
+					<td class="notes">${escapeHtml(entry.note ?? "")}</td>
+					<td class="check">${isTaken(entry.team) ? "✓" : "☐"}</td>
+				</tr>`;
+			}).join("")}
+		</tbody>`).join("");
+	const tables = sections ? `<table class="print-table">${sections}</table>` : "";
+
+	printView.innerHTML = `
+		<header class="print-header">
+			<h1>Picklist · ${escapeHtml(eventName)}</h1>
+			<p>MakeShift 4039 · Printed ${escapeHtml(printed)}</p>
+		</header>
+		${tables || `<p>No teams have been added to the lists yet.</p>`}`;
+}
+
+document.getElementById("printButton").addEventListener("click", () => {
+	renderPrintView();
+	window.print();
+});
+/* Cmd/Ctrl+P on the page gets the same printout. */
+window.addEventListener("beforeprint", renderPrintView);
 
 /* Lists side by side, like the old picklist spreadsheet. */
 document.getElementById("csvButton").addEventListener("click", () => {

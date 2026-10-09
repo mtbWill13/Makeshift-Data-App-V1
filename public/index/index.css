@@ -502,3 +502,122 @@
 .scouting-match-summary .match-alliance {
 	padding: 8px 20px;
 }
+
+
+/* =========================
+	EMBED (?embed=1)
+	The team view only, sized for a panel inside another page.
+========================= */
+
+html.embed .top-bar,
+html.embed body > header,
+html.embed main > .controls {
+	display: none;
+}
+
+html.embed body {
+	min-height: 0;
+	font-size: 15px;
+}
+
+html.embed main {
+	width: auto;
+	padding: 16px 16px 24px;
+}
+
+html.embed #results {
+	margin-top: 0;
+}
+
+html.embed .team-hero {
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: 16px;
+	margin-bottom: 16px;
+}
+
+html.embed .team-heading h2 {
+	font-size: 1.35rem;
+}
+
+html.embed .team-heading > span {
+	font-size: 0.85rem;
+}
+
+html.embed .robot-photo {
+	width: 150px;
+}
+
+html.embed .top-stats {
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 10px;
+}
+
+html.embed .stat-card {
+	min-height: 0;
+	gap: 8px;
+	padding: 14px 16px;
+}
+
+html.embed .stat-value {
+	font-size: 1.9rem;
+}
+
+html.embed .stat-description {
+	font-size: 0.75rem;
+}
+
+html.embed .section-title {
+	margin: 24px 0 10px;
+	padding-bottom: 8px;
+}
+
+html.embed .data-grid {
+	grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+	gap: 8px;
+}
+
+html.embed .data-item {
+	padding: 12px 14px;
+	border-radius: var(--radius-sm);
+}
+
+html.embed .data-item-value {
+	font-size: 1.25rem;
+}
+
+html.embed .data-item-description {
+	font-size: 0.72rem;
+}
+
+html.embed .scouting-list {
+	grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+	gap: 10px;
+}
+
+html.embed .match-list {
+	grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+
+html.embed .performance-chart,
+html.embed .chart-card {
+	padding: 14px;
+}
+
+html.embed .performance-chart svg {
+	max-height: 220px;
+}
+
+@media (max-width: 480px) {
+	html.embed .team-hero {
+		grid-template-columns: 1fr;
+	}
+
+	html.embed .robot-photo {
+		width: 100%;
+		max-width: 260px;
+	}
+
+	html.embed .top-stats {
+		grid-template-columns: 1fr;
+	}
+}

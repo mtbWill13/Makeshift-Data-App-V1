@@ -39,6 +39,7 @@
         </div>
         <div class="button-row">
           <button id="reloadButton" class="secondary-button" type="button">Reload data</button>
+          <button id="printButton" type="button">Print / PDF</button>
           <button id="csvButton" class="secondary-button" type="button">Download CSV</button>
           <button id="exportButton" class="secondary-button" type="button">Export</button>
           <button id="importButton" class="secondary-button" type="button">Import</button>
@@ -66,7 +67,7 @@
 
           <div class="pool-toolbar">
             <div class="search-row">
-              <input id="search" type="search" placeholder="Search by team number or name" autocomplete="off">
+              <input id="search" type="search" placeholder="Search by team number" autocomplete="off">
               <label class="toggle"><input id="hideUnscouted" type="checkbox"> Only scouted teams</label>
             </div>
 
@@ -88,11 +89,13 @@
           </div>
           <p class="pool-legend">Click a column name to sort. <span class="good-sample">Green</span> = top quarter of the event.</p>
 
+          <div id="poolHead" class="pool-head-bar"></div>
           <div id="pool" class="pool"></div>
         </section>
       </div>
     </main>
     <div id="menu" class="add-menu" hidden></div>
+    <section id="printView" class="print-view" aria-hidden="true"></section>
     <script src="/global.js"></script>
     <script src="picklist.js"></script>
   </body>

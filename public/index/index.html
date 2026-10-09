@@ -8,6 +8,19 @@
     <link rel="preload" href="/fonts/dm-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="/theme.css">
     <link rel="stylesheet" href="index.css">
+    <script>
+      /* ?embed=1 shows just the team view, compact, for other pages to frame
+         (e.g. the picklist). Links open in a new tab instead of inside the frame. */
+      if (new URLSearchParams(location.search).has("embed")) {
+        document.documentElement.classList.add("embed");
+        const style = document.createElement("style");
+        style.textContent = ".top-bar, body > header, main > .controls { display: none !important; }";
+        document.head.append(style);
+        const base = document.createElement("base");
+        base.target = "_blank";
+        document.head.append(base);
+      }
+    </script>
 </head>
 
 <body>
