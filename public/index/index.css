@@ -77,6 +77,7 @@
 .nav-pit { --accent: var(--ms-red); }
 .nav-transfer { --accent: var(--ms-neutral); }
 .nav-overview { --accent: var(--ms-blue); }
+.nav-picklist { --accent: var(--ms-yellow); }
 
 /* An odd tile out (e.g. 7 tiles in 2 columns) spans the full row. */
 .nav-tile:last-child:nth-child(odd) {
