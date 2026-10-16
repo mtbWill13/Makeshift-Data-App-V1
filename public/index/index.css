@@ -8,7 +8,19 @@
 	display: grid;
 	grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
 	gap: 40px 56px;
-	align-items: end;
+	align-items: stretch;
+}
+
+/* Label and title sit at the top; the description stays at the bottom,
+   level with the last row of tiles. */
+.hero-intro {
+	display: flex;
+	flex-direction: column;
+}
+
+.hero-intro .header-description {
+	margin-top: auto;
+	padding-top: 16px;
 }
 
 .nav-grid {

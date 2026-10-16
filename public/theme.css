@@ -823,6 +823,166 @@ button:disabled {
 	font: 600 13px var(--font);
 }
 
+/* ----- Scouting trend chart (match scores + running average) ----- */
+
+.chart-legend .key-dot {
+	width: 9px;
+	height: 9px;
+	border-radius: 50%;
+}
+
+.chart-legend .key-line {
+	width: 16px;
+	height: 3px;
+	border-radius: 2px;
+}
+
+.trend-plot {
+	position: relative;
+}
+
+/* The end label never gets clipped, even with a long value. */
+.trend-chart svg {
+	overflow: visible;
+}
+
+.trend-chart .chart-grid text,
+.trend-chart .chart-labels text {
+	font-size: 14px;
+	font-variant-numeric: tabular-nums;
+}
+
+.trend-match-line {
+	fill: none;
+	stroke-width: 1.5;
+	stroke-linejoin: round;
+	opacity: 0.35;
+}
+
+.trend-average-line {
+	fill: none;
+	stroke-width: 3;
+	stroke-linejoin: round;
+	stroke-linecap: round;
+}
+
+/* Dots and end markers get a ring in the card colour so they stay
+   readable where they cross the lines. */
+.trend-dot,
+.trend-average-end,
+.trend-focus {
+	stroke: var(--surface);
+	stroke-width: 2;
+}
+
+.trend-end-label {
+	fill: var(--text);
+	font: 700 14px var(--font);
+	font-variant-numeric: tabular-nums;
+}
+
+.trend-crosshair {
+	stroke: rgba(255, 255, 255, 0.3);
+	stroke-width: 1;
+	pointer-events: none;
+}
+
+.trend-focus {
+	pointer-events: none;
+}
+
+.trend-hit {
+	fill: transparent;
+	cursor: crosshair;
+	outline: none;
+}
+
+.trend-tooltip {
+	position: absolute;
+	z-index: 2;
+	display: grid;
+	gap: 4px;
+	min-width: 140px;
+	padding: 10px 12px;
+	border: 1px solid var(--border-strong);
+	border-radius: var(--radius-sm);
+	background: var(--surface-3);
+	box-shadow: 0 10px 24px rgba(0, 0, 0, 0.5);
+	font-size: 0.8rem;
+	pointer-events: none;
+}
+
+.trend-tooltip[hidden] {
+	display: none;
+}
+
+.trend-tooltip-title {
+	color: var(--text-muted);
+	font-weight: 600;
+}
+
+.trend-tooltip-row {
+	display: grid;
+	grid-template-columns: 14px auto 1fr;
+	align-items: center;
+	gap: 8px;
+}
+
+.trend-tooltip-row i {
+	width: 14px;
+	height: 3px;
+	border-radius: 2px;
+}
+
+.trend-tooltip-row strong {
+	color: var(--text);
+	font-size: 0.95rem;
+	font-variant-numeric: tabular-nums;
+}
+
+.trend-tooltip-row span {
+	color: var(--text-muted);
+}
+
+.trend-table {
+	margin-top: 10px;
+	font-size: 0.82rem;
+}
+
+.trend-table summary {
+	width: fit-content;
+	color: var(--text-muted);
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.trend-table table {
+	width: 100%;
+	max-width: 420px;
+	margin-top: 8px;
+	border-collapse: collapse;
+	font-variant-numeric: tabular-nums;
+}
+
+.trend-table th,
+.trend-table td {
+	padding: 6px 10px;
+	border-bottom: 1px solid var(--border);
+	text-align: right;
+}
+
+.trend-table th {
+	color: var(--text-muted);
+	font-size: 0.72rem;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+}
+
+.trend-table th:first-child,
+.trend-table td:first-child {
+	text-align: left;
+}
+
 .chart-note,
 .empty-chart p {
 	margin: 12px 0 0;

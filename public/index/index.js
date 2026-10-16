@@ -1154,7 +1154,7 @@ async function printTeamData() {
 
         </section>
 
-        ${performanceTrendChart(trendPoints, "Scouting average by match")}
+        ${performanceTrendChart(trendPoints, "Scouting by match")}
 
         <!-- Event Results -->
 

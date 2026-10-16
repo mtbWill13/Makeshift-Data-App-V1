@@ -190,7 +190,9 @@ function textRow(label, a, b) {
 
 function renderComparison(a, b) {
 	const isSeason = eventSelect.value === SEASON_OPTION;
-	const trendAxis = isSeason ? "Scouted match (season, in order)" : "Qualification match";
+	const trendAxis = isSeason ? "Match (season, in order)" : "Match";
+	/* Both teams' charts share one y-scale so they can be compared by eye. */
+	const trendMax = Math.max(0, ...[...a.trendPoints, ...b.trendPoints].map(point => Number(point.scouting)).filter(Number.isFinite));
 	const aTotal =
 		Number.isFinite(a.auto) && Number.isFinite(a.teleop)
 			? a.auto + a.teleop
@@ -214,8 +216,8 @@ function renderComparison(a, b) {
 	results.innerHTML = `
         <div class="comparison-heading"><div><h2 class="team-name">Team ${escapeHtml(a.number)}</h2><p class="team-detail">${a.scoutingCount} scouting reports</p></div><div class="vs">VS</div><div><h2 class="team-name right">Team ${escapeHtml(b.number)}</h2><p class="team-detail right">${b.scoutingCount} scouting reports</p></div></div>
         <section class="summary"><div class="summary-card"><div class="summary-label">Comparison edge</div><div class="summary-value">${summary}</div><div class="summary-note">Based on available OPR, CCWM, and scouting scoring data.</div></div><div class="summary-card"><div class="summary-label">Event</div><div class="summary-value">${escapeHtml(eventSelect.selectedOptions[0].text)}</div><div class="summary-note">Green cells indicate the stronger numeric value.</div></div></section>
-        <h3 class="section-title">Scouting average over matches</h3>
-        <section class="trend-grid">${performanceTrendChart(a.trendPoints, `Team ${a.number}: scouting average`, trendAxis)}${performanceTrendChart(b.trendPoints, `Team ${b.number}: scouting average`, trendAxis)}</section>
+        <h3 class="section-title">Scouting by match</h3>
+        <section class="trend-grid">${performanceTrendChart(a.trendPoints, `Team ${a.number}`, trendAxis, { yMax: trendMax, compact: true })}${performanceTrendChart(b.trendPoints, `Team ${b.number}`, trendAxis, { yMax: trendMax, compact: true })}</section>
         <h3 class="section-title">${isSeason ? "Season performance" : "Event performance"}</h3>
         <table class="comparison-table"><thead><tr><th>Stat</th><th>Team ${escapeHtml(a.number)}</th><th>Team ${escapeHtml(b.number)}</th></tr></thead><tbody>
           ${numericRow("OPR", a.opr, b.opr, { digits: 2 })}${numericRow("DPR", a.dpr, b.dpr, { digits: 2, lowerIsBetter: true })}${numericRow("CCWM", a.ccwm, b.ccwm, { digits: 2 })}${numericRow("Total EPA", a.totalEpa, b.totalEpa)}${numericRow("Auto EPA", a.autoEpa, b.autoEpa)}${numericRow("Teleop EPA", a.teleopEpa, b.teleopEpa)}${numericRow("Endgame EPA", a.endgameEpa, b.endgameEpa)}${numericRow("Matches played", a.matches, b.matches, { digits: 0 })}
