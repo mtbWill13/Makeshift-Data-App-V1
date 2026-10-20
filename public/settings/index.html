@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Team Settings | MakeShift Scouting Data Hub</title>
+    <link rel="preload" href="/fonts/dm-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="/theme.css">
+    <link rel="stylesheet" href="/team.css">
+    <link rel="stylesheet" href="/team-forms.css">
+    <link rel="stylesheet" href="settings.css" />
+  </head>
+  <body>
+    <div class="top-bar" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+    <header>
+      <div class="header-content">
+        <a class="brand" href="/"><img src="/images/makeshift-logo-wide.png" alt="MakeShift 4039" width="707" height="78"></a>
+        <div class="eyebrow">Team <span data-team-number></span></div>
+        <h1>Team<br>Settings</h1>
+        <p class="header-description">Your team's name, colours, events and passwords.</p>
+        <div class="header-links"><a class="back-link" href="/">← Data Hub</a></div>
+      </div>
+    </header>
+
+    <main>
+      <div id="managed" class="empty-state" hidden>
+        This team is set up in the server's <code>.env</code> file, so its settings can't be changed here.
+      </div>
+
+      <div id="settings" class="team-form" hidden>
+
+        <form id="profileForm" class="form-section" novalidate>
+          <h2>Team name and colours</h2>
+          <div class="control-group">
+            <label for="name">Team name</label>
+            <input id="name" type="text" maxlength="60" autocomplete="organization" required>
+          </div>
+          <div id="colorPicker"></div>
+          <p id="profileMessage" class="form-message" role="status"></p>
+          <button id="profileSave" type="submit">Save name and colours</button>
+        </form>
+
+        <section class="form-section">
+          <h2>Your events</h2>
+          <p>These are the events your team scouts. Each one has a name, an event key and (when you're ready) the
+            Google Sheet for it. They're the choices in every page's event dropdown.</p>
+          <ul id="eventList" class="event-list"></ul>
+
+          <form id="eventForm" class="add-event" novalidate>
+            <h3>Add an event, or update one</h3>
+            <div id="quickFillRow" class="control-group" hidden>
+              <label for="quickFill">Quick fill from The Blue Alliance <small>(optional)</small></label>
+              <select id="quickFill"></select>
+            </div>
+            <div class="field-row">
+              <div class="control-group">
+                <label for="eventName">Event name</label>
+                <input id="eventName" type="text" maxlength="60" autocomplete="off" placeholder="e.g. Waterloo District">
+              </div>
+              <div class="control-group">
+                <label for="eventKey">Event key</label>
+                <input id="eventKey" type="text" maxlength="30" autocomplete="off" spellcheck="false" placeholder="e.g. 2026onwat">
+              </div>
+            </div>
+            <p class="section-note">
+              The key is the event's code on thebluealliance.com (the year, then letters). It's how public data like
+              rankings is found. For a practice event, make one up, like <code>2026practice</code>.
+            </p>
+            <div class="control-group">
+              <label for="sheet">Google Sheet link or ID <small>(optional, you can add it later)</small></label>
+              <input id="sheet" type="text" autocomplete="off" spellcheck="false" placeholder="https://docs.google.com/spreadsheets/d/…">
+            </div>
+            <p class="section-note">
+              Make a copy of the team template sheet, then share your copy with
+              <code id="serviceEmail">…</code> as an <strong>Editor</strong>. <span id="templateLink"></span>
+              To connect a sheet to an event you already added, enter the same key again with the link.
+            </p>
+            <p id="eventMessage" class="form-message" role="status"></p>
+            <button id="eventSave" type="submit">Save event</button>
+          </form>
+        </section>
+
+        <form id="passwordForm" class="form-section" novalidate>
+          <h2>Passwords</h2>
+          <p>Leave a new value blank to keep it as it is. Changing the team password logs everyone else out.</p>
+          <div class="control-group">
+            <label for="current">Current team password</label>
+            <input id="current" type="password" autocomplete="current-password" required>
+          </div>
+          <div class="field-row">
+            <div class="control-group">
+              <label for="newPassword">New team password</label>
+              <input id="newPassword" type="password" autocomplete="new-password" minlength="8">
+            </div>
+            <div class="control-group">
+              <label for="newScout">New scout passcode</label>
+              <input id="newScout" type="text" autocomplete="off" spellcheck="false">
+            </div>
+          </div>
+          <p id="passwordMessage" class="form-message" role="status"></p>
+          <button id="passwordSave" type="submit" class="secondary-button">Save passwords</button>
+        </form>
+
+        <form id="deleteForm" class="form-section danger-zone" novalidate>
+          <h2>Delete this account</h2>
+          <p>
+            This removes your team's login, colours and event list from this site, and everyone on your team is
+            logged out. <strong>Your Google Sheets are not deleted</strong>; they stay in your Google account.
+            Your team number can be signed up again afterwards.
+          </p>
+          <div class="field-row">
+            <div class="control-group">
+              <label for="deletePassword">Team password</label>
+              <input id="deletePassword" type="password" autocomplete="current-password" required>
+            </div>
+            <div class="control-group">
+              <label for="deleteConfirm">Type your team number to confirm</label>
+              <input id="deleteConfirm" type="text" inputmode="numeric" maxlength="5" autocomplete="off" required>
+            </div>
+          </div>
+          <p id="deleteMessage" class="form-message" role="alert"></p>
+          <button id="deleteSave" type="submit" class="danger-button">Delete account</button>
+        </form>
+
+        <button id="logout" type="button" class="secondary-button logout-wide">Log out</button>
+      </div>
+    </main>
+
+    <script src="/global.js"></script>
+    <script src="/team-colors.js"></script>
+    <script src="settings.js"></script>
+  </body>
+</html>

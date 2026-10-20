@@ -22,7 +22,7 @@ const toggles = {
 	hideUnscouted: document.getElementById("hideUnscouted")
 };
 
-const OUR_TEAM = "4039";
+const OUR_TEAM = String(window.TEAM?.number ?? 4039);
 const DISPLAY_COLUMNS = 5;
 const PREFS_KEY = "makeshift-picklist-prefs";
 const listsKey = event => `makeshift-picklist-${event}`;
@@ -1165,7 +1165,7 @@ function renderPrintView() {
 	printView.innerHTML = `
 		<header class="print-header">
 			<h1>Picklist · ${escapeHtml(eventName)}</h1>
-			<p>MakeShift 4039 · Printed ${escapeHtml(printed)}</p>
+			<p>${escapeHtml(window.TEAM?.legacy === false ? `${window.TEAM.name} ${window.TEAM.number}` : "MakeShift 4039")} · Printed ${escapeHtml(printed)}</p>
 		</header>
 		${tables || `<p>No teams have been added to the lists yet.</p>`}`;
 }

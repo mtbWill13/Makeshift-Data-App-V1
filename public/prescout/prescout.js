@@ -4,7 +4,7 @@
    TBA records and finishes) and writes a short overview of each.
 ================================= */
 
-const OUR_TEAM = 4039;
+const OUR_TEAM = Number(window.TEAM?.number ?? 4039);
 const MAX_TEAMS = 80;
 const MEDIA_CONCURRENCY = 4;
 

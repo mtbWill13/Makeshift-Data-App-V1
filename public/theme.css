@@ -41,6 +41,11 @@
 	--green: var(--ms-green);
 	--cyan: var(--ms-blue);
 
+	/* A team's own colours (set by /team.css after this file loads):
+	   --brand = buttons, --brand-2 = links and focus highlights. */
+	--brand: var(--ms-red);
+	--brand-2: var(--ms-blue);
+
 	/* Surfaces */
 	--bg: #060709;
 	--surface: #0f1115;
@@ -107,7 +112,7 @@ h4 {
 }
 
 a {
-	color: var(--ms-blue);
+	color: var(--brand-2);
 }
 
 /* =========================
@@ -166,6 +171,24 @@ header {
 	display: block;
 	width: auto;
 	height: 26px;
+}
+
+/* Other teams: their name and number in place of the MakeShift logo. */
+.brand-text {
+	display: inline-flex;
+	align-items: baseline;
+	gap: 10px;
+	color: var(--text);
+	font-size: 1.4rem;
+	font-weight: 700;
+	letter-spacing: -0.02em;
+	line-height: 1.1;
+	text-decoration: none;
+}
+
+.brand-text b {
+	color: var(--brand);
+	font-variant-numeric: tabular-nums;
 }
 
 /* Skewed five-colour chip echoing the 4039 logo */
@@ -359,8 +382,8 @@ textarea:hover {
 input:focus,
 select:focus,
 textarea:focus {
-	border-color: var(--ms-blue);
-	box-shadow: 0 0 0 3px rgba(89, 168, 215, 0.22);
+	border-color: var(--brand-2);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-2) 22%, transparent);
 }
 
 input[readonly] {
@@ -397,7 +420,7 @@ button {
 	padding: 0 22px;
 	border: 1px solid transparent;
 	border-radius: var(--radius-sm);
-	background: var(--ms-red);
+	background: var(--brand);
 	color: var(--on-accent);
 	font: inherit;
 	font-weight: 700;

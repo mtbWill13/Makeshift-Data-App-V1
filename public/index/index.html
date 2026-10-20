@@ -7,6 +7,7 @@
   <title>MakeShift Scouting Data Hub</title>
     <link rel="preload" href="/fonts/dm-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="/theme.css">
+    <link rel="stylesheet" href="/team.css">
     <link rel="stylesheet" href="index.css">
     <script>
       /* ?embed=1 shows just the team view, compact, for other pages to frame
@@ -30,11 +31,15 @@
   <header>
     <div class="header-content">
       <a class="brand" href="/"><img src="/images/makeshift-logo-wide.png" alt="MakeShift 4039" width="707" height="78"></a>
+      <div class="header-actions">
+        <a class="logout-button" id="settingsLink" data-team-settings hidden href="/settings/">Team settings</a>
+        <button id="logoutButton" class="logout-button" type="button">Log out</button>
+      </div>
 
       <div class="hero">
         <div class="hero-intro">
           <div class="eyebrow">
-            <span>FRC 4039 • Powered by
+            <span>FRC <span data-team-number>4039</span> • Powered by
               <a href="https://www.thebluealliance.com/" target="_blank" rel="noopener noreferrer">The Blue Alliance</a> &amp;
               <a href="https://www.statbotics.io/" target="_blank" rel="noopener noreferrer">Statbotics</a></span>
           </div>
@@ -63,6 +68,11 @@
   </header>
 
   <main>
+
+    <div id="noSheetNotice" class="empty-state sheet-notice" hidden>
+      <span id="noSheetText"></span>
+      <a href="/settings/">Open Team settings →</a>
+    </div>
 
     <section class="controls">
 
@@ -108,6 +118,15 @@
   <script src="../utils.js"></script>
 	<script src="/global.js"></script>
   <script src="index.js"></script>
+  <script>
+    document.getElementById("logoutButton").addEventListener("click", logoutTeam);
+    if (window.TEAM && !window.TEAM.legacy && !window.TEAM.events.some(event => event.hasSheet)) {
+      document.getElementById("noSheetText").textContent = window.TEAM.events.length
+        ? "None of your events has a Google Sheet connected yet, so scouting data isn't showing."
+        : "Your team hasn't added any events yet. Add the events you scout (name, key and Google Sheet) to get started.";
+      document.getElementById("noSheetNotice").hidden = false;
+    }
+  </script>
 
 </body>
 </html>

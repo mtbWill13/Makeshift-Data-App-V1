@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Create a Team Account | MakeShift Scouting Data Hub</title>
+    <link rel="preload" href="/fonts/dm-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="/theme.css">
+    <link rel="stylesheet" href="/team.css">
+    <link rel="stylesheet" href="/team-forms.css">
+    <link rel="stylesheet" href="signup.css" />
+  </head>
+  <body>
+    <div class="top-bar" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+    <header>
+      <div class="header-content">
+        <a class="brand" href="/login/"><img src="/images/makeshift-logo-wide.png" alt="MakeShift 4039" width="707" height="78"></a>
+        <div class="eyebrow">New team</div>
+        <h1>Create a team<br>account</h1>
+        <p class="header-description">
+          Your team gets its own login, colours and Google Sheet. Nobody else
+          can see your scouting data.
+        </p>
+        <div class="header-links"><a class="back-link" href="/login/">← Back to log in</a></div>
+      </div>
+    </header>
+
+    <main>
+      <form id="signupForm" class="team-form" novalidate>
+
+        <section class="form-section">
+          <h2>1 · Your team</h2>
+          <div class="field-row">
+            <div class="control-group">
+              <label for="number">FRC team number</label>
+              <input id="number" type="text" inputmode="numeric" maxlength="5" autocomplete="off" placeholder="e.g. 4039" required>
+              <p id="numberNote" class="field-note"></p>
+            </div>
+            <div class="control-group">
+              <label for="name">Team name</label>
+              <input id="name" type="text" maxlength="60" autocomplete="organization" placeholder="e.g. MakeShift" required>
+            </div>
+          </div>
+        </section>
+
+        <section class="form-section">
+          <h2>2 · Colour scheme</h2>
+          <p>Pick a preset or choose your own. The whole site changes to your colours.</p>
+          <div id="colorPicker"></div>
+        </section>
+
+        <section class="form-section">
+          <h2>3 · Your Google Sheet <span class="optional">optional</span></h2>
+          <p>
+            Your scouting data lives in a Google Sheet that only your team owns.
+            Other teams are never given access to it. <strong>Don't have one yet?</strong>
+            Skip this step and connect it later in Team settings. Everything that uses
+            public event data works without it.
+          </p>
+          <ol class="steps">
+            <li><strong>Make your own copy</strong> of the team template sheet (File → Make a copy). <span id="templateLink">Ask the site owner for the template link.</span></li>
+            <li><strong>Share your copy</strong> with this address as an <strong>Editor</strong> (Share button, top right):
+              <div class="copy-row"><code id="serviceEmail">…</code><button id="copyEmail" class="secondary-button small-button" type="button">Copy</button></div>
+            </li>
+            <li><strong>Paste the sheet's link</strong> (or its ID) below.</li>
+          </ol>
+
+          <div class="control-group">
+            <label for="event">Event this sheet is for <small>(only needed with a sheet)</small></label>
+            <select id="event"><option value="">Enter your team number first…</option></select>
+          </div>
+          <div id="customEventRow" class="control-group" hidden>
+            <label for="customEvent">Event key</label>
+            <input id="customEvent" type="text" maxlength="30" autocomplete="off" spellcheck="false" placeholder="e.g. 2026onwat (from thebluealliance.com)">
+          </div>
+
+          <div class="control-group">
+            <label for="sheet">Google Sheet link or ID <small>(leave blank to skip)</small></label>
+            <input id="sheet" type="text" autocomplete="off" spellcheck="false" placeholder="https://docs.google.com/spreadsheets/d/…">
+          </div>
+          <div class="check-row">
+            <button id="checkSheet" class="secondary-button small-button" type="button">Check my sheet</button>
+            <p id="sheetNote" class="field-note" role="status"></p>
+          </div>
+        </section>
+
+        <section class="form-section">
+          <h2>4 · Passwords</h2>
+          <div class="field-row">
+            <div class="control-group">
+              <label for="password">Team password</label>
+              <input id="password" type="password" autocomplete="new-password" minlength="8" required>
+              <p class="field-note">At least 8 characters. Everyone on your team uses this to log in.</p>
+            </div>
+            <div class="control-group">
+              <label for="confirm">Confirm password</label>
+              <input id="confirm" type="password" autocomplete="new-password" required>
+            </div>
+          </div>
+          <div class="control-group">
+            <label for="scoutPasscode">Scout passcode <small>(optional)</small></label>
+            <input id="scoutPasscode" type="text" autocomplete="off" spellcheck="false" placeholder="Leave blank to use the team password">
+            <p class="field-note">Scouts type this on the match and pit scouting forms before submitting.</p>
+          </div>
+        </section>
+
+        <p id="message" class="form-message" role="alert" aria-live="assertive"></p>
+        <button id="submit" type="submit">Create team account</button>
+      </form>
+    </main>
+
+    <script src="/team-colors.js"></script>
+    <script src="signup.js"></script>
+  </body>
+</html>
