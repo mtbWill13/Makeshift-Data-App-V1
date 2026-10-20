@@ -358,6 +358,95 @@ function forgetSheet(spreadsheetId) {
 	sheetReads.invalidate(key => key.startsWith(`${spreadsheetId}${SHEET_KEY_SEPARATOR}`));
 }
 
+/* =================================
+   SHEET LAYOUTS
+   A team's sheet can use either layout, found by which tab it has:
+   - SIMPLE: "Match Scouting Columns" / "Pit Scouting Columns". Only the columns
+     the app uses; every column is a form field, and there are no formulas. The
+     numbers the pages expect (like climb points) are worked out here.
+   - LEGACY: "Scouting Raw Data" / "Pit Scouting Raw Data", the 39-column sheet
+     with a calculated block and a fixed set of form columns. Existing event
+     sheets keep working exactly as before.
+   A sheet with both tabs uses the simple one.
+================================= */
+
+const SHEET_TABS = {
+	match: { simple: "Match Scouting Columns", legacy: "Scouting Raw Data" },
+	pit: { simple: "Pit Scouting Columns", legacy: "Pit Scouting Raw Data" }
+};
+
+/* Which columns of the legacy sheets are form fields. */
+const LEGACY_FORM_LETTERS = {
+	match: "B C D E H K L M N R T".split(" "),
+	pit: "B C D F G H J K L M Z AD AE AF AH".split(" ")
+};
+
+/* Headers that hold yes/no answers (a new simple tab has no rows yet to tell). */
+const SIMPLE_MATCH_YES_NO = new Set([
+	"Shuttle Fuel", "Robot was defended", "No Show", "Robot died/had breakdown in functionality",
+	"Robot tipped/fell over", "Robot received fouls or a yellow/red card"
+]);
+
+const sheetTabTitles = cachedFetcher(60 * 1000, spreadsheetId =>
+	sheets.spreadsheets.get({ spreadsheetId, fields: "sheets.properties.title" })
+		.then(response => response.data.sheets.map(sheet => sheet.properties.title)),
+	{ name: "sheet-tabs" }
+);
+
+/* The tab to use for "match" or "pit" data, or null if the sheet has neither. */
+async function sheetTab(spreadsheetId, kind) {
+	const titles = await sheetTabTitles(spreadsheetId);
+	const tabs = SHEET_TABS[kind];
+
+	if (titles.includes(tabs.simple)) return { title: tabs.simple, simple: true, kind };
+	if (titles.includes(tabs.legacy)) return { title: tabs.legacy, simple: false, kind };
+	return null;
+}
+
+function letterToIndex(letter) {
+	return [...String(letter).trim().toUpperCase()].reduce((total, character) => total * 26 + character.charCodeAt(0) - 64, 0) - 1;
+}
+
+/* Column positions the form should show, in order. */
+function formFieldIndexes(headers, tab) {
+	if (tab.simple) return headers.map((header, index) => header ? index : null).filter(Number.isInteger);
+	return LEGACY_FORM_LETTERS[tab.kind].map(letterToIndex).filter(index => headers[index]);
+}
+
+/* The simple match tab has no formula columns, so numbers the pages expect are
+   worked out as rows are read: End Game Climb as points (level 1/2/3 = 10/20/30)
+   and the climb-points total. */
+function climbPoints(value) {
+	const text = String(value ?? "").trim();
+	if (text !== "" && Number.isFinite(Number(text))) return Number(text);
+	if (/^true$/i.test(text)) return 10; // an older yes/no answer: climbed, level unknown, counted as level 1
+	const level = text.match(/(?:level|lvl|l)\s*([123])\b/i);
+	return level ? Number(level[1]) * 10 : 0;
+}
+
+function normalizeSimpleMatchRow(row) {
+	const endgame = climbPoints(row["End Game Climb"]);
+	const auto = Number(row["Auto Climb"]);
+
+	return {
+		...row,
+		"End Game Climb": endgame,
+		"Climb points": endgame + (Number.isFinite(auto) ? auto : 0),
+		"Teleop Calculated Scoring Points": row["Teleop Scoring Points"] ?? ""
+	};
+}
+
+/* Rows as { header: value } objects. */
+function rowsToObjects(values, normalize = row => row) {
+	const [headers, ...rows] = values ?? [];
+	if (!headers) return [];
+	return rows.map(row => normalize(Object.fromEntries(headers.map((header, index) => [header, row[index] ?? ""]))));
+}
+
+const noTabMessage = (kind, req) => req.team.legacy
+	? `The sheet has no ${SHEET_TABS[kind].legacy} tab.`
+	: `That event's sheet has no "${SHEET_TABS[kind].simple}" tab. Start from a copy of the team template sheet.`;
+
 const scoutingSheetIds = {
 	"2026oncmp2": process.env.SCOUTING_SHEET_2026ONCMP2,
 	"2026ontor": process.env.SCOUTING_SHEET_2026ONTOR,
@@ -500,8 +589,14 @@ function stripHtml(value) {
 /* The tabs and columns the stats pages rely on. The match form builds itself
    from the sheet's header row, so anything extra is fine. */
 const REQUIRED_SHEET_COLUMNS = {
-	"Scouting Raw Data": ["Team Number", "Match Number", "No Show", "Auto Scoring Points", "Teleop Scoring Points"],
-	"Pit Scouting Raw Data": ["Team Number of Team Being Scouted"]
+	match: {
+		simple: ["Team Number", "Match Number", "Auto Scoring Points", "Teleop Scoring Points"],
+		legacy: ["Team Number", "Match Number", "No Show", "Auto Scoring Points", "Teleop Scoring Points"]
+	},
+	pit: {
+		simple: ["Team Number of Team Being Scouted"],
+		legacy: ["Team Number of Team Being Scouted"]
+	}
 };
 
 const TEMPLATE_SHEET_URL = /^https:\/\/docs\.google\.com\//.test(process.env.TEMPLATE_SHEET_URL ?? "") ? process.env.TEMPLATE_SHEET_URL : null;
@@ -543,16 +638,20 @@ async function checkSheet(spreadsheetId) {
 	}
 
 	const titles = new Set(meta.data.sheets.map(sheet => sheet.properties.title));
-	const missingTabs = Object.keys(REQUIRED_SHEET_COLUMNS).filter(tab => !titles.has(tab));
-	if (missingTabs.length) {
-		return `That sheet has no ${missingTabs.map(tab => `"${tab}"`).join(" or ")} tab. Start from a copy of the team template sheet so the tabs and columns match.`;
-	}
 
-	for (const [tab, columns] of Object.entries(REQUIRED_SHEET_COLUMNS)) {
+	for (const kind of ["match", "pit"]) {
+		/* Either layout will do; the simple tab is used if both are there. */
+		const layout = titles.has(SHEET_TABS[kind].simple) ? "simple" : titles.has(SHEET_TABS[kind].legacy) ? "legacy" : null;
+
+		if (!layout) {
+			return `That sheet has no "${SHEET_TABS[kind].simple}" tab. Start from a copy of the team template sheet so the tabs and columns match.`;
+		}
+
 		// Read directly (not through the cache) so a fixed sheet passes straight away.
+		const tab = SHEET_TABS[kind][layout];
 		const response = await sheets.spreadsheets.values.get({ spreadsheetId, range: `'${tab}'!1:1` });
 		const headers = new Set((response.data.values?.[0] ?? []).map(header => String(header).trim()));
-		const missing = columns.filter(column => !headers.has(column));
+		const missing = REQUIRED_SHEET_COLUMNS[kind][layout].filter(column => !headers.has(column));
 		if (missing.length) return `The "${tab}" tab is missing the column${missing.length === 1 ? "" : "s"}: ${missing.join(", ")}. Start from a copy of the team template sheet.`;
 	}
 
@@ -1334,26 +1433,17 @@ app.get("/api/scouting/:eventKey", async (req, res) => {
 			return res.json([]);
 		}
 
-		const response = await readSheet(spreadsheetId, "'Scouting Raw Data'!A:AF");
+		const tab = await sheetTab(spreadsheetId, "match");
 
-		console.log("Google Sheets request succeeded");
-
-		const [headers, ...rows] = response.data.values || [];
-
-		if (!headers) {
+		if (!tab) {
 			return res.json([]);
 		}
 
-		const scoutingData = rows.map(row =>
-			Object.fromEntries(
-				headers.map((header, index) => [
-					header,
-					row[index] ?? ""
-				])
-			)
-		);
+		const response = await readSheet(spreadsheetId, tab.simple ? `'${tab.title}'!A:ZZ` : `'${tab.title}'!A:AF`);
 
-		res.json(scoutingData);
+		console.log("Google Sheets request succeeded");
+
+		res.json(rowsToObjects(response.data.values, tab.simple ? normalizeSimpleMatchRow : undefined));
 
 	} catch (error) {
 		console.error("SCOUTING ERROR:", error);
@@ -1372,7 +1462,10 @@ app.get("/api/scouting/:eventKey/schema", async (req, res) => {
 			return res.status(404).json({ error: req.team.legacy ? "No scouting sheet is configured for this event." : "No Google Sheet is connected for this event yet. Add one in Team settings." });
 		}
 
-		const response = await readSheet(spreadsheetId, "'Scouting Raw Data'!A:ZZ");
+		const tab = await sheetTab(spreadsheetId, "match");
+		if (!tab) return res.status(404).json({ error: noTabMessage("match", req) });
+
+		const response = await readSheet(spreadsheetId, `'${tab.title}'!A:ZZ`);
 
 		/* Keep blank cells: array index 0 must always remain column A.
 		   Filtering blank headers shifts later columns (for example Y becomes B). */
@@ -1391,15 +1484,17 @@ app.get("/api/scouting/:eventKey/schema", async (req, res) => {
 					.map(row => String(row[index] ?? "").trim().toUpperCase())
 					.filter(Boolean);
 
-				return values.length && values.every(value =>
+				const looksYesNo = values.length && values.every(value =>
 					value === "TRUE" || value === "FALSE"
-				)
+				);
+
+				return looksYesNo || (tab.simple && SIMPLE_MATCH_YES_NO.has(header))
 					? index
 					: null;
 			})
 			.filter(Number.isInteger);
 
-		res.json({ headers, booleanColumnIndexes });
+		res.json({ headers, booleanColumnIndexes, fields: formFieldIndexes(headers, tab) });
 	} catch (error) {
 		console.error("SCOUTING SCHEMA ERROR:", error);
 		res.status(500).json({ error: error.message });
@@ -1423,9 +1518,12 @@ app.post("/api/scouting/:eventKey", async (req, res) => {
 			return res.status(400).json({ error: "A scouting response is required." });
 		}
 
+		const tab = await sheetTab(spreadsheetId, "match");
+		if (!tab) return res.status(404).json({ error: noTabMessage("match", req) });
+
 		const headerResponse = await sheets.spreadsheets.values.get({
 			spreadsheetId,
-			range: "'Scouting Raw Data'!1:1"
+			range: `'${tab.title}'!1:1`
 		});
 
 		const headers = (headerResponse.data.values?.[0] ?? [])
@@ -1445,7 +1543,7 @@ app.post("/api/scouting/:eventKey", async (req, res) => {
 
 		const existingRowsResponse = await sheets.spreadsheets.values.get({
 			spreadsheetId,
-			range: `'Scouting Raw Data'!A:${lastColumn}`
+			range: `'${tab.title}'!A:${lastColumn}`
 		});
 
 		const existingRows = existingRowsResponse.data.values ?? [];
@@ -1461,7 +1559,7 @@ app.post("/api/scouting/:eventKey", async (req, res) => {
 
 		await sheets.spreadsheets.values.update({
 			spreadsheetId,
-			range: `'Scouting Raw Data'!A${nextRow}:${lastColumn}${nextRow}`,
+			range: `'${tab.title}'!A${nextRow}:${lastColumn}${nextRow}`,
 			valueInputOption: "USER_ENTERED",
 			requestBody: {
 				values: [headers.map((header, index) =>
@@ -1495,26 +1593,17 @@ app.get("/api/pitscouting/:eventKey", async (req, res) => {
 			return res.json([]);
 		}
 
-		const response = await readSheet(spreadsheetId, "'Pit Scouting Raw Data'!A:AL");
+		const tab = await sheetTab(spreadsheetId, "pit");
 
-		console.log("Google Sheets request succeeded");
-
-		const [headers, ...rows] = response.data.values || [];
-
-		if (!headers) {
+		if (!tab) {
 			return res.json([]);
 		}
 
-		const scoutingData = rows.map(row =>
-			Object.fromEntries(
-				headers.map((header, index) => [
-					header,
-					row[index] ?? ""
-				])
-			)
-		);
+		const response = await readSheet(spreadsheetId, tab.simple ? `'${tab.title}'!A:ZZ` : `'${tab.title}'!A:AL`);
 
-		res.json(scoutingData);
+		console.log("Google Sheets request succeeded");
+
+		res.json(rowsToObjects(response.data.values));
 
 	} catch (error) {
 		console.error("SCOUTING ERROR:", error);
@@ -1533,10 +1622,13 @@ app.get("/api/pitscouting/:eventKey/schema", async (req, res) => {
 			return res.status(404).json({ error: req.team.legacy ? "No pit-scouting sheet is configured for this event." : "No Google Sheet is connected for this event yet. Add one in Team settings." });
 		}
 
-		const response = await readSheet(spreadsheetId, "'Pit Scouting Raw Data'!1:1");
+		const tab = await sheetTab(spreadsheetId, "pit");
+		if (!tab) return res.status(404).json({ error: noTabMessage("pit", req) });
+
+		const response = await readSheet(spreadsheetId, `'${tab.title}'!1:1`);
 
 		/* Keep blank cells so array index 0 always remains column A,
-		   otherwise PIT_SCOUTING_COLUMNS letters point at the wrong questions. */
+		   otherwise the legacy form column letters point at the wrong questions. */
 		const headers = (response.data.values?.[0] ?? [])
 			.map(header => String(header).trim());
 
@@ -1544,7 +1636,7 @@ app.get("/api/pitscouting/:eventKey/schema", async (req, res) => {
 			return res.status(500).json({ error: "The pit-scouting sheet has no header row." });
 		}
 
-		res.json({ headers });
+		res.json({ headers, fields: formFieldIndexes(headers, tab) });
 	} catch (error) {
 		console.error("PIT SCOUTING SCHEMA ERROR:", error);
 		res.status(500).json({ error: error.message });
@@ -1568,9 +1660,12 @@ app.post("/api/pitscouting/:eventKey", async (req, res) => {
 			return res.status(400).json({ error: "A pit-scouting response is required." });
 		}
 
+		const tab = await sheetTab(spreadsheetId, "pit");
+		if (!tab) return res.status(404).json({ error: noTabMessage("pit", req) });
+
 		const headerResponse = await sheets.spreadsheets.values.get({
 			spreadsheetId,
-			range: "'Pit Scouting Raw Data'!1:1"
+			range: `'${tab.title}'!1:1`
 		});
 
 		const headers = (headerResponse.data.values?.[0] ?? [])
@@ -1582,7 +1677,7 @@ app.post("/api/pitscouting/:eventKey", async (req, res) => {
 
 		await sheets.spreadsheets.values.append({
 			spreadsheetId,
-			range: "'Pit Scouting Raw Data'!A:AL",
+			range: tab.simple ? `'${tab.title}'!A:ZZ` : `'${tab.title}'!A:AL`,
 			valueInputOption: "USER_ENTERED",
 			insertDataOption: "INSERT_ROWS",
 			requestBody: {

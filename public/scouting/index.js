@@ -211,6 +211,20 @@ function fieldMarkup(field) {
 	const required = isTeamNumberField(header) ? "required" : "";
 	const isScoutName = isScoutNameField(header);
 
+	/* Climb is a level, not a yes/no. The sheet and the stats read "level 1/2/3". */
+	if (/^end ?game climb$/i.test(header)) {
+		return `
+      <div class="control-group">
+        <label for="${fieldId}">${safeHeader}</label>
+        <select id="${fieldId}" name="${fieldName}" ${required}>
+          <option value="no">No climb</option>
+          <option value="level 1">Level 1</option>
+          <option value="level 2">Level 2</option>
+          <option value="level 3">Level 3</option>
+        </select>
+      </div>`;
+	}
+
 	if (isBoolean || isYesNoField(header)) {
 		return `
       <div class="control-group">
@@ -318,14 +332,14 @@ async function loadForm() {
 
 	try {
 		await loadMatchSchedule();
-		const { headers, booleanColumnIndexes = [] } = await fetchJson(`/api/scouting/${eventKey.value}/schema`);
-		ScoutOffline.saveSchema(FORM_TYPE, eventKey.value, { headers, booleanColumnIndexes });
-		renderForm(headers, booleanColumnIndexes, false);
+		const { headers, booleanColumnIndexes = [], fields } = await fetchJson(`/api/scouting/${eventKey.value}/schema`);
+		ScoutOffline.saveSchema(FORM_TYPE, eventKey.value, { headers, booleanColumnIndexes, fields });
+		renderForm(headers, booleanColumnIndexes, false, fields);
 	} catch (error) {
 		const cached = ScoutOffline.cachedSchema(FORM_TYPE, eventKey.value);
 
 		if (cached) {
-			renderForm(cached.headers, cached.booleanColumnIndexes ?? [], true);
+			renderForm(cached.headers, cached.booleanColumnIndexes ?? [], true, cached.fields);
 			return;
 		}
 
@@ -334,13 +348,18 @@ async function loadForm() {
 	}
 }
 
-function renderForm(headers, booleanColumnIndexes, offline) {
-	const selectedColumns = SCOUTING_COLUMNS
-		.map(columnLetter => ({
-			columnLetter: String(columnLetter).trim().toUpperCase(),
-			index: columnLetterToIndex(columnLetter)
-		}))
-		.filter(column => column.index !== null && headers[column.index]);
+/* `fields` is the list of column positions the server says to show (every
+   column of a simple sheet). Without it (an older cached copy), fall back to
+   the fixed column letters of the original 39-column sheet. */
+function renderForm(headers, booleanColumnIndexes, offline, fields) {
+	const selectedColumns = fields
+		? fields.map(index => ({ index })).filter(column => headers[column.index])
+		: SCOUTING_COLUMNS
+			.map(columnLetter => ({
+				columnLetter: String(columnLetter).trim().toUpperCase(),
+				index: columnLetterToIndex(columnLetter)
+			}))
+			.filter(column => column.index !== null && headers[column.index]);
 
 	const selectedFields = selectedColumns.map(column => ({
 		header: headers[column.index],
@@ -348,13 +367,13 @@ function renderForm(headers, booleanColumnIndexes, offline) {
 		isBoolean: booleanColumnIndexes.includes(column.index)
 	}));
 
-	const unavailableColumns = SCOUTING_COLUMNS.filter(columnLetter => {
+	const unavailableColumns = fields ? [] : SCOUTING_COLUMNS.filter(columnLetter => {
 		const index = columnLetterToIndex(columnLetter);
 		return index === null || !headers[index];
 	});
 
 	if (!selectedFields.length) {
-		throw new Error("None of the column letters in SCOUTING_COLUMNS match this sheet's header row.");
+		throw new Error("This sheet's header row has no scouting columns.");
 	}
 
 	formFields.innerHTML = selectedFields.map(fieldMarkup).join("");

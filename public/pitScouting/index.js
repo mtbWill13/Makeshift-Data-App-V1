@@ -143,14 +143,14 @@ async function loadForm() {
 	formStatus.textContent = "Loading pit-scouting fields…";
 
 	try {
-		const { headers } = await fetchJson(`/api/pitscouting/${eventKey.value}/schema`);
-		ScoutOffline.saveSchema(FORM_TYPE, eventKey.value, { headers });
-		renderForm(headers, false);
+		const { headers, fields } = await fetchJson(`/api/pitscouting/${eventKey.value}/schema`);
+		ScoutOffline.saveSchema(FORM_TYPE, eventKey.value, { headers, fields });
+		renderForm(headers, false, fields);
 	} catch (error) {
 		const cached = ScoutOffline.cachedSchema(FORM_TYPE, eventKey.value);
 
 		if (cached) {
-			renderForm(cached.headers, true);
+			renderForm(cached.headers, true, cached.fields);
 			return;
 		}
 
@@ -159,23 +159,28 @@ async function loadForm() {
 	}
 }
 
-function renderForm(headers, offline) {
-	const selectedColumns = PIT_SCOUTING_COLUMNS
-		.map(columnLetter => ({
-			columnLetter: String(columnLetter).trim().toUpperCase(),
-			index: columnLetterToIndex(columnLetter)
-		}))
-		.filter(column => column.index !== null && headers[column.index]);
+/* `fields` is the list of column positions the server says to show (every
+   column of a simple sheet). Without it (an older cached copy), fall back to
+   the fixed column letters of the original sheet. */
+function renderForm(headers, offline, fields) {
+	const selectedColumns = fields
+		? fields.map(index => ({ index })).filter(column => headers[column.index])
+		: PIT_SCOUTING_COLUMNS
+			.map(columnLetter => ({
+				columnLetter: String(columnLetter).trim().toUpperCase(),
+				index: columnLetterToIndex(columnLetter)
+			}))
+			.filter(column => column.index !== null && headers[column.index]);
 
 	const selectedHeaders = selectedColumns.map(column => headers[column.index]);
 
-	const unavailableColumns = PIT_SCOUTING_COLUMNS.filter(columnLetter => {
+	const unavailableColumns = fields ? [] : PIT_SCOUTING_COLUMNS.filter(columnLetter => {
 		const index = columnLetterToIndex(columnLetter);
 		return index === null || !headers[index];
 	});
 
 	if (!selectedHeaders.length) {
-		throw new Error("None of the column letters in PIT_SCOUTING_COLUMNS match this sheet's header row.");
+		throw new Error("This sheet's header row has no pit-scouting columns.");
 	}
 
 	formFields.innerHTML = selectedHeaders.map(fieldMarkup).join("");
