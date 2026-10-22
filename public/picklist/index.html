@@ -27,7 +27,8 @@
       <section class="controls">
         <div class="control-group">
           <label for="eventKey">Event</label>
-          <select id="eventKey">
+          <select id="eventKey" data-default-event>
+            <option value="custom" data-keep>Custom team list (season stats)</option>
             <option value="2026onham">McMaster</option>
             <option value="2026onosh">Durham College</option>
             <option value="2026onwat">Waterloo</option>
@@ -35,6 +36,7 @@
             <option value="2026oncmp1">Provincials Science Division</option>
             <option value="2026ontor">Humber</option>
             <option value="2026onwin">Windsor</option>
+            <option value="2026onsi">Southwest International</option>
             <option value="2026test">Test Event</option>
           </select>
         </div>
@@ -66,6 +68,33 @@
             <span id="poolCount" class="pool-count"></span>
           </div>
 
+          <section id="customPanel" class="custom-panel" hidden>
+            <div class="control-group">
+              <label for="customTeams">Teams</label>
+              <textarea id="customTeams" rows="3" placeholder="e.g. 4039, 1114, 2056, 7558 (commas, spaces or new lines)"></textarea>
+            </div>
+            <div class="custom-row">
+              <div class="control-group">
+                <label for="customImport">Or import an event's team list</label>
+                <div class="import-row">
+                  <input id="customImport" type="text" placeholder="TBA event key, e.g. 2026onwat" autocomplete="off" spellcheck="false">
+                  <button id="customImportButton" class="secondary-button small" type="button">Import</button>
+                </div>
+              </div>
+              <div class="control-group">
+                <label for="customYear">Season stats from</label>
+                <select id="customYear">
+                  <option value="2026" selected>2026</option>
+                  <option value="2025">2025</option>
+                  <option value="2024">2024</option>
+                  <option value="2023">2023</option>
+                </select>
+              </div>
+              <button id="customLoad" type="button">Load stats</button>
+            </div>
+            <p class="section-note">Season stats come from Statbotics and The Blue Alliance, like Prescouting. Your own scouting and pit reports from your events are added where you have them.</p>
+          </section>
+
           <div class="pool-toolbar">
             <div class="search-row">
               <input id="search" type="search" placeholder="Search by team number" autocomplete="off">
@@ -88,7 +117,7 @@
               <div id="columns" class="columns-grid"></div>
             </details>
           </div>
-          <p class="pool-legend">Click a column name to sort. <span class="good-sample">Green</span> = top quarter of the event.</p>
+          <p class="pool-legend">Click a column name to sort. <span class="good-sample">Green</span> = top quarter of the teams listed.</p>
 
           <div id="poolHead" class="pool-head-bar"></div>
           <div id="pool" class="pool"></div>

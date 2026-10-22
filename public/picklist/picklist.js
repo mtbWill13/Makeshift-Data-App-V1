@@ -43,6 +43,7 @@ const SKIP_PIT = /^(event|pit scouter name|team number of team being scouted|tim
 /* Columns where a smaller number is better (ratings where 1 is best, breakdowns…). */
 const LOWER_IS_BETTER = /\(best\)|incredible|died|breakdown|tipped|fouls|card|no show|was defended/i;
 
+let customMode = false;  // true while "Custom team list" is selected
 let teams = [];          // [{ number, name, stats: {key: number|null}, pit: {header: string}, reports }]
 let stats = new Map();   // key → { label, title, group, digits, percent, lower, pit, kind, options }
 let state = loadLists(eventKey.value);
@@ -182,12 +183,20 @@ function addStat(key, stat) {
 /* The fixed stats, plus one for every numeric or yes/no scouting column. */
 function buildStats(scouting, pit) {
 	stats = new Map();
-	addStat("rank", { label: "Rank", title: "Qualification rank (TBA)", digits: 0, lower: true });
-	addStat("winRate", { label: "Win rate", title: "Qualification win rate", percent: true });
-	addStat("opr", { label: "OPR" });
-	addStat("dpr", { label: "DPR", lower: true });
-	addStat("ccwm", { label: "CCWM" });
-	addStat("epa", { label: "EPA", group: "Statbotics" });
+	addStat("rank", customMode
+		? { label: "World rank", title: "Statbotics worldwide rank by season EPA (lower is better)", digits: 0, lower: true }
+		: { label: "Rank", title: "Qualification rank (TBA)", digits: 0, lower: true });
+	addStat("winRate", { label: "Win rate", title: customMode ? "Win rate across the season's official events" : "Qualification win rate", percent: true });
+	addStat("opr", { label: customMode ? "Avg OPR" : "OPR", title: customMode ? "Average OPR across the official events they played" : "OPR" });
+	if (!customMode) {
+		addStat("dpr", { label: "DPR", lower: true });
+		addStat("ccwm", { label: "CCWM" });
+	}
+	addStat("epa", { label: "EPA", group: "Statbotics", title: customMode ? "Statbotics season EPA" : "Statbotics event EPA" });
+	if (customMode) {
+		addStat("peakEpa", { label: "Peak EPA", title: "Highest EPA they reached this season", group: "Statbotics" });
+		addStat("events", { label: "Events", title: "Official events played", digits: 0 });
+	}
 	addStat("autoEpa", { label: "Auto EPA", group: "Statbotics" });
 	addStat("teleopEpa", { label: "Teleop EPA", group: "Statbotics" });
 	addStat("endgameEpa", { label: "Endgame EPA", group: "Statbotics" });
@@ -264,16 +273,40 @@ function teamNumberOf(value) {
 }
 
 /* Builds the team list from whatever has loaded so far. */
-function buildTeams({ oprs, rankings, scouting, pit, eventTeams, epas }) {
+/* A team's season stats from the same /api/prescout data the Prescouting page uses. */
+function seasonStatsFrom(row) {
+	if (!row) return {};
+	const epa = row.epa ?? {};
+	const breakdown = epa.breakdown ?? {};
+	const official = (row.events ?? []).filter(event => event.official !== false);
+	const oprs = official.map(event => finite(event.opr)).filter(opr => opr !== null && opr > 0);
+	const winRate = finite(row.record?.winrate);
+
+	return {
+		rank: finite(epa.ranks?.total?.rank),
+		winRate: winRate === null ? null : winRate * 100,
+		opr: oprs.length ? oprs.reduce((sum, opr) => sum + opr, 0) / oprs.length : null,
+		epa: finite(epa.total_points?.mean ?? epa.total_points),
+		autoEpa: finite(breakdown.auto_points),
+		teleopEpa: finite(breakdown.teleop_points),
+		endgameEpa: finite(breakdown.endgame_points),
+		peakEpa: finite(epa.stats?.max),
+		events: official.length
+	};
+}
+
+function buildTeams({ oprs, rankings, scouting, pit, eventTeams, epas, season }) {
 	buildStats(scouting, pit);
 
-	const numbers = new Set([
-		...eventTeams.map(String),
-		...Object.keys(oprs?.oprs ?? {}).map(teamNumberOf),
-		...rankings.map(row => teamNumberOf(row.team_key)),
-		...scouting.map(row => teamNumberOf(row["Team Number"])),
-		...epas.map(row => teamNumberOf(row.team ?? row.team_number))
-	].filter(Boolean));
+	const numbers = customMode
+		? new Set(eventTeams.map(String))   // exactly the teams that were entered
+		: new Set([
+			...eventTeams.map(String),
+			...Object.keys(oprs?.oprs ?? {}).map(teamNumberOf),
+			...rankings.map(row => teamNumberOf(row.team_key)),
+			...scouting.map(row => teamNumberOf(row["Team Number"])),
+			...epas.map(row => teamNumberOf(row.team ?? row.team_number))
+		].filter(Boolean));
 
 	const ranks = new Map(rankings.map(row => [teamNumberOf(row.team_key), row]));
 	const epaRows = new Map(epas.map(row => [teamNumberOf(row.team ?? row.team_number), row]));
@@ -285,15 +318,16 @@ function buildTeams({ oprs, rankings, scouting, pit, eventTeams, epas }) {
 		const played = record ? record.wins + record.losses + record.ties : 0;
 		const epa = epaRows.get(number);
 		const breakdown = epa?.epa?.breakdown ?? {};
+		const seasonRow = season?.get(number);
 		const rows = scouting.filter(row => teamNumberOf(row["Team Number"]) === number);
 		/* Last pit report for the team wins. */
 		const pitRow = pit.filter(row => teamNumberOf(row["Team Number of Team Being Scouted"]) === number).at(-1) ?? {};
 
 		return {
 			number,
-			name: epa?.team_name ?? "",
+			name: seasonRow?.name ?? epa?.team_name ?? "",
 			pit: Object.fromEntries(Object.entries(pitRow).map(([header, value]) => [header, String(value ?? "").trim()])),
-			stats: {
+			stats: customMode ? { ...seasonStatsFrom(seasonRow), ...scoutingStats(rows) } : {
 				rank: finite(ranking?.rank),
 				winRate: played ? (record.wins + record.ties / 2) / played * 100 : null,
 				opr: finite(oprs?.oprs?.[key]),
@@ -323,7 +357,136 @@ function buildTeams({ oprs, rankings, scouting, pit, eventTeams, epas }) {
 	}
 }
 
+/* Our own scouting and pit reports from every event in the dropdown except test
+   events (a practice or test event isn't part of the season). A failure just
+   means "nothing from that event". */
+function ourEventKeys() {
+	return [...eventKey.options].map(option => option.value).filter(value => value && value !== "custom" && !/test/i.test(value));
+}
+
+async function loadOurReports(event) {
+	const settle = (promise, fallback) => promise.catch(() => fallback);
+	const [scouting, pit] = await Promise.all([
+		settle(fetchJson(`/api/scouting/${event}`), []),
+		settle(fetchJson(`/api/pitscouting/${event}`), [])
+	]);
+
+	return {
+		scouting: Array.isArray(scouting) ? scouting : [],
+		pit: Array.isArray(pit) ? pit : []
+	};
+}
+
+/* ----- Custom team list ----- */
+
+const MAX_CUSTOM_TEAMS = 240;
+const SEASON_CHUNK = 80;   // the prescout route takes up to 80 teams per request
+/* Not "makeshift-picklist-custom": that name is where this view's picks are saved. */
+const CUSTOM_KEY = "makeshift-picklist-custom-input";
+
+const customPanel = document.getElementById("customPanel");
+const customTeams = document.getElementById("customTeams");
+const customYear = document.getElementById("customYear");
+const customImport = document.getElementById("customImport");
+
+function parseTeamNumbers(text) {
+	const numbers = String(text).match(/\d{1,5}/g) ?? [];
+	return [...new Set(numbers.map(Number).filter(number => number > 0))].slice(0, MAX_CUSTOM_TEAMS);
+}
+
+function updateCustomPanel() {
+	customPanel.hidden = !customMode;
+}
+
+/* The list and season are remembered (and put in the link, so it can be shared). */
+function rememberCustom(numbers, year) {
+	storageSet(CUSTOM_KEY, { teams: numbers.join(", "), year });
+	const url = new URL(window.location);
+	url.searchParams.set("event", "custom");
+	url.searchParams.set("teams", numbers.join(","));
+	url.searchParams.set("year", year);
+	window.history.replaceState({}, "", url);
+}
+
+async function loadCustom() {
+	const thisLoad = ++loadId;
+	const numbers = parseTeamNumbers(customTeams.value);
+	const year = customYear.value;
+
+	if (!numbers.length) {
+		teams = [];
+		render();
+		status.textContent = "Enter some team numbers (or import an event's teams), then Load stats.";
+		return;
+	}
+
+	customTeams.value = numbers.join(", ");
+	rememberCustom(numbers, year);
+	status.textContent = `Loading ${numbers.length} team${numbers.length === 1 ? "" : "s"}…`;
+
+	/* Our scouting first (it's quick), so the list appears right away; the season
+	   stats are filled in as soon as they arrive. */
+	const reports = await Promise.all(ourEventKeys().map(loadOurReports));
+	if (thisLoad !== loadId) return;
+
+	const data = {
+		oprs: {},
+		rankings: [],
+		scouting: reports.flatMap(report => report.scouting),
+		pit: reports.flatMap(report => report.pit),
+		eventTeams: numbers,
+		epas: [],
+		season: new Map()
+	};
+	buildTeams(data);
+	render();
+	status.textContent = `${teams.length} teams • ${data.scouting.length} of our scouting reports • ${data.pit.length} pit reports. Loading ${year} season stats…`;
+
+	const chunks = [];
+	for (let start = 0; start < numbers.length; start += SEASON_CHUNK) chunks.push(numbers.slice(start, start + SEASON_CHUNK));
+	const answers = await Promise.all(chunks.map(chunk => fetchJson(`/api/prescout?year=${year}&teams=${chunk.join(",")}`).catch(() => null)));
+	if (thisLoad !== loadId) return;
+
+	const ok = answers.every(Array.isArray);
+	data.season = new Map(answers.filter(Array.isArray).flat().map(row => [String(row.team), row]));
+	buildTeams(data);
+	render();
+
+	const withStats = [...data.season.values()].filter(row => row.epa?.total_points !== null && row.epa?.total_points !== undefined).length;
+	status.textContent = ok
+		? `${teams.length} teams • ${withStats} with ${year} season stats • ${data.scouting.length} of our scouting reports • ${data.pit.length} pit reports.`
+		: "Couldn't load the season stats (Statbotics or The Blue Alliance didn't respond). Try Load stats again in a moment.";
+}
+
+async function importCustomEvent() {
+	const key = customImport.value.trim().toLowerCase();
+
+	if (!/^\d{4}[a-z0-9]+$/.test(key)) {
+		status.textContent = "Enter a TBA event key like 2027onwat.";
+		return;
+	}
+
+	status.textContent = `Looking up ${key}…`;
+
+	try {
+		const response = await fetch(`/api/events/${encodeURIComponent(key)}/teams`);
+		const data = await response.json().catch(() => ({}));
+		if (!response.ok) throw new Error(data.error || "Event not found.");
+		if (!data.length) throw new Error(`${key} has no teams published on TBA yet.`);
+
+		customTeams.value = data.join(", ");
+		if ([...customYear.options].some(option => option.value === key.slice(0, 4))) customYear.value = key.slice(0, 4);
+		loadCustom();
+	} catch (error) {
+		status.textContent = error.message;
+	}
+}
+
 async function loadEvent() {
+	customMode = eventKey.value === "custom";
+	updateCustomPanel();
+	if (customMode) return loadCustom();
+
 	const event = eventKey.value;
 	const thisLoad = ++loadId;
 	const url = new URL(window.location);
@@ -516,14 +679,19 @@ function headerCell(key, label, title, extraClass = "") {
 	return `<button class="col-head${extraClass}${active}" type="button" data-sort="${escapeHtml(key)}" title="Sort by ${escapeHtml(title)}">${escapeHtml(label)}${sortArrow(key)}</button>`;
 }
 
+/* A team's dashboard: for a custom list that's their whole season. */
+function dashboardEvent() {
+	return eventKey.value === "custom" ? "season" : eventKey.value;
+}
+
 function teamLink(number) {
-	return `/?${new URLSearchParams({ event: eventKey.value, team: number })}`;
+	return `/?${new URLSearchParams({ event: dashboardEvent(), team: number })}`;
 }
 
 function renderPool() {
 	if (!teams.length) {
 		poolHead.innerHTML = "";
-		poolEl.innerHTML = `<div class="empty-state">${loadId ? "No teams to show yet." : "Loading…"}</div>`;
+		poolEl.innerHTML = `<div class="empty-state">${customMode ? "Enter team numbers above, then Load stats." : loadId ? "No teams to show yet." : "Loading…"}</div>`;
 		poolCount.textContent = "";
 		return;
 	}
@@ -601,7 +769,7 @@ function renderPool() {
 
 /* The main team page, framed in its compact ?embed=1 layout. */
 function teamDetails(team) {
-	const embed = `/?${new URLSearchParams({ event: eventKey.value, team: team.number, embed: "1" })}`;
+	const embed = `/?${new URLSearchParams({ event: dashboardEvent(), team: team.number, embed: "1" })}`;
 	return `
 		<div class="team-details" data-details="${team.number}">
 			<div class="details-bar">
@@ -1101,8 +1269,22 @@ eventKey.addEventListener("change", () => {
 	state = loadLists(eventKey.value);
 	teams = [];
 	expanded.clear();
+	/* Switching away from a custom list drops its link parameters. */
+	const url = new URL(window.location);
+	url.searchParams.delete("teams");
+	url.searchParams.delete("year");
+	window.history.replaceState({}, "", url);
 	render();
 	loadEvent();
+});
+
+document.getElementById("customLoad").addEventListener("click", loadCustom);
+document.getElementById("customImportButton").addEventListener("click", importCustomEvent);
+customImport.addEventListener("keydown", event => {
+	if (event.key === "Enter") importCustomEvent();
+});
+customTeams.addEventListener("keydown", event => {
+	if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) loadCustom();
 });
 
 
@@ -1244,6 +1426,15 @@ if ([...eventKey.options].some(option => option.value === eventFromUrl)) {
 	eventKey.value = eventFromUrl;
 }
 state = loadLists(eventKey.value);
+
+/* A custom list comes from a shared link (?teams=…&year=…) or the last one used. */
+{
+	const params = new URL(window.location).searchParams;
+	const saved = storageGet(CUSTOM_KEY) ?? {};
+	customTeams.value = params.get("teams") ? parseTeamNumbers(params.get("teams")).join(", ") : saved.teams ?? "";
+	const year = params.get("year") ?? saved.year;
+	if ([...customYear.options].some(option => option.value === year)) customYear.value = year;
+}
 
 render();
 loadEvent();

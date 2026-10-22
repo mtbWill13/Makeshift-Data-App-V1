@@ -326,16 +326,23 @@ async function syncOfflineQueue() {
 	return result;
 }
 
+/* Each load gets a number. If another event is picked while one is still loading,
+   the older load must not draw its fields over the newer event's form. */
+let formLoadCount = 0;
+
 async function loadForm() {
+	const thisLoad = ++formLoadCount;
 	scoutingForm.hidden = true;
 	formStatus.textContent = "Loading scouting fields…";
 
 	try {
 		await loadMatchSchedule();
 		const { headers, booleanColumnIndexes = [], fields } = await fetchJson(`/api/scouting/${eventKey.value}/schema`);
+		if (thisLoad !== formLoadCount) return;
 		ScoutOffline.saveSchema(FORM_TYPE, eventKey.value, { headers, booleanColumnIndexes, fields });
 		renderForm(headers, booleanColumnIndexes, false, fields);
 	} catch (error) {
+		if (thisLoad !== formLoadCount) return;
 		const cached = ScoutOffline.cachedSchema(FORM_TYPE, eventKey.value);
 
 		if (cached) {

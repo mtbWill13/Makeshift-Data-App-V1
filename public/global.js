@@ -82,14 +82,18 @@ function applyTeamEvents(team) {
 		const select = document.getElementById(id);
 		if (!select) continue;
 
+		/* Built-in choices that aren't events stay: "Entire Season", and anything marked data-keep. */
 		const season = [...select.options].filter(option => option.value === "season");
+		const kept = [...select.options].filter(option => option.value === "season" || option.hasAttribute("data-keep"));
 		const options = choices.map(event => new Option(event.name, event.key));
 		if (!options.length) options.push(new Option("No events yet: add some in Team settings", ""));
-		select.replaceChildren(...season, ...options);
+		select.replaceChildren(...kept, ...options);
 
-		/* With no "Entire Season" choice, start on the latest event that has a sheet (else the latest). */
+		/* Most pages start on "Entire Season". Pages marked data-default-event (the
+		   picklist) and pages with no season choice start on the latest event that
+		   has a sheet (else the latest). */
 		const start = choices.findLast(event => event.hasSheet) ?? choices.at(-1);
-		select.value = season.length ? "season" : start?.key ?? "";
+		select.value = season.length && !select.hasAttribute("data-default-event") ? "season" : start?.key ?? "";
 	}
 }
 

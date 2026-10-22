@@ -38,7 +38,7 @@ try {
 	/* First run or unreadable: start empty. */
 }
 
-function cachedFetcher(ttl, load, { name = null } = {}) {
+function cachedFetcher(ttl, load, { name = null, staleOk = true } = {}) {
 	const cache = new Map(name ? (savedApiCache[name] ?? []) : []);
 	const inFlight = new Map();
 
@@ -64,6 +64,11 @@ function cachedFetcher(ttl, load, { name = null } = {}) {
 		if (age < ttl) return Promise.resolve(cached.data);
 
 		if (age < API_CACHE_MAX_AGE) {
+			if (!staleOk) {
+				// Wait for the fresh copy; only if that fails fall back to the old one.
+				return refresh(key).catch(() => cached.data);
+			}
+
 			// Serve the last good copy now and refresh behind the scenes.
 			refresh(key).catch(() => { /* keep serving the old copy */ });
 			return Promise.resolve(cached.data);
@@ -354,6 +359,20 @@ function readSheet(spreadsheetId, range) {
 	return sheetReads(`${spreadsheetId}${SHEET_KEY_SEPARATOR}${range}`);
 }
 
+/* For the scouting forms' questions (the header rows). A scout opening the form
+   right after the sheet's headers were edited must see the edit, not a saved copy,
+   so this always fetches fresh, kept only 5 seconds so a room of scouts opening
+   the form together doesn't hammer Google. Never shown stale unless Google fails. */
+const sheetHeaderReads = cachedFetcher(5 * 1000, key => {
+	const [spreadsheetId, range] = key.split(SHEET_KEY_SEPARATOR);
+	return sheets.spreadsheets.values.get({ spreadsheetId, range })
+		.then(response => ({ data: { values: response.data.values } }));
+}, { staleOk: false });
+
+function readSheetFresh(spreadsheetId, range) {
+	return sheetHeaderReads(`${spreadsheetId}${SHEET_KEY_SEPARATOR}${range}`);
+}
+
 function forgetSheet(spreadsheetId) {
 	sheetReads.invalidate(key => key.startsWith(`${spreadsheetId}${SHEET_KEY_SEPARATOR}`));
 }
@@ -387,10 +406,10 @@ const SIMPLE_MATCH_YES_NO = new Set([
 	"Robot tipped/fell over", "Robot received fouls or a yellow/red card"
 ]);
 
-const sheetTabTitles = cachedFetcher(60 * 1000, spreadsheetId =>
+const sheetTabTitles = cachedFetcher(5 * 1000, spreadsheetId =>
 	sheets.spreadsheets.get({ spreadsheetId, fields: "sheets.properties.title" })
 		.then(response => response.data.sheets.map(sheet => sheet.properties.title)),
-	{ name: "sheet-tabs" }
+	{ staleOk: false }
 );
 
 /* The tab to use for "match" or "pit" data, or null if the sheet has neither. */
@@ -451,7 +470,9 @@ const scoutingSheetIds = {
 	"2026oncmp2": process.env.SCOUTING_SHEET_2026ONCMP2,
 	"2026ontor": process.env.SCOUTING_SHEET_2026ONTOR,
 	"2026onwin": process.env.SCOUTING_SHEET_2026ONWIN,
-	"2026test": process.env.SCOUTING_SHEET_2026TEST
+	"2026test": process.env.SCOUTING_SHEET_2026TEST,
+	// Southwest International (offseason). SCOUTING_SHEET_2026SOUTHWEST works too.
+	"2026onsi": process.env.SCOUTING_SHEET_2026ONSI ?? process.env.SCOUTING_SHEET_2026SOUTHWEST
 };
 
 /* A team only ever gets its own sheets: the lookup goes through that team's
@@ -961,6 +982,12 @@ app.post("/api/team/passwords", requireEditableTeam, async (req, res) => {
 	res.json({ ok: true });
 });
 
+/* The Blue Alliance doesn't know every event: practice and test events (like
+   2026test) aren't on it, and a brand-new offseason event has no data yet. For
+   those, TBA answers 404 or an empty list; the pages should just show no public
+   data rather than fail. Any other failure (TBA down) is still an error. */
+const tbaNotFound = error => /\b404\b/.test(error.message);
+
 // All results for an event, such as "2026onott"
 app.get("/api/events/:eventKey/matches", async (req, res) => {
 	try {
@@ -981,6 +1008,7 @@ app.get("/api/events/:eventKey/matches", async (req, res) => {
 				.map(video => `https://www.youtube.com/watch?v=${encodeURIComponent(video.key)}`),
 		})));
 	} catch (error) {
+		if (tbaNotFound(error)) return res.json([]);
 		res.status(500).json({ error: error.message });
 	}
 });
@@ -1083,6 +1111,7 @@ app.get("/api/events/:eventKey/rankings", async (req, res) => {
 		const data = await tba(`/event/${req.params.eventKey}/rankings`);
 		res.json(data?.rankings ?? []);
 	} catch (error) {
+		if (tbaNotFound(error)) return res.json([]);
 		res.status(500).json({ error: error.message });
 	}
 });
@@ -1090,8 +1119,9 @@ app.get("/api/events/:eventKey/rankings", async (req, res) => {
 // Event OPR statistics
 app.get("/api/events/:eventKey/oprs", async (req, res) => {
 	try {
-		res.json(await tba(`/event/${req.params.eventKey}/oprs`));
+		res.json(await tba(`/event/${req.params.eventKey}/oprs`) ?? { oprs: {}, dprs: {}, ccwms: {} });
 	} catch (error) {
+		if (tbaNotFound(error)) return res.json({ oprs: {}, dprs: {}, ccwms: {} });
 		res.status(500).json({ error: error.message });
 	}
 });
@@ -1465,7 +1495,7 @@ app.get("/api/scouting/:eventKey/schema", async (req, res) => {
 		const tab = await sheetTab(spreadsheetId, "match");
 		if (!tab) return res.status(404).json({ error: noTabMessage("match", req) });
 
-		const response = await readSheet(spreadsheetId, `'${tab.title}'!A:ZZ`);
+		const response = await readSheetFresh(spreadsheetId, `'${tab.title}'!A:ZZ`);
 
 		/* Keep blank cells: array index 0 must always remain column A.
 		   Filtering blank headers shifts later columns (for example Y becomes B). */
@@ -1625,7 +1655,7 @@ app.get("/api/pitscouting/:eventKey/schema", async (req, res) => {
 		const tab = await sheetTab(spreadsheetId, "pit");
 		if (!tab) return res.status(404).json({ error: noTabMessage("pit", req) });
 
-		const response = await readSheet(spreadsheetId, `'${tab.title}'!1:1`);
+		const response = await readSheetFresh(spreadsheetId, `'${tab.title}'!1:1`);
 
 		/* Keep blank cells so array index 0 always remains column A,
 		   otherwise the legacy form column letters point at the wrong questions. */

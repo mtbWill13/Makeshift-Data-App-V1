@@ -761,10 +761,15 @@ async function printTeamData() {
 	const teamKey =
 		`frc${teamNumber}`;
 
+	/* TBA has no record of the team at this event when it's a practice/test event
+	   (not on TBA) or an event whose teams aren't published yet; scouting data can
+	   still be shown for it, so a missing team is fine here. */
 	const team =
 		teamData[teamKey]
 
-	team.matches = team.matches.filter(el => el.level === "qm");
+	if (team) {
+		team.matches = team.matches.filter(el => el.level === "qm");
+	}
 
 
 	const scoutingRows = scoutingData.filter(row =>

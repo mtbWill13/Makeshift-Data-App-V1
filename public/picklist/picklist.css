@@ -1029,3 +1029,50 @@ body.dragging * {
 		text-decoration: line-through;
 	}
 }
+
+
+/* =========================
+	CUSTOM TEAM LIST
+========================= */
+
+.custom-panel {
+	display: grid;
+	gap: 14px;
+	margin-bottom: 10px;
+	padding: 16px;
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	background: var(--surface);
+}
+
+.custom-panel[hidden] {
+	display: none;
+}
+
+.custom-panel textarea {
+	min-height: 84px;
+}
+
+.custom-row {
+	display: grid;
+	grid-template-columns: minmax(0, 1.6fr) minmax(0, 0.7fr) auto;
+	gap: 12px;
+	align-items: end;
+}
+
+.import-row {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: 8px;
+}
+
+.custom-panel input,
+.custom-panel select {
+	min-height: 42px;
+}
+
+@media (max-width: 700px) {
+	.custom-row {
+		grid-template-columns: 1fr;
+	}
+}
