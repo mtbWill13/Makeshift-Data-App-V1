@@ -1253,11 +1253,24 @@ app.get("/api/prescout", async (req, res) => {
 	}
 
 	try {
-		const [seasons, events] = await Promise.all([
-			teamYears(year),
+		/* Statbotics can be down (and, for a season never downloaded, there's no saved
+		   copy to fall back on). Don't fail the page over it: carry on with what The
+		   Blue Alliance has (records, events, OPR, finishes) and say so in a header. */
+		const [seasonsOrNull, events] = await Promise.all([
+			teamYears(year).catch(error => {
+				console.warn("Prescouting without Statbotics:", error.message);
+				return null;
+			}),
 			tba(`/events/${year}`).catch(() => [])
 		]);
+		const statboticsDown = seasonsOrNull === null;
+		const seasons = seasonsOrNull ?? new Map();
 		const eventsByKey = new Map(events.map(event => [event.key, event]));
+
+		// Without Statbotics there are no team names, so ask TBA for them.
+		const tbaNames = statboticsDown
+			? await mapLimit(teams, 8, team => tba(`/team/frc${team}`).then(data => data.nickname ?? null).catch(() => null))
+			: [];
 
 		// Each team's finish and rank at every event they attended.
 		const statuses = await mapLimit(teams, 8, team =>
@@ -1294,11 +1307,26 @@ app.get("/api/prescout", async (req, res) => {
 				})
 				.sort((a, b) => String(a.startDate).localeCompare(String(b.startDate)));
 
-			return season
-				? { team, name: season.name, epa: season.epa ?? null, record: season.record ?? null, events: teamEvents }
-				: { team, name: null, epa: null, record: null, events: teamEvents };
+			/* Win/loss record from the qualification records TBA gave us, for when
+			   Statbotics has none (it's down, or the team isn't in it). */
+			const played = teamEvents.filter(event => event.official && event.qualRecord);
+			const wins = played.reduce((sum, event) => sum + (event.qualRecord.wins ?? 0), 0);
+			const losses = played.reduce((sum, event) => sum + (event.qualRecord.losses ?? 0), 0);
+			const ties = played.reduce((sum, event) => sum + (event.qualRecord.ties ?? 0), 0);
+			const tbaRecord = wins + losses + ties
+				? { wins, losses, ties, winrate: (wins + ties / 2) / (wins + losses + ties) }
+				: null;
+
+			return {
+				team,
+				name: season?.name ?? tbaNames[index] ?? null,
+				epa: season?.epa ?? null,
+				record: season?.record ?? tbaRecord,
+				events: teamEvents
+			};
 		});
 
+		res.set("X-Statbotics", statboticsDown ? "down" : "ok");
 		res.json(results);
 	} catch (error) {
 		console.error("PRESCOUT ERROR:", error);

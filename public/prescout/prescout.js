@@ -40,6 +40,7 @@ let teams = [];
 let year = seasonSelect.value;
 let sortKey = "epa";
 let runId = 0;
+let statboticsDown = false;   // true when the server had to carry on without Statbotics
 
 
 /* =================================
@@ -173,6 +174,11 @@ async function prescout() {
 		const data = await response.json().catch(() => ({}));
 		if (thisRun !== runId) return;
 		if (!response.ok) throw new Error(data.error || "Couldn't load these teams.");
+
+		/* Statbotics didn't answer: EPA and world rank are blank, so rank by the
+		   OPR from The Blue Alliance instead (unless a non-EPA sort was picked). */
+		statboticsDown = response.headers.get("X-Statbotics") === "down";
+		if (statboticsDown && ["epa", "auto", "teleop", "endgame", "peak"].includes(sortKey)) sortKey = "opr";
 
 		const seasons = new Map(data.map(season => [season.team, season]));
 		teams = numbers.map(number => {
@@ -475,13 +481,24 @@ function fieldSummary(group) {
 	const us = byEpa.findIndex(team => team.number === OUR_TEAM);
 	const top = byEpa[0];
 
+	/* Without Statbotics there's no EPA, so the last tile goes by average OPR instead. */
+	const byOpr = group.filter(team => team.hasData && team.avgOpr !== null).sort((a, b) => b.avgOpr - a.avgOpr);
+	const usOpr = byOpr.findIndex(team => team.number === OUR_TEAM);
+	const topOpr = byOpr[0];
+
 	const lastTile = us !== -1
 		? { label: `Where ${OUR_TEAM} ranks`, value: `#${us + 1} of ${byEpa.length}`, note: "by EPA in this group" }
-		: { label: "Top team", value: top ? `${top.number}` : "—", note: top ? `${escapeHtml(top.name)} • EPA ${format(top.epa)}` : "" };
+		: top
+			? { label: "Top team", value: `${top.number}`, note: `${escapeHtml(top.name)} • EPA ${format(top.epa)}` }
+			: usOpr !== -1
+				? { label: `Where ${OUR_TEAM} ranks`, value: `#${usOpr + 1} of ${byOpr.length}`, note: "by average OPR in this group" }
+				: topOpr
+					? { label: "Top team", value: `${topOpr.number}`, note: `${escapeHtml(topOpr.name)} • avg OPR ${format(topOpr.avgOpr)}` }
+					: { label: "Top team", value: "—", note: "" };
 
 	return `
       <section class="field-summary">
-        <div class="stat-card"><div class="stat-label">Teams</div><div class="stat-value">${group.length}</div><div class="stat-description">${withData.length} with ${year} results</div></div>
+        <div class="stat-card"><div class="stat-label">Teams</div><div class="stat-value">${group.length}</div><div class="stat-description">${group.filter(team => team.hasData).length} with ${year} results</div></div>
         <div class="stat-card"><div class="stat-label">Average EPA</div><div class="stat-value">${format(average)}</div><div class="stat-description">Field strength</div></div>
         <div class="stat-card"><div class="stat-label">Elite teams</div><div class="stat-value">${elite}</div><div class="stat-description">Top 5% worldwide by EPA</div></div>
         <div class="stat-card"><div class="stat-label">${lastTile.label}</div><div class="stat-value">${lastTile.value}</div><div class="stat-description">${lastTile.note}</div></div>
@@ -498,13 +515,14 @@ function render() {
 	const done = loaded === teams.length;
 
 	status.textContent = done
-		? `Ranked ${teams.length} team${teams.length === 1 ? "" : "s"} on ${year} results.`
+		? `Ranked ${teams.length} team${teams.length === 1 ? "" : "s"} on ${year} results${statboticsDown ? " (without Statbotics)" : ""}.`
 		: `Loading ${teams.length} team${teams.length === 1 ? "" : "s"}…`;
 
 	const ordered = sortedTeams();
 	let position = 0;
 
 	results.innerHTML = `
+      ${statboticsDown ? `<div class="empty-state statbotics-notice">Statbotics isn't responding right now, so EPA, world rank and tiers are blank. Records, events and OPR still come from The Blue Alliance, and teams are ranked by average OPR. Click <strong>Prescout Teams</strong> again later to get EPA.</div>` : ""}
       ${fieldSummary(teams)}
       <div class="results-toolbar">
         <h3 class="section-title">Ranked by ${escapeHtml(SORTS[sortKey].label)}</h3>
