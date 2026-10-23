@@ -10,6 +10,7 @@ const MEDIA_CONCURRENCY = 4;
 
 const teamsInput = document.getElementById("teamsInput");
 const eventImport = document.getElementById("eventImport");
+const savedLists = document.getElementById("savedLists");
 const importButton = document.getElementById("importButton");
 const seasonSelect = document.getElementById("seasonSelect");
 const prescoutButton = document.getElementById("prescoutButton");
@@ -209,6 +210,13 @@ async function importEvent() {
 	try {
 		const response = await fetch(`/api/events/${encodeURIComponent(key)}/teams`);
 		const data = await response.json().catch(() => ({}));
+		const known = KNOWN_EVENT_TEAMS[key];
+
+		/* TBA has no teams for it (yet), but we have the event's attendance list. */
+		if ((!response.ok || !data.length) && known) {
+			loadSavedList(key);
+			return;
+		}
 
 		if (!response.ok) throw new Error(data.error || "Event not found.");
 		if (!data.length) throw new Error(`${key} has no teams published on TBA yet.`);
@@ -222,6 +230,27 @@ async function importEvent() {
 		importButton.disabled = false;
 	}
 }
+
+
+/* Saved team lists (public/event-lists.js): an event's attendance list, for
+   events TBA doesn't have teams for yet. */
+function loadSavedList(key) {
+	const list = KNOWN_EVENT_TEAMS[key];
+	if (!list) return;
+
+	teamsInput.value = list.teams.map(([number]) => number).join(", ");
+	savedLists.value = key;
+	status.textContent = `Loaded the ${list.name} team list (${list.teams.length} teams attending).`;
+	prescout();
+}
+
+for (const [key, list] of Object.entries(KNOWN_EVENT_TEAMS)) {
+	savedLists.add(new Option(`${list.name} (${list.teams.length})`, key));
+}
+
+savedLists.addEventListener("change", () => {
+	if (savedLists.value) loadSavedList(savedLists.value);
+});
 
 
 /* =================================

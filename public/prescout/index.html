@@ -31,7 +31,11 @@
         </div>
 
         <div class="control-group">
-          <label for="eventImport">Or import an event's team list</label>
+          <label for="savedLists">Or load a saved team list</label>
+          <select id="savedLists">
+            <option value="">Choose a list…</option>
+          </select>
+          <label for="eventImport" class="sub-label">Or import an event's team list</label>
           <div class="import-row">
             <input id="eventImport" type="text" placeholder="TBA event key, e.g. 2027onwat" autocomplete="off" spellcheck="false">
             <button id="importButton" class="secondary-button" type="button">Import</button>
@@ -57,6 +61,7 @@
       <div id="results"></div>
     </main>
 	<script src="/global.js"></script>
+    <script src="/event-lists.js"></script>
     <script src="prescout.js"></script>
   </body>
 </html>

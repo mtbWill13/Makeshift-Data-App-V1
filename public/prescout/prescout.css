@@ -19,6 +19,10 @@
 	min-height: 132px;
 }
 
+.sub-label {
+	margin-top: 6px;
+}
+
 .import-row {
 	display: grid;
 	grid-template-columns: minmax(0, 1fr) auto;
