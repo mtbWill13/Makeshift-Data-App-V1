@@ -81,24 +81,18 @@
         </section>
 
         <form id="passwordForm" class="form-section" novalidate>
-          <h2>Passwords</h2>
-          <p>Leave a new value blank to keep it as it is. Changing the team password logs everyone else out.</p>
+          <h2>Team password</h2>
+          <p>Changing the team password logs everyone else out.</p>
           <div class="control-group">
             <label for="current">Current team password</label>
             <input id="current" type="password" autocomplete="current-password" required>
           </div>
-          <div class="field-row">
-            <div class="control-group">
-              <label for="newPassword">New team password</label>
-              <input id="newPassword" type="password" autocomplete="new-password" minlength="8">
-            </div>
-            <div class="control-group">
-              <label for="newScout">New scout passcode</label>
-              <input id="newScout" type="text" autocomplete="off" spellcheck="false">
-            </div>
+          <div class="control-group">
+            <label for="newPassword">New team password</label>
+            <input id="newPassword" type="password" autocomplete="new-password" minlength="8" required>
           </div>
           <p id="passwordMessage" class="form-message" role="status"></p>
-          <button id="passwordSave" type="submit" class="secondary-button">Save passwords</button>
+          <button id="passwordSave" type="submit" class="secondary-button">Save password</button>
         </form>
 
         <form id="deleteForm" class="form-section danger-zone" novalidate>

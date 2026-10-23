@@ -2,10 +2,8 @@ const eventKey = document.getElementById("eventKey");
 const pitScoutingForm = document.getElementById("pitScoutingForm");
 const formFields = document.getElementById("formFields");
 const formStatus = document.getElementById("formStatus");
-const submissionToken = document.getElementById("submissionToken");
 const submitButton = document.getElementById("submitButton");
 const SCOUT_NAME_STORAGE_KEY = "makeshift-scout-name";
-const PASSCODE_STORAGE_KEY = "makeshift-scouting-passcode";
 const FORM_TYPE = "pit-scouting";
 
 ScoutOffline.registerServiceWorker();
@@ -120,10 +118,7 @@ async function submitToServer(submission) {
 	return fetchJson(`/api/pitscouting/${submission.eventKey}`, {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({
-			submissionToken: submission.submissionToken,
-			answers: submission.answers
-		})
+		body: JSON.stringify({ answers: submission.answers })
 	});
 }
 
@@ -143,7 +138,6 @@ let formLoadCount = 0;
 
 async function loadForm() {
 	const thisLoad = ++formLoadCount;
-	submissionToken.value = localStorage[PASSCODE_STORAGE_KEY] ?? "";
 	pitScoutingForm.hidden = true;
 	formStatus.textContent = "Loading pit-scouting fields…";
 
@@ -214,14 +208,9 @@ pitScoutingForm.addEventListener("submit", async event => {
 
 	console.log(answers);
 
-	if (submissionToken.value) {
-		localStorage[PASSCODE_STORAGE_KEY] = submissionToken.value;
-	}
-
 	const submission = {
 		type: FORM_TYPE,
 		eventKey: eventKey.value,
-		submissionToken: submissionToken.value,
 		answers
 	};
 
@@ -239,7 +228,6 @@ pitScoutingForm.addEventListener("submit", async event => {
 		if (error instanceof TypeError) {
 			await ScoutOffline.queueSubmission(submission);
 			pitScoutingForm.reset();
-			submissionToken.value = "";
 			formStatus.textContent = "Offline pit-scouting response saved on this device and will sync automatically when online.";
 		} else {
 			formStatus.textContent = error.message;

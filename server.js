@@ -622,24 +622,6 @@ const REQUIRED_SHEET_COLUMNS = {
 
 const TEMPLATE_SHEET_URL = /^https:\/\/docs\.google\.com\//.test(process.env.TEMPLATE_SHEET_URL ?? "") ? process.env.TEMPLATE_SHEET_URL : null;
 
-/* Scout passcodes are checked per team. The original team keeps using the
-   values in .env; other teams use the passcode saved on their account. */
-async function checkSubmissionToken(req, kind) {
-	const provided = req.body?.submissionToken;
-
-	if (req.team.legacy) {
-		const token = kind === "pit"
-			? process.env.PIT_SCOUTING_SUBMISSION_TOKEN
-			: process.env.SCOUTING_SUBMISSION_TOKEN ?? process.env.PIT_SCOUTING_SUBMISSION_TOKEN;
-
-		if (!token) return { status: 503, error: "Scouting submissions are not configured. Set the scout passcode in .env on the server first." };
-		return provided === token ? null : { status: 401, error: "Incorrect scout passcode." };
-	}
-
-	const matches = typeof provided === "string" && await verifySecret(provided.slice(0, 200), req.team.scoutPasscodeHash);
-	return matches ? null : { status: 401, error: "Incorrect scout passcode." };
-}
-
 async function serviceAccountEmail() {
 	return (await googleAuth.getCredentials()).client_email;
 }
@@ -780,7 +762,6 @@ app.post("/api/signup", async (req, res) => {
 	const number = parseTeamNumber(body.number);
 	const name = cleanName(body.name);
 	const password = typeof body.password === "string" ? body.password : "";
-	const scoutPasscode = typeof body.scoutPasscode === "string" && body.scoutPasscode ? body.scoutPasscode : password;
 	const eventKey = parseEventKey(body.event);
 	const { colors, error: colorError } = checkColors(body.colors);
 	/* A Google Sheet is optional here: it can be connected later in Team settings. */
@@ -789,7 +770,6 @@ app.post("/api/signup", async (req, res) => {
 	if (!number) return fail(400, "Enter your FRC team number.");
 	if (name.length < 2) return fail(400, "Enter your team name.");
 	if (password.length < 8 || password.length > 200) return fail(400, "The team password needs at least 8 characters.");
-	if (scoutPasscode.length < 4 || scoutPasscode.length > 200) return fail(400, "The scout passcode needs at least 4 characters.");
 	if (colorError) return fail(400, colorError);
 	if (wantsSheet && !eventKey) return fail(400, "Pick the event your sheet is for (or enter its key, like 2026onwat).");
 	if (teamStore.isFull()) return fail(503, "Sign-ups are closed right now. Ask the site owner.");
@@ -813,7 +793,7 @@ app.post("/api/signup", async (req, res) => {
 			events.push({ ...event, sheetId: sheet.sheetId });
 		}
 
-		const [passwordHash, scoutPasscodeHash] = await Promise.all([hashSecret(password), hashSecret(scoutPasscode)]);
+		const passwordHash = await hashSecret(password);
 
 		// Re-check right before saving: someone may have signed up while we were checking.
 		if (teamStore.get(number)) return fail(409, `Team ${number} already has an account. Log in instead.`);
@@ -824,7 +804,6 @@ app.post("/api/signup", async (req, res) => {
 			name,
 			colors,
 			passwordHash,
-			scoutPasscodeHash,
 			sessionVersion: randomBytes(8).toString("hex"),
 			events,
 			createdAt: new Date().toISOString()
@@ -948,7 +927,7 @@ app.post("/api/team/delete", requireEditableTeam, async (req, res) => {
 	res.json({ ok: true });
 });
 
-/* Changing either password needs the current team password. */
+/* Changing the team password needs the current one. */
 app.post("/api/team/passwords", requireEditableTeam, async (req, res) => {
 	const wait = loginLimiter.wait(req.ip);
 	if (wait) return res.status(429).json({ error: waitMessage(wait) });
@@ -961,23 +940,14 @@ app.post("/api/team/passwords", requireEditableTeam, async (req, res) => {
 		return res.status(401).json({ error: "The current password isn't right." });
 	}
 
-	const changes = {};
-	if (body.password) {
-		if (typeof body.password !== "string" || body.password.length < 8 || body.password.length > 200) {
-			return res.status(400).json({ error: "The new team password needs at least 8 characters." });
-		}
-		changes.passwordHash = await hashSecret(body.password);
-		changes.sessionVersion = randomBytes(8).toString("hex"); // logs everyone else out
+	if (typeof body.password !== "string" || body.password.length < 8 || body.password.length > 200) {
+		return res.status(400).json({ error: "The new team password needs at least 8 characters." });
 	}
-	if (body.scoutPasscode) {
-		if (typeof body.scoutPasscode !== "string" || body.scoutPasscode.length < 4 || body.scoutPasscode.length > 200) {
-			return res.status(400).json({ error: "The new scout passcode needs at least 4 characters." });
-		}
-		changes.scoutPasscodeHash = await hashSecret(body.scoutPasscode);
-	}
-	if (!Object.keys(changes).length) return res.status(400).json({ error: "Enter a new password or scout passcode." });
 
-	const team = teamStore.update(req.team.number, changes);
+	const team = teamStore.update(req.team.number, {
+		passwordHash: await hashSecret(body.password),
+		sessionVersion: randomBytes(8).toString("hex") // logs everyone else out
+	});
 	startSession(req, res, team); // keep this browser logged in
 	res.json({ ok: true });
 });
@@ -1533,9 +1503,6 @@ app.get("/api/scouting/:eventKey/schema", async (req, res) => {
 
 app.post("/api/scouting/:eventKey", async (req, res) => {
 	try {
-		const rejected = await checkSubmissionToken(req, "match");
-		if (rejected) return res.status(rejected.status).json({ error: rejected.error });
-
 		const spreadsheetId = spreadsheetIdForEvent(req.team, req.params.eventKey);
 
 		if (!spreadsheetId) {
@@ -1675,9 +1642,6 @@ app.get("/api/pitscouting/:eventKey/schema", async (req, res) => {
 
 app.post("/api/pitscouting/:eventKey", async (req, res) => {
 	try {
-		const rejected = await checkSubmissionToken(req, "pit");
-		if (rejected) return res.status(rejected.status).json({ error: rejected.error });
-
 		const spreadsheetId = spreadsheetIdForEvent(req.team, req.params.eventKey);
 
 		if (!spreadsheetId) {

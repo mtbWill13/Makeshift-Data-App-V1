@@ -156,13 +156,12 @@ document.getElementById("passwordForm").addEventListener("submit", async event =
 	event.preventDefault();
 	const { ok, data } = await api("/api/team/passwords", "POST", {
 		current: document.getElementById("current").value,
-		password: document.getElementById("newPassword").value,
-		scoutPasscode: document.getElementById("newScout").value
+		password: document.getElementById("newPassword").value
 	});
 
 	if (!ok) return say("passwordMessage", data.error || "Couldn't save.", "bad");
 
-	for (const id of ["current", "newPassword", "newScout"]) document.getElementById(id).value = "";
+	for (const id of ["current", "newPassword"]) document.getElementById(id).value = "";
 	say("passwordMessage", "Saved.", "good");
 });
 

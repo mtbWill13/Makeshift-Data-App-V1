@@ -2,7 +2,6 @@ const eventKey = document.getElementById("eventKey");
 const scoutingForm = document.getElementById("scoutingForm");
 const formFields = document.getElementById("formFields");
 const formStatus = document.getElementById("formStatus");
-const submissionToken = document.getElementById("submissionToken");
 const submitButton = document.getElementById("submitButton");
 const startingMatch = document.getElementById("startingMatch");
 const driverStation = document.getElementById("driverStation");
@@ -11,7 +10,6 @@ const assignmentStatus = document.getElementById("assignmentStatus");
 const FORM_TYPE = "match-scouting";
 const ASSIGNMENT_STORAGE_KEY = "makeshift-match-assignment";
 const SCOUT_NAME_STORAGE_KEY = "makeshift-scout-name";
-const PASSCODE_STORAGE_KEY = "makeshift-scouting-passcode";
 let eventMatches = [];
 
 ScoutOffline.registerServiceWorker();
@@ -277,10 +275,6 @@ function savePersistentScoutFields() {
 	if (scoutName) {
 		localStorage.setItem(SCOUT_NAME_STORAGE_KEY, scoutName);
 	}
-
-	if (submissionToken.value) {
-		sessionStorage.setItem(PASSCODE_STORAGE_KEY, submissionToken.value);
-	}
 }
 
 function restorePersistentScoutFields() {
@@ -290,8 +284,6 @@ function restorePersistentScoutFields() {
 	if (scoutName && scoutNameInput) {
 		scoutNameInput.value = scoutName;
 	}
-
-	submissionToken.value = sessionStorage.getItem(PASSCODE_STORAGE_KEY) || "";
 }
 
 async function fetchJson(url, options) {
@@ -309,10 +301,7 @@ async function submitToServer(submission) {
 	return fetchJson(`/api/scouting/${submission.eventKey}`, {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({
-			submissionToken: submission.submissionToken,
-			answers: submission.answers
-		})
+		body: JSON.stringify({ answers: submission.answers })
 	});
 }
 
@@ -405,7 +394,6 @@ scoutingForm.addEventListener("submit", async event => {
 	const submission = {
 		type: FORM_TYPE,
 		eventKey: eventKey.value,
-		submissionToken: submissionToken.value,
 		answers
 	};
 
@@ -459,13 +447,6 @@ formFields.addEventListener("click", event => {
 
 eventKey.addEventListener("change", loadForm);
 setAssignmentButton.addEventListener("click", setMatchAssignment);
-submissionToken.addEventListener("input", () => {
-	if (submissionToken.value) {
-		sessionStorage.setItem(PASSCODE_STORAGE_KEY, submissionToken.value);
-	} else {
-		sessionStorage.removeItem(PASSCODE_STORAGE_KEY);
-	}
-});
 window.addEventListener("online", syncOfflineQueue);
 
 const assignment = savedAssignment();

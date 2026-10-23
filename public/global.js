@@ -6,8 +6,8 @@ document.addEventListener("wheel", event => {
 
 /* If the login has expired (or the team password was changed), any data request
    comes back 401 with { login: true }. Send the person to the login page and
-   bring them back here after. Other 401s (a wrong scout passcode, a wrong
-   password on a settings form) are ordinary errors for the page to show. */
+   bring them back here after. Other 401s (a wrong password on a
+   settings form) are ordinary errors for the page to show. */
 const nativeFetch = window.fetch.bind(window);
 const onAuthPage = /^\/(login|signup)(\/|$)/.test(window.location.pathname);
 

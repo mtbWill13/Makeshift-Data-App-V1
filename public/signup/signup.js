@@ -188,8 +188,7 @@ form.addEventListener("submit", async event => {
 			colors,
 			event: eventKey,
 			sheet: sheetInput.value,
-			password,
-			scoutPasscode: document.getElementById("scoutPasscode").value
+			password
 		});
 
 		if (!ok) throw new Error(data.error || "Couldn't create the account. Try again.");
