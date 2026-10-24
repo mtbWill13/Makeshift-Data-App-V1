@@ -7,6 +7,7 @@
     <link rel="preload" href="/fonts/dm-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="/theme.css">
     <link rel="stylesheet" href="/team.css">
+    <link rel="stylesheet" href="/scout-ui.css">
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
@@ -40,14 +41,21 @@
         </div>
 
         <p id="formStatus" class="status" aria-live="polite">Choose an event to load its pit-scouting form.</p>
-        <form id="pitScoutingForm" hidden>
+        <p id="queueNote" class="queue-note" hidden></p>
+        <form id="pitScoutingForm" hidden novalidate>
           <div id="formFields" class="form-fields"></div>
-          <button id="submitButton" type="submit">Submit Pit Scouting</button>
+          <label class="flag-row"><input type="checkbox" id="messedUp"><span>I think I messed this up, please double check.</span></label>
+          <div class="form-actions">
+            <button id="submitButton" type="submit">Submit Pit Scouting</button>
+            <a class="transfer-button" href="/transfer/">Offline Transfer</a>
+          </div>
         </form>
       </section>
     </main>
     <script src="/offline.js"></script>
 	<script src="/global.js"></script>
+    <script src="/scout-ui.js"></script>
+    <script src="/event-lists.js"></script>
     <script src="index.js"></script>
   </body>
 </html>

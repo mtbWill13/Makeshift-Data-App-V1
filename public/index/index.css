@@ -160,6 +160,7 @@ html.embed .header-actions {
 .nav-match { --accent: var(--ms-blue); }
 .nav-pit { --accent: var(--ms-red); }
 .nav-transfer { --accent: var(--ms-neutral); }
+.nav-qr { --accent: var(--ms-green); }
 .nav-overview { --accent: var(--ms-blue); }
 .nav-picklist { --accent: var(--ms-yellow); }
 

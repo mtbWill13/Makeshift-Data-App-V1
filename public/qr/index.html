@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>QR Codes | MakeShift Scouting Data Hub</title>
+    <link rel="preload" href="/fonts/dm-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="/theme.css">
+    <link rel="stylesheet" href="/team.css">
+    <link rel="stylesheet" href="qr.css" />
+  </head>
+  <body>
+    <div class="top-bar" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+    <header>
+      <div class="header-content">
+        <a class="brand" href="/"><img src="/images/makeshift-logo-wide.png" alt="MakeShift 4039" width="707" height="78"></a>
+        <div class="eyebrow">Scouting</div>
+        <h1>QR Codes</h1>
+        <p class="header-description">Print these, laminate them, and tape them up at the event. Scouts scan one with their phone camera to open the site.</p>
+        <div class="header-links"><a class="back-link" href="/">← Data Hub</a></div>
+      </div>
+    </header>
+
+    <main>
+      <section class="controls qr-controls">
+        <div class="control-group">
+          <label for="baseUrl">Website address</label>
+          <input id="baseUrl" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://your-site.example.com">
+          <p id="baseNote" class="status"></p>
+        </div>
+        <button id="printButton" type="button">Print</button>
+      </section>
+
+      <section id="cards" class="qr-cards" aria-live="polite"></section>
+    </main>
+
+    <script src="/global.js"></script>
+    <script src="/vendor/qrcode.js"></script>
+    <script src="qr.js"></script>
+  </body>
+</html>

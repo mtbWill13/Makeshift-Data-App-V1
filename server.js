@@ -310,6 +310,21 @@ app.use((req, res, next) => {
 	res.redirect(`/login/?next=${encodeURIComponent(req.originalUrl)}`);
 });
 
+/* Start and end dates for events, so the scouting forms can start on the event
+   that's happening today. Events TBA doesn't know (test events) come back without dates. */
+app.get("/api/event-dates", async (req, res) => {
+	const keys = [...new Set(String(req.query.keys ?? "").split(",").map(key => key.trim().toLowerCase()).filter(key => /^\d{4}[a-z0-9]{2,20}$/.test(key)))].slice(0, 30);
+
+	res.json(await Promise.all(keys.map(async key => {
+		try {
+			const event = await tba(`/event/${key}`);
+			return { key, start: event.start_date ?? null, end: event.end_date ?? null };
+		} catch {
+			return { key, start: null, end: null };
+		}
+	})));
+});
+
 /* A page asked for data without picking an event (a team with no events yet has an empty dropdown). */
 app.use("/api", (req, res, next) => {
 	if (req.path.includes("//")) {
@@ -453,6 +468,34 @@ function normalizeSimpleMatchRow(row) {
 		"Climb points": endgame + (Number.isFinite(auto) ? auto : 0),
 		"Teleop Calculated Scoring Points": row["Teleop Scoring Points"] ?? ""
 	};
+}
+
+/* =================================
+   WHAT SCOUTS TYPE INTO THE SHEET
+   Reports go in with USER_ENTERED so numbers and TRUE/FALSE stay real values, which
+   also means text starting with = + - or @ would be run as a spreadsheet formula
+   (=IMPORTXML(…) and friends). Anything like that is stored as plain text, control
+   characters are dropped, and a cell is capped in length.
+================================= */
+
+const MAX_CELL_CHARS = 1000;
+
+function cleanCell(value) {
+	let text = String(value ?? "").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "").slice(0, MAX_CELL_CHARS);
+
+	if (/^[=+\-@]/.test(text) && !/^[+-]?\d+(\.\d+)?$/.test(text.trim())) {
+		text = `'${text}`;
+	}
+
+	return text;
+}
+
+/* A whole number from min to max, or null if it isn't one. */
+function wholeNumberIn(value, min, max) {
+	const text = String(value ?? "").trim();
+	if (!/^\d{1,6}$/.test(text)) return null;
+	const number = Number(text);
+	return number >= min && number <= max ? number : null;
 }
 
 /* Rows as { header: value } objects. */
@@ -1581,15 +1624,46 @@ app.post("/api/scouting/:eventKey", async (req, res) => {
 		);
 
 		const nextRow = lastUsedRowIndex + 2;
+		const answerFor = index => answers[`column-${index}`] ?? answers[`${index}`] ?? "";
+
+		/* Reject nonsense before it reaches the sheet. */
+		const matchIndex = headers.findIndex(header => /^match number$/i.test(header));
+		const teamIndex = headers.findIndex(header => /^team number$/i.test(header));
+		const scouterIndex = headers.findIndex(header => /^scout(er)? name$/i.test(header));
+
+		const team = teamIndex === -1 ? null : wholeNumberIn(answerFor(teamIndex), 1, 99999);
+		const match = matchIndex === -1 ? null : wholeNumberIn(answerFor(matchIndex), 1, 999);
+		if (teamIndex !== -1 && team === null) return res.status(400).json({ error: "Team number must be a whole number from 1 to 99999." });
+		if (matchIndex !== -1 && match === null) return res.status(400).json({ error: "Match number must be a whole number from 1 to 999." });
+
+		for (const [index, header] of headers.entries()) {
+			if (/scoring points$/i.test(header) && String(answerFor(index)).trim() !== "" && wholeNumberIn(answerFor(index), 0, 999) === null) {
+				return res.status(400).json({ error: `${header} must be a whole number from 0 to 999.` });
+			}
+		}
+
+		/* Two scouts on the same robot in the same match: ask before adding another
+		   report, unless the scout has already said to go ahead. */
+		if (team !== null && match !== null && req.body?.confirmDuplicate !== true) {
+			const earlier = existingRows.slice(1).find(row =>
+				Number(row[teamIndex]) === team && Number(row[matchIndex]) === match
+			);
+
+			if (earlier) {
+				const scouter = scouterIndex === -1 ? "" : String(earlier[scouterIndex] ?? "").trim();
+				return res.status(409).json({
+					error: `Team ${team} in match ${match} was already scouted${scouter ? ` by ${scouter}` : ""}.`,
+					duplicate: { team, match, scouter }
+				});
+			}
+		}
 
 		await sheets.spreadsheets.values.update({
 			spreadsheetId,
 			range: `'${tab.title}'!A${nextRow}:${lastColumn}${nextRow}`,
 			valueInputOption: "USER_ENTERED",
 			requestBody: {
-				values: [headers.map((header, index) =>
-					String(answers[`column-${index}`] ?? answers[`${index}`] ?? "")
-				)]
+				values: [headers.map((header, index) => cleanCell(answerFor(index)))]
 			}
 		});
 
@@ -1661,7 +1735,13 @@ app.get("/api/pitscouting/:eventKey/schema", async (req, res) => {
 			return res.status(500).json({ error: "The pit-scouting sheet has no header row." });
 		}
 
-		res.json({ headers, fields: formFieldIndexes(headers, tab) });
+		/* Yes/no questions (asked as "Can/Does/Is…" or a plain Shooter/Climber/Defence)
+		   are answered with Yes/No buttons; they're stored as TRUE/FALSE. */
+		const booleanColumnIndexes = headers
+			.map((header, index) => /^(can|does|do|is|are|would|has|have|did|will)\b/i.test(header) || /^(shooter|shuttle|climber|defen[cs]e|same drive team.*)$/i.test(header) ? index : null)
+			.filter(Number.isInteger);
+
+		res.json({ headers, fields: formFieldIndexes(headers, tab), booleanColumnIndexes });
 	} catch (error) {
 		console.error("PIT SCOUTING SCHEMA ERROR:", error);
 		res.status(500).json({ error: error.message });
@@ -1697,6 +1777,11 @@ app.post("/api/pitscouting/:eventKey", async (req, res) => {
 			return res.status(500).json({ error: "The pit-scouting sheet has no header row." });
 		}
 
+		const pitTeamIndex = headers.findIndex(header => /team number/i.test(header));
+		if (pitTeamIndex !== -1 && wholeNumberIn(answers[`column-${pitTeamIndex}`] ?? answers[headers[pitTeamIndex]], 1, 99999) === null) {
+			return res.status(400).json({ error: "Team number must be a whole number from 1 to 99999." });
+		}
+
 		await sheets.spreadsheets.values.append({
 			spreadsheetId,
 			range: tab.simple ? `'${tab.title}'!A:ZZ` : `'${tab.title}'!A:AL`,
@@ -1705,7 +1790,7 @@ app.post("/api/pitscouting/:eventKey", async (req, res) => {
 			requestBody: {
 				/* Pit forms key answers by header; QR transfers key them by column. */
 				values: [headers.map((header, index) =>
-					String(answers[`column-${index}`] ?? answers[header] ?? "")
+					cleanCell(answers[`column-${index}`] ?? answers[header] ?? "")
 				)]
 			}
 		});

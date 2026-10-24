@@ -7,6 +7,7 @@
     <link rel="preload" href="/fonts/dm-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="/theme.css">
     <link rel="stylesheet" href="/team.css">
+    <link rel="stylesheet" href="/scout-ui.css">
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
@@ -39,40 +40,39 @@
           </div>
         </div>
 
-        <section class="match-setup" aria-labelledby="matchSetupTitle">
+        <div id="assignmentSummary" class="assignment-summary" hidden>
+          <strong id="assignmentText"></strong>
+          <button id="changeAssignment" class="secondary-button" type="button">Change</button>
+        </div>
+
+        <section id="assignmentPanel" class="match-setup" aria-labelledby="matchSetupTitle">
           <h2 id="matchSetupTitle">Match Assignment</h2>
           <p>Set your starting qualification match and driver station once. The team and match number will update automatically after each report.</p>
-          <div class="event-row">
-            <div class="control-group">
-              <label for="startingMatch">Starting match</label>
-              <input id="startingMatch" type="number" min="1" inputmode="numeric" placeholder="e.g. 12">
-            </div>
-            <div class="control-group">
-              <label for="driverStation">Driver station</label>
-              <select id="driverStation">
-                <option value="">Select station</option>
-                <option value="red1">Red 1</option>
-                <option value="red2">Red 2</option>
-                <option value="red3">Red 3</option>
-                <option value="blue1">Blue 1</option>
-                <option value="blue2">Blue 2</option>
-                <option value="blue3">Blue 3</option>
-              </select>
-            </div>
+          <div class="control-group setup-match">
+            <label for="startingMatch">Starting match</label>
+            <input id="startingMatch" type="number" min="1" max="200" step="1" inputmode="numeric" placeholder="e.g. 12">
           </div>
-          <button id="setAssignmentButton" class="secondary-button" type="button">Set Assignment</button>
+          <div id="assignmentStations"></div>
+          <button id="setAssignmentButton" type="button">Start scouting</button>
           <p id="assignmentStatus" class="status" aria-live="polite">Load this event online once to cache its match schedule.</p>
         </section>
 
         <p id="formStatus" class="status" aria-live="polite">Choose an event to load its scouting form.</p>
-        <form id="scoutingForm" hidden>
+        <p id="queueNote" class="queue-note" hidden></p>
+        <form id="scoutingForm" hidden novalidate>
           <div id="formFields" class="form-fields"></div>
-          <button id="submitButton" type="submit">Submit Match Scouting</button>
+          <label class="flag-row"><input type="checkbox" id="messedUp"><span>I think I messed this up, please double check.</span></label>
+          <div class="form-actions">
+            <button id="submitButton" type="submit">Submit Match Scouting</button>
+            <a class="transfer-button" href="/transfer/">Offline Transfer</a>
+          </div>
         </form>
       </section>
     </main>
     <script src="/offline.js"></script>
 	<script src="/global.js"></script>
+    <script src="/scout-ui.js"></script>
+    <script src="/event-lists.js"></script>
     <script src="index.js"></script>
   </body>
 </html>

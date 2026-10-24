@@ -67,27 +67,21 @@ body {
 #submitButton {
 	width: 100%;
 	min-height: 56px;
-	margin-top: 28px;
 	font-size: 1.05rem;
 }
 
-.score-clicker {
-	display: grid;
-	grid-template-columns: minmax(0, 1fr) auto;
-	gap: 10px;
+.setup-match {
+	max-width: 240px;
+	margin-bottom: 18px;
 }
 
-.score-clicker input {
-	font-size: 1.4rem;
-	font-weight: 700;
-	text-align: center;
-	font-variant-numeric: tabular-nums;
+#assignmentStations {
+	margin-bottom: 18px;
 }
 
-.score-button {
-	min-width: 80px;
-	padding: 0 16px;
-	font-size: 1.1rem;
+#setAssignmentButton {
+	min-height: 52px;
+	padding: 0 28px;
 }
 
 @media (max-width: 700px) {
@@ -110,5 +104,9 @@ body {
 
 	#setAssignmentButton {
 		width: 100%;
+	}
+
+	.setup-match {
+		max-width: none;
 	}
 }

@@ -280,7 +280,7 @@ uploadToSheets.addEventListener("click", async () => {
 			const response = await fetch(`${endpoint}/${report.eventKey}`, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ answers: report.answers })
+				body: JSON.stringify({ answers: report.answers, confirmDuplicate: true })
 			});
 			const body = await response.json().catch(() => ({}));
 			if (!response.ok) throw new Error(body.error || "Google Sheets upload failed.");
