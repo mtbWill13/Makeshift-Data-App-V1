@@ -317,11 +317,10 @@ fieldset.control-group > legend {
 	}
 }
 
-/* ----- bottom buttons: half Submit, half Offline Transfer ----- */
+/* ----- bottom buttons: Submit, with Offline Transfer stacked under it ----- */
 
 .form-actions {
 	display: grid;
-	grid-template-columns: 1fr 1fr;
 	gap: 10px;
 	margin-top: 28px;
 }
