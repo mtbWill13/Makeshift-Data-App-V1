@@ -249,6 +249,34 @@ function renderForm(headers, offline, fields, booleanColumnIndexes = []) {
 			: `Ready: ${selectedFields.length} configured fields loaded.`;
 }
 
+/* Saves the report on screen on this device (if there is one), then opens the transfer
+   page, which makes the QR codes by itself. */
+document.getElementById("transferButton").addEventListener("click", async () => {
+	const answers = {};
+	for (const [key, value] of new FormData(pitScoutingForm).entries()) {
+		answers[key] = String(value).trim();
+	}
+
+	const teamKey = Object.keys(answers).find(isTeamNumberField);
+
+	if (teamKey && answers[teamKey]) {
+		if (!pitScoutingForm.reportValidity()) {
+			ScoutUI.toast("error", "Not saved", "Fill in the highlighted field first.");
+			return;
+		}
+
+		const commentKey = Object.keys(answers).find(key => /^comments?$/i.test(key));
+		if (messedUp.checked && commentKey) {
+			answers[commentKey] = ScoutUI.applyFlag(answers[commentKey]);
+		}
+
+		await ScoutOffline.queueSubmission({ type: FORM_TYPE, eventKey: eventKey.value, answers });
+		pitScoutingForm.reset();
+	}
+
+	location.href = `/transfer/?type=${FORM_TYPE}&event=${encodeURIComponent(eventKey.value)}`;
+});
+
 pitScoutingForm.addEventListener("submit", async event => {
 	event.preventDefault();
 

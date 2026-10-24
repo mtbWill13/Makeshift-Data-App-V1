@@ -604,6 +604,28 @@ function describeReport(answers) {
 	return `Qual ${answers[match?.name] ?? "?"}, Team ${answers[team?.name] ?? "?"}`;
 }
 
+/* Saves the report on screen on this device (if there is one), then opens the transfer
+   page, which makes the QR codes by itself. Saved reports are never lost: they stay
+   queued until they reach Google Sheets. */
+transferButton.addEventListener("click", async () => {
+	const team = fieldByHeader(formHeaders, /^team number$/i);
+	const hasReport = team && String(collectAnswers()[team.name] ?? "").trim() !== "";
+
+	if (hasReport) {
+		if (!scoutingForm.reportValidity()) {
+			ScoutUI.toast("error", "Not saved", "Fill in the highlighted field first.");
+			return;
+		}
+
+		savePersistentScoutFields();
+		await ScoutOffline.queueSubmission({ type: FORM_TYPE, eventKey: eventKey.value, answers: collectAnswers() });
+		scoutingForm.reset();
+		advanceMatchAssignment();
+	}
+
+	location.href = `/transfer/?type=${FORM_TYPE}&event=${encodeURIComponent(eventKey.value)}`;
+});
+
 scoutingForm.addEventListener("submit", async event => {
 	event.preventDefault();
 
@@ -657,12 +679,6 @@ scoutingForm.addEventListener("submit", async event => {
 				}
 
 				if (error instanceof TypeError) {
-					// remove the "column-"" from the submission for smaller qr code sizes
-					for (const key of Object.keys(submission.answers)) {
-						submission.answers[key.substring(7)] = submission.answers[key];
-						delete submission.answers[key];
-					}
-
 					await ScoutOffline.queueSubmission(submission);
 					scoutingForm.reset();
 					advanceMatchAssignment();
