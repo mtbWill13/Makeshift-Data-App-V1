@@ -57,7 +57,7 @@ const ScoutUI = (() => {
 	   perRow > 0 lays the buttons out in rows of that many (the six driver stations). */
 	function radioGroup({ name, label, options, value = "", required = false, wide = false, perRow = 0 }) {
 		const buttons = options.map(option => `
-			<label class="radio-option${option.tone ? ` tone-${option.tone}` : ""}">
+			<label class="radio-option${option.tone ? ` tone-${option.tone}` : ""}${option.big ? " big" : ""}">
 				<input type="radio" name="${escapeHtml(name)}" value="${escapeHtml(option.value)}"${String(option.value) === String(value) ? " checked" : ""}${required ? " required" : ""}>
 				<span>${escapeHtml(option.label)}<small data-sub="${escapeHtml(option.value)}">${escapeHtml(option.sub ?? "")}</small></span>
 			</label>`);

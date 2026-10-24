@@ -344,7 +344,7 @@ function fieldMarkup(field) {
 			value: "no",
 			wide: true,
 			options: [
-				{ value: "no", label: "No climb" },
+				{ value: "no", label: "No climb", big: true },
 				{ value: "level 1", label: "Level 1" },
 				{ value: "level 2", label: "Level 2" },
 				{ value: "level 3", label: "Level 3" }
@@ -360,12 +360,12 @@ function fieldMarkup(field) {
 			value: "x",
 			wide: true,
 			options: [
+				{ value: "x", label: "None", sub: "No defense", big: true },
 				{ value: "1", label: "1", sub: "Incredible" },
 				{ value: "2", label: "2" },
 				{ value: "3", label: "3" },
 				{ value: "4", label: "4" },
-				{ value: "5", label: "5", sub: "Poor" },
-				{ value: "x", label: "None", sub: "No defense" }
+				{ value: "5", label: "5", sub: "Poor" }
 			]
 		});
 	}

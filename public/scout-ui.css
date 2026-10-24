@@ -44,6 +44,16 @@ fieldset.control-group > legend {
 	cursor: pointer;
 }
 
+/* The usual answer (none / no climb): a full-width button above the rest. */
+.radio-option.big {
+	flex-basis: 100%;
+}
+
+.radio-option.big > span {
+	min-height: 64px;
+	font-size: 1.15rem;
+}
+
 .radio-option input {
 	position: absolute;
 	inset: 0;
@@ -288,8 +298,18 @@ fieldset.control-group > legend {
 
 @media (max-width: 480px) {
 	.score-clicker {
-		grid-template-columns: 48px 48px minmax(60px, 1fr) 48px 48px;
-		gap: 6px;
+		grid-template-columns: 42px 42px minmax(0, 1fr) 42px 42px;
+		gap: 4px;
+	}
+
+	.score-clicker input {
+		padding-left: 4px;
+		padding-right: 4px;
+		font-size: 1.4rem;
+	}
+
+	.score-button {
+		font-size: 0.95rem;
 	}
 
 	.radio-option {
