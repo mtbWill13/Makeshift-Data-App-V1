@@ -370,6 +370,35 @@ function fieldMarkup(field) {
 		});
 	}
 
+	/* A robot that never showed up: one big "showed up" default, and "No show" hides the scoring questions. */
+	if (/^no show$/i.test(header)) {
+		return ScoutUI.radioGroup({
+			name,
+			label: header,
+			value: "FALSE",
+			wide: true,
+			options: [
+				{ value: "FALSE", label: "Robot showed up", big: true },
+				{ value: "TRUE", label: "No show", tone: "red" }
+			]
+		});
+	}
+
+	/* Where the robot starts, seen from the scouting seat. */
+	if (/^starting (location|position)/i.test(header)) {
+		return ScoutUI.radioGroup({
+			name,
+			label: header,
+			wide: true,
+			perRow: 3,
+			options: [
+				{ value: "Left", label: "Left" },
+				{ value: "Centre", label: "Centre" },
+				{ value: "Right", label: "Right" }
+			]
+		});
+	}
+
 	if (isBoolean || isYesNoField(header)) {
 		return ScoutUI.yesNoGroup({ name, label: header });
 	}
@@ -510,6 +539,22 @@ function renderForm(headers, booleanColumnIndexes, offline, fields) {
 	}
 
 	formHeaders = headers;
+	/* Screen order, whatever the sheet's column order: no show and starting location sit just above the
+	   scoring questions (after the driver station), and comments come last. */
+	const moved = [/^no show$/i, /^starting (location|position)/i]
+		.map(pattern => selectedFields.findIndex(field => pattern.test(field.header)))
+		.filter(index => index >= 0)
+		.map(index => selectedFields[index]);
+
+	if (moved.length) {
+		for (const field of moved) selectedFields.splice(selectedFields.indexOf(field), 1);
+		const stationAt = selectedFields.findIndex(field => /^driver station$/i.test(field.header));
+		selectedFields.splice(stationAt >= 0 ? stationAt + 1 : 0, 0, ...moved);
+	}
+
+	const commentsAt = selectedFields.findIndex(field => /^comments?$/i.test(field.header));
+	if (commentsAt >= 0) selectedFields.push(...selectedFields.splice(commentsAt, 1));
+
 	formFields.innerHTML = selectedFields.map(fieldMarkup).join("");
 	messedUp.checked = false;
 	scoutingForm.hidden = false;
@@ -523,6 +568,33 @@ function renderForm(headers, booleanColumnIndexes, offline, fields) {
 			? `Ready: ${selectedFields.length} fields loaded. ${unavailableColumns.join(", ")} could not be found in this sheet.`
 			: `Ready: ${selectedFields.length} fields loaded.`;
 }
+
+/* "No show": only who/when questions stay; the rest go back to their defaults and hide.
+   Hidden answers are still sent, so the sheet row reads as zeros. */
+const KEEP_FOR_NO_SHOW = /scouter|scout name|match number|team number|driver station|no show|comment/i;
+
+formFields.addEventListener("change", event => {
+	const changed = event.target;
+	const header = formHeaders[Number(/^column-(\d+)$/.exec(changed.name ?? "")?.[1])];
+	if (!/^no show$/i.test(header ?? "")) return;
+
+	const noShow = changed.value === "TRUE";
+
+	for (const group of formFields.querySelectorAll(".control-group")) {
+		const control = group.querySelector("[name^='column-']");
+		const groupHeader = formHeaders[Number(/^column-(\d+)$/.exec(control?.name ?? "")?.[1])] ?? "";
+		if (!control || KEEP_FOR_NO_SHOW.test(groupHeader)) continue;
+
+		if (noShow) {
+			for (const field of group.querySelectorAll("input, textarea")) {
+				if (field.type === "radio" || field.type === "checkbox") field.checked = field.defaultChecked;
+				else field.value = field.defaultValue;
+			}
+		}
+
+		group.hidden = noShow;
+	}
+});
 
 /* Typing a match number or choosing a station updates who's shown in each station. */
 formFields.addEventListener("input", event => {
