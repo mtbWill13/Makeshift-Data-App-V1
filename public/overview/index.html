@@ -19,6 +19,7 @@
         <p class="header-description">Event-wide graphs from our scouting, plus a chart builder for any stat and any set of teams.</p>
         <div class="header-links">
           <a class="back-link" href="/">← Data Hub</a>
+          <a class="back-link" href="#matchLookup">Match lookup ↓</a>
           <a class="back-link" href="#builder">Chart builder ↓</a>
         </div>
       </div>
@@ -42,6 +43,15 @@
       </section>
 
       <section id="summary" class="overview-summary"></section>
+
+      <h2 class="section-title" id="matchLookup">Match lookup</h2>
+      <section class="controls match-controls">
+        <label for="matchInput">Match number
+          <input id="matchInput" type="text" inputmode="text" placeholder="e.g. 12, or sf2m1" autocomplete="off" maxlength="12">
+        </label>
+        <button id="matchSearch" type="button">Search</button>
+      </section>
+      <section id="matchResult"></section>
 
       <h2 class="section-title">Event graphs</h2>
       <section id="dashboard" class="overview-grid"></section>
@@ -85,5 +95,6 @@
     <script src="/global.js"></script>
     <script src="charts.js"></script>
     <script src="overview.js"></script>
+    <script src="matches.js"></script>
   </body>
 </html>

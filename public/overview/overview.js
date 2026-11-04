@@ -222,7 +222,14 @@ async function load() {
 		opr: new Map(Object.entries(oprs?.oprs ?? {}).map(([key, value]) => [Number(key.replace(/^frc/, "")), Number(value)])),
 		epa: new Map((Array.isArray(epas) ? epas : [])
 			.map(row => [Number(row.team), Number(row.epa?.total_points?.mean ?? row.epa?.total_points)])
-			.filter(([team, epa]) => team && Number.isFinite(epa)))
+			.filter(([team, epa]) => team && Number.isFinite(epa))),
+		/* Statbotics' spread of each team's match scores, and team names (for the match lookup). */
+		epaSd: new Map((Array.isArray(epas) ? epas : [])
+			.map(row => [Number(row.team), Number(row.epa?.total_points?.sd)])
+			.filter(([team, sd]) => team && Number.isFinite(sd))),
+		names: new Map((Array.isArray(epas) ? epas : [])
+			.filter(row => row.team && row.team_name)
+			.map(row => [Number(row.team), String(row.team_name)]))
 	};
 	stats = buildStats(data.rows);
 
@@ -230,6 +237,7 @@ async function load() {
 	renderDashboard();
 	fillBuilder();
 	renderBuilder();
+	document.dispatchEvent(new Event("overview-loaded"));
 }
 
 /* =================================
