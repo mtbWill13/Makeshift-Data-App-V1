@@ -1,3 +1,28 @@
+let trendRows = [];   // the scouting rows behind the by-match chart
+let trendChosen = ["total"];   // stats ticked above that chart; kept when the page refreshes itself
+
+/* The by-match chart for the ticked stats: one stat draws the usual chart with its
+   running average; several draw one coloured line each. */
+function trendChartHtml(rows, statIds) {
+	const chosen = statIds.map(id => TREND_STATS.find(stat => stat.id === id)).filter(Boolean);
+
+	if (chosen.length <= 1) {
+		const stat = chosen[0] ?? TREND_STATS[0];
+		return performanceTrendChart(
+			performanceTrendPoints(rows, stat.value),
+			stat.id === "total" ? "Scouting by match" : `${stat.label} by match`,
+			"Match",
+			{ clickable: true, valueName: stat.valueName, note: stat.note }
+		);
+	}
+
+	return performanceMultiTrendChart(
+		chosen.map(stat => ({ id: stat.id, label: stat.label, rating: stat.rating, points: performanceTrendPoints(rows, stat.value) })),
+		"Stats by match",
+		"Match",
+		{ clickable: true }
+	);
+}
 
 /* =================================
    DOM ELEMENTS
@@ -1019,6 +1044,12 @@ async function printTeamData() {
 		);
 
 	const trendPoints = performanceTrendPoints(scoutingRows);
+	/* The by-match chart can switch stat; only offer the ones this team has data for. */
+	trendRows = scoutingRows;
+	const trendStats = TREND_STATS.filter(stat => performanceTrendPoints(scoutingRows, stat.value).length);
+	/* Keep what was ticked (this page redraws every 30 s), minus stats this team has no data for. */
+	const trendShown = trendChosen.filter(id => trendStats.some(stat => stat.id === id));
+	if (!trendShown.length) trendShown.push(trendStats[0]?.id ?? "total");
 
 	function averagePowerRating() {
 		let totalPoints = 0;
@@ -1159,7 +1190,12 @@ async function printTeamData() {
 
         </section>
 
-        ${performanceTrendChart(trendPoints, "Scouting by match")}
+        ${trendStats.length > 1 ? `
+        <div class="trend-picker" id="trendStats" role="group" aria-label="Stats shown by match">
+          <span>Stats by match</span>
+          ${trendStats.map(stat => `<label class="trend-chip" style="--chip:${TREND_STAT_COLORS[stat.id]}"><input type="checkbox" value="${stat.id}"${trendShown.includes(stat.id) ? " checked" : ""}><i></i>${escapeHtml(stat.label)}</label>`).join("")}
+        </div>` : ""}
+        <div id="trendHolder">${trendChartHtml(scoutingRows, trendShown)}</div>
 
         <!-- Event Results -->
 
@@ -1624,7 +1660,7 @@ Own Score vs Prediction  </div>
 
                 ${scoutingRows.map((row, index) => `
 
-                  <article class="scouting-card">
+                  <article class="scouting-card" data-report-match="${escapeHtml(Number(String(row["Match Number"] ?? "").trim()) || "")}">
 
                     <div class="scouting-card-header">
                       <span class="scouting-card-title">
@@ -1817,6 +1853,31 @@ function matchResultBadge(match, teamNumber) {
 
 }
 
+
+/* Stat picker above the by-match chart. */
+document.addEventListener("change", event => {
+	const picker = event.target.closest?.("#trendStats");
+	if (!picker) return;
+
+	/* Always keep at least one stat on. */
+	if (!picker.querySelector("input:checked")) event.target.checked = true;
+
+	trendChosen = [...picker.querySelectorAll("input:checked")].map(input => input.value);
+	document.getElementById("trendHolder").innerHTML = trendChartHtml(trendRows, trendChosen);
+});
+
+/* Picking a match on the chart jumps to that match's scouting report. */
+document.addEventListener("trend-select", event => {
+	const cards = [...document.querySelectorAll(`.scouting-card[data-report-match="${Number(event.detail.match)}"]`)];
+	if (!cards.length) return;
+
+	cards[0].scrollIntoView({ behavior: "smooth", block: "start" });
+	for (const card of cards) {
+		card.classList.remove("report-highlight");
+		void card.offsetWidth;   // restart the highlight if it's picked again
+		card.classList.add("report-highlight");
+	}
+});
 
 /* Who played in a scouted qualification match and the final score, shown at
    the top of the scouting report card. Empty if TBA doesn't have the match. */

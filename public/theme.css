@@ -1064,3 +1064,125 @@ input[type="number"]::-webkit-inner-spin-button {
 	-webkit-appearance: none !important;
 	margin: 0 !important;
 }
+
+
+/* By-match chart: stat picker, clickable matches, and the report it jumps to */
+.trend-picker {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px 12px;
+	margin: 24px 0 10px;
+}
+
+.trend-picker > span {
+	color: var(--text-muted);
+	font-size: 0.75rem;
+	font-weight: 600;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
+/* Tick several stats to draw them together. The swatch is the line's colour. */
+.trend-chip {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 38px;
+	padding: 0 14px;
+	border: 1px solid var(--border-strong);
+	border-radius: 999px;
+	background: var(--field, var(--surface-2));
+	color: var(--text-muted);
+	font-size: 0.9rem;
+	font-weight: 600;
+	letter-spacing: normal;
+	text-transform: none;
+	cursor: pointer;
+}
+
+.trend-chip input {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	min-height: 0;
+	margin: 0;
+	opacity: 0;
+	cursor: pointer;
+}
+
+.trend-chip i {
+	width: 12px;
+	height: 12px;
+	border: 2px solid var(--chip);
+	border-radius: 50%;
+}
+
+.trend-chip:has(input:checked) {
+	border-color: var(--chip);
+	color: var(--text);
+}
+
+.trend-chip:has(input:checked) i {
+	background: var(--chip);
+}
+
+.trend-chip:has(input:focus-visible) {
+	outline: 2px solid var(--text);
+	outline-offset: 2px;
+}
+
+.multi-line {
+	fill: none;
+	stroke-width: 2.5;
+	stroke-linejoin: round;
+	stroke-linecap: round;
+}
+
+.multi-hit {
+	fill: transparent;
+	cursor: crosshair;
+	outline: none;
+}
+
+.trend-chart[data-clickable] .multi-hit {
+	cursor: pointer;
+}
+
+.trend-picker + #trendHolder .performance-chart {
+	margin-top: 0;
+}
+
+.trend-chart[data-clickable] .trend-hit {
+	cursor: pointer;
+}
+
+.trend-tooltip-hint {
+	margin-top: 6px;
+	color: var(--text-faint);
+	font-size: 0.72rem;
+}
+
+.scouting-card[data-report-match] {
+	scroll-margin-top: 16px;
+}
+
+.scouting-card.report-highlight {
+	animation: report-highlight 2.4s ease-out;
+}
+
+@keyframes report-highlight {
+	0%, 35% { box-shadow: 0 0 0 3px var(--ms-blue); }
+	100% { box-shadow: 0 0 0 3px transparent; }
+}
+
+/* Ratings drawn against the right-hand axis */
+.multi-line.right-axis {
+	stroke-dasharray: 7 5;
+}
+
+.trend-chart .right-axis-title {
+	font-size: 13px;
+}
