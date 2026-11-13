@@ -68,11 +68,17 @@ export function applySeasonRows(rows) {
 /* Has the real season EPA been loaded (rather than the made-up fallback)? */
 export const usingSeasonStrengths = () => seasonLoaded;
 
-try {
-	const saved = JSON.parse(readFileSync(new URL(`./data/statbotics-team-years-${new Date().getFullYear()}.json`, import.meta.url), "utf8"));
-	applySeasonRows(saved.rows);
-} catch {
-	/* No saved download yet: the server fetches the season data at startup (see server.js). */
+/* The newest saved Statbotics season download if this server has one (Prescouting makes it);
+   otherwise the snapshot kept with the code, so a fresh deployment still gets real numbers. */
+for (const [file, read] of [
+	[`./data/statbotics-team-years-${new Date().getFullYear()}.json`, saved => saved.rows],
+	["./fake-event-strengths.json", saved => Object.entries(saved.epa ?? {}).map(([team, epa]) => ({ team: Number(team), epa: { total_points: epa } }))]
+]) {
+	try {
+		if (applySeasonRows(read(JSON.parse(readFileSync(new URL(file, import.meta.url), "utf8"))))) break;
+	} catch {
+		/* Not there: try the next one. */
+	}
 }
 
 const TEAM_NUMBERS = Object.keys(TEAMS).map(Number);

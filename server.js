@@ -12,7 +12,7 @@ import { google } from "googleapis";
 import { startBehindTheBumpers, episodesForTeam } from "./behind-the-bumpers.js";
 import { createSupabaseMirror } from "./supabase-mirror.js";
 import { createBets } from "./bets.js";
-import { applySeasonRows, fakeEventEnabled, fakeEventResponse, isFakeEventPath, usingSeasonStrengths, FAKE_EVENT_KEY } from "./fake-event.js";
+import { fakeEventEnabled, fakeEventResponse, isFakeEventPath, FAKE_EVENT_KEY } from "./fake-event.js";
 import { openPointsStore } from "./points-store.js";
 const app = express();
 
@@ -572,9 +572,8 @@ const tbaFromTheBlueAlliance = cachedFetcher(60 * 1000, async path => {
 }, { name: "tba" });
 
 /* The made-up test event (BETS_FAKE_EVENT=1) never goes to The Blue Alliance or the saved cache. */
-let fakeEventReady = Promise.resolve();   // the test event waits here until its team strengths are loaded (see the bottom of this file)
 const tba = path => isFakeEventPath(path)
-	? fakeEventReady.then(() => fakeEventResponse(path))
+	? Promise.resolve().then(() => fakeEventResponse(path))
 	: tbaFromTheBlueAlliance(path);
 
 const STATBOTICS_CACHE_MS = 2 * 60 * 1000;
@@ -1915,18 +1914,3 @@ loadSavedTeamYears(String(new Date().getFullYear())).then(hasCopy => {
 		);
 	}, 60 * 1000).unref();
 });
-
-/* The test event scores matches from each team's real season EPA. A server without the saved season
-   download (a fresh deployment) fetches it first, and the test event waits for that (up to 2 minutes)
-   so its scores never change after matches have been played. */
-if (fakeEventEnabled() && !usingSeasonStrengths()) {
-	const year = String(new Date().getFullYear());
-	fakeEventReady = Promise.race([
-		teamYears(year).then(byTeam => applySeasonRows([...byTeam.values()])),
-		new Promise((_, reject) => setTimeout(() => reject(new Error("timed out")), 2 * 60 * 1000))
-	]).then(found => {
-		console.log(`Test event: using season EPA for ${found} teams.`);
-	}).catch(error => {
-		console.warn(`Test event: couldn't get season EPA (${error.message}); using made-up team strengths.`);
-	});
-}
