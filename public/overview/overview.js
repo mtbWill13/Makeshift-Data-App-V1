@@ -602,7 +602,24 @@ document.addEventListener("click", event => {
 	}
 });
 
+/* The made-up test event (BETS_FAKE_EVENT=1 on the server) joins the dropdown when it's turned on. */
+async function addFakeEvent() {
+	try {
+		const response = await fetch("/api/fake-event");
+		const fake = response.ok ? await response.json() : null;
+		if (!fake || [...eventSelect.options].some(option => option.value === fake.key)) return;
+		const option = new Option(`${fake.name} (for testing)`, fake.key);
+		option.setAttribute("data-keep", "");
+		eventSelect.add(option);
+	} catch {
+		/* No test event: nothing to add. */
+	}
+}
+
 /* INITIAL LOAD: ?event=2026oncmp2 */
-const eventFromUrl = new URL(window.location).searchParams.get("event");
-if ([...eventSelect.options].some(option => option.value === eventFromUrl)) eventSelect.value = eventFromUrl;
-load();
+(async () => {
+	await addFakeEvent();
+	const eventFromUrl = new URL(window.location).searchParams.get("event");
+	if ([...eventSelect.options].some(option => option.value === eventFromUrl)) eventSelect.value = eventFromUrl;
+	load();
+})();

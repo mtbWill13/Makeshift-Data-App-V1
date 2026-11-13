@@ -48,6 +48,10 @@
 	color: var(--text);
 }
 
+.bets-button {
+	color: var(--ms-yellow);
+}
+
 .logout-button[hidden] {
 	display: none;
 }

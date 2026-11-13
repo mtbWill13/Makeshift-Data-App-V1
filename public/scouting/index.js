@@ -731,11 +731,11 @@ scoutingForm.addEventListener("submit", async event => {
 			try {
 				if (!navigator.onLine) throw new TypeError("Device is offline");
 
-				await submitToServer(submission, { confirmDuplicate });
+				const saved = await submitToServer(submission, { confirmDuplicate });
 
 				scoutingForm.reset();
 				advanceMatchAssignment();
-				ScoutUI.toast("success", "Submitted!", `${summary} is saved in Google Sheets.`);
+				ScoutUI.toast("success", "Submitted!", `${summary} is saved in Google Sheets.${saved?.points ? ` +${saved.points.earned} points (you have ${saved.points.balance}).` : ""}`);
 				await loadForm();
 				break;
 			} catch (error) {

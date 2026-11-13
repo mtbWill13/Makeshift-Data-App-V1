@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scout Bets | MakeShift Scouting Data Hub</title>
+    <link rel="preload" href="/fonts/dm-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="/theme.css">
+    <link rel="stylesheet" href="/team.css">
+    <link rel="stylesheet" href="bets.css">
+  </head>
+  <body>
+    <div class="top-bar" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+    <header>
+      <div class="header-content">
+        <a class="brand" href="/"><img src="/images/makeshift-logo-wide.png" alt="MakeShift 4039" width="707" height="78"></a>
+        <div class="eyebrow">Just for fun</div>
+        <h1>Scout<br>Bets</h1>
+        <p class="header-description">Scout matches to earn points, then bet them on who wins upcoming matches. Know the teams, win more.</p>
+        <div class="header-links"><a class="back-link" href="/">← Data Hub</a></div>
+      </div>
+    </header>
+    <main>
+      <div id="setupNotice" class="empty-state" hidden></div>
+
+      <section id="balanceBar" class="balance-bar" hidden>
+        <div>
+          <span class="balance-label">Your points</span>
+          <strong id="balance">–</strong>
+          <small id="playerName"></small>
+          <button id="grantPoints" class="grant-points" type="button" hidden>+20 free test points</button>
+          <button id="resetPoints" class="grant-points" type="button" hidden>Reset my points</button>
+          <form id="nameForm" class="name-form" hidden>
+            <input id="nameInput" type="text" maxlength="40" placeholder="Pick a name" aria-label="Your display name" autocomplete="nickname">
+            <button type="submit">Save name</button>
+          </form>
+        </div>
+        <ul class="earn-list">
+          <li>New here: <b><span id="earnWelcome">15</span> points</b> to start</li>
+          <li>Scout a match: <b>+<span id="earnMatch">3</span></b></li>
+          <li>Pit scout a team: <b>+<span id="earnPit">2</span></b></li>
+        </ul>
+      </section>
+
+      <section class="controls bets-controls">
+        <label for="eventKey">Event
+          <select id="eventKey">
+            <option value="2026onham">McMaster</option>
+            <option value="2026onosh">Durham College</option>
+            <option value="2026onwat">Waterloo</option>
+            <option value="2026oncmp2">Provincials Technology Division</option>
+            <option value="2026oncmp1">Provincials Science Division</option>
+            <option value="2026ontor">Humber</option>
+            <option value="2026onwin">Windsor</option>
+            <option value="2026onsi" selected>Southwest International</option>
+            <option value="2026test">Test Event</option>
+          </select>
+        </label>
+        <p class="bets-hint">Points are play money, just for fun. The odds are hidden: a bet on the less likely winner pays more, so learn the teams. You'll see your payout when you place the bet. Betting closes shortly before a match starts.</p>
+      </section>
+
+      <h2 class="section-title">Upcoming matches</h2>
+      <section id="matches" class="bet-matches"><div class="loading">Loading matches…</div></section>
+
+      <h2 class="section-title">Your bets</h2>
+      <section id="myBets"></section>
+
+      <section class="bets-columns">
+        <div>
+          <h2 class="section-title">Leaderboard</h2>
+          <div id="leaderboard"></div>
+        </div>
+        <div>
+          <h2 class="section-title">Recent points</h2>
+          <div id="ledger"></div>
+        </div>
+      </section>
+    </main>
+    <script src="/global.js"></script>
+    <script src="bets.js"></script>
+  </body>
+</html>

@@ -11,6 +11,9 @@ import {
 import { google } from "googleapis";
 import { startBehindTheBumpers, episodesForTeam } from "./behind-the-bumpers.js";
 import { createSupabaseMirror } from "./supabase-mirror.js";
+import { createBets } from "./bets.js";
+import { fakeEventEnabled, fakeEventResponse, isFakeEventPath, FAKE_EVENT_KEY } from "./fake-event.js";
+import { openPointsStore } from "./points-store.js";
 const app = express();
 
 /* =================================
@@ -553,7 +556,7 @@ function columnIndexToLetter(index) {
 
 
 // TBA data changes during events (new match results), so only keep it briefly.
-const tba = cachedFetcher(60 * 1000, async path => {
+const tbaFromTheBlueAlliance = cachedFetcher(60 * 1000, async path => {
 	const response = await fetch(`${TBA_BASE}${path}`, {
 		headers: {
 			"X-TBA-Auth-Key": process.env.TBA_AUTH_KEY,
@@ -567,6 +570,11 @@ const tba = cachedFetcher(60 * 1000, async path => {
 
 	return response.json();
 }, { name: "tba" });
+
+/* The made-up test event (BETS_FAKE_EVENT=1) never goes to The Blue Alliance or the saved cache. */
+const tba = path => isFakeEventPath(path)
+	? Promise.resolve().then(() => fakeEventResponse(path))
+	: tbaFromTheBlueAlliance(path);
 
 const STATBOTICS_CACHE_MS = 2 * 60 * 1000;
 
@@ -586,7 +594,7 @@ function statboticsFailed(slow) {
 	}
 }
 
-const statbotics = cachedFetcher(STATBOTICS_CACHE_MS, async path => {
+const statboticsFromStatbotics = cachedFetcher(STATBOTICS_CACHE_MS, async path => {
 	if (Date.now() < statboticsHealth.skipUntil) {
 		const error = new Error("Statbotics request skipped: it's currently down");
 		error.status = 503;
@@ -631,6 +639,14 @@ const statbotics = cachedFetcher(STATBOTICS_CACHE_MS, async path => {
 		await new Promise(resolve => setTimeout(resolve, 500 * attempt));
 	}
 }, { name: "statbotics" });
+
+/* Statbotics has nothing on the made-up test event: say so straight away. */
+const statbotics = path => {
+	if (fakeEventEnabled() && path.includes(FAKE_EVENT_KEY)) {
+		return Promise.reject(Object.assign(new Error("Statbotics request failed: 404"), { status: 404 }));
+	}
+	return statboticsFromStatbotics(path);
+};
 
 /* Sends a Statbotics error to the browser with the same status codes as before:
    Statbotics' own status (e.g. 500 when a team isn't at an event), or 502. */
@@ -1669,7 +1685,8 @@ app.post("/api/scouting/:eventKey", async (req, res) => {
 
 		forgetSheet(spreadsheetId);
 		if (req.team.legacy) supabaseMirror.scheduleSync(req.params.eventKey);
-		res.status(201).json({ ok: true });
+		const points = await bets?.awardScouting(req, res, { kind: "match", eventKey: req.params.eventKey, team, match, scouterName: scouterIndex === -1 ? "" : answerFor(scouterIndex) });
+		res.status(201).json({ ok: true, ...(points ? { points } : {}) });
 	} catch (error) {
 		console.error("SCOUTING WRITE ERROR:", error);
 		res.status(500).json({ error: error.message });
@@ -1797,11 +1814,29 @@ app.post("/api/pitscouting/:eventKey", async (req, res) => {
 
 		forgetSheet(spreadsheetId);
 		if (req.team.legacy) supabaseMirror.scheduleSync(req.params.eventKey);
-		res.status(201).json({ ok: true });
+		const pitTeam = pitTeamIndex === -1 ? null : wholeNumberIn(answers[`column-${pitTeamIndex}`] ?? answers[headers[pitTeamIndex]], 1, 99999);
+		const points = await bets?.awardScouting(req, res, { kind: "pit", eventKey: req.params.eventKey, team: pitTeam });
+		res.status(201).json({ ok: true, ...(points ? { points } : {}) });
 	} catch (error) {
 		console.error("PIT SCOUTING WRITE ERROR:", error);
 		res.status(500).json({ error: error.message });
 	}
+});
+
+/* Points game: earn points by scouting, bet them on upcoming matches (see bets.js).
+   If the points database can't be opened, the rest of the site works as normal. */
+let bets = null;
+try {
+	bets = createBets({ store: openPointsStore(process.env.POINTS_DB_FILE ?? new URL("./data/points.db", import.meta.url)), tba, statbotics });
+	bets.register(app);
+	bets.startSettling();
+} catch (error) {
+	console.error("Points game unavailable (continuing without it):", error.message);
+}
+
+/* The made-up test event, if turned on (BETS_FAKE_EVENT=1): pages add it to their event dropdown. */
+app.get("/api/fake-event", (req, res) => {
+	res.json(fakeEventEnabled() ? { key: FAKE_EVENT_KEY, name: "Fake test event" } : null);
 });
 
 app.get("/api/statbotics/team-event/:team/:event", async (req, res) => {

@@ -324,10 +324,10 @@ pitScoutingForm.addEventListener("submit", async event => {
 			throw new TypeError("Device is offline");
 		}
 
-		await submitToServer(submission);
+		const saved = await submitToServer(submission);
 
 		pitScoutingForm.reset();
-		ScoutUI.toast("success", "Submitted!", `Pit report for team ${team} is saved in Google Sheets.`);
+		ScoutUI.toast("success", "Submitted!", `Pit report for team ${team} is saved in Google Sheets.${saved?.points ? ` +${saved.points.earned} points (you have ${saved.points.balance}).` : ""}`);
 		await loadForm();
 	} catch (error) {
 		if (error instanceof TypeError) {
