@@ -268,6 +268,9 @@ export function createBets({ store, tba, statbotics }) {
 		}
 	}
 
+	/* The test-mode buttons (free points, reset points, run a match) need the admin key from .env. */
+	const isAdmin = req => Boolean(process.env.BETS_ADMIN_KEY) && sameSecret(req.get("x-admin-key"), process.env.BETS_ADMIN_KEY);
+
 	function register(app) {
 		const needUser = (req, res) => {
 			const user = betsUser(req, res);
@@ -294,9 +297,16 @@ export function createBets({ store, tba, statbotics }) {
 			});
 		});
 
+		/* Does this admin key work? (The page unlocks its test buttons with it.) */
+		app.post("/api/bets/admin/check", (req, res) => {
+			if (!isAdmin(req)) return res.status(403).json({ error: "That isn't the admin key." });
+			res.json({ ok: true });
+		});
+
 		/* Test event only: top up with free points so betting can be tried out. */
 		app.post("/api/bets/fake/grant", (req, res) => {
 			if (!fakeEventEnabled()) return res.status(404).json({ error: "Not available." });
+			if (!isAdmin(req)) return res.status(403).json({ error: "Admin key needed." });
 			const user = needUser(req, res);
 			if (!user) return;
 
@@ -307,6 +317,7 @@ export function createBets({ store, tba, statbotics }) {
 		/* Test event only: play a match right now instead of waiting for its time, and pay out its bets. */
 		app.post("/api/bets/fake/play", async (req, res) => {
 			if (!fakeEventEnabled()) return res.status(404).json({ error: "Not available." });
+			if (!isAdmin(req)) return res.status(403).json({ error: "Admin key needed." });
 			if (!needUser(req, res)) return;
 
 			const number = Number(/^2026fake_qm(\d+)$/.exec(String(req.body?.matchKey ?? ""))?.[1]);
@@ -321,6 +332,7 @@ export function createBets({ store, tba, statbotics }) {
 		   test event. The matches are left exactly as they are. */
 		app.post("/api/bets/fake/reset-points", (req, res) => {
 			if (!fakeEventEnabled()) return res.status(404).json({ error: "Not available." });
+			if (!isAdmin(req)) return res.status(403).json({ error: "Admin key needed." });
 			const user = needUser(req, res);
 			if (!user) return;
 

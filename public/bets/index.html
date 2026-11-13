@@ -28,6 +28,7 @@
           <span class="balance-label">Your points</span>
           <strong id="balance">–</strong>
           <small id="playerName"></small>
+          <button id="adminUnlock" class="grant-points" type="button" hidden>Admin</button>
           <button id="grantPoints" class="grant-points" type="button" hidden>+20 free test points</button>
           <button id="resetPoints" class="grant-points" type="button" hidden>Reset my points</button>
           <form id="nameForm" class="name-form" hidden>
@@ -45,6 +46,7 @@
       <section class="controls bets-controls">
         <label for="eventKey">Event
           <select id="eventKey">
+            <option value="2026fake" data-keep>Fake test event (for testing)</option>
             <option value="2026onham">McMaster</option>
             <option value="2026onosh">Durham College</option>
             <option value="2026onwat">Waterloo</option>
@@ -52,7 +54,7 @@
             <option value="2026oncmp1">Provincials Science Division</option>
             <option value="2026ontor">Humber</option>
             <option value="2026onwin">Windsor</option>
-            <option value="2026onsi" selected>Southwest International</option>
+            <option value="2026onsi">Southwest International</option>
             <option value="2026test">Test Event</option>
           </select>
         </label>

@@ -25,8 +25,17 @@ const percent = value => `${Math.round(value * 100)}%`;
 const plural = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
 const side = pick => pick === "red" ? "Red" : "Blue";
 
-async function api(url, options) {
-	const response = await fetch(url, options);
+/* The admin key (typed once per tab) unlocks the test-only buttons. The server checks it on every use. */
+let adminKey = "";
+try {
+	adminKey = sessionStorage.getItem("bets-admin-key") ?? "";
+} catch {
+	/* Private mode: ask again next time. */
+}
+let adminUnlocked = false;
+
+async function api(url, options = {}) {
+	const response = await fetch(url, adminKey ? { ...options, headers: { ...options.headers, "X-Admin-Key": adminKey } } : options);
 	const data = await response.json().catch(() => ({}));
 	if (!response.ok) {
 		const error = new Error(data.error || "Something went wrong.");
@@ -45,16 +54,43 @@ function when(milliseconds) {
 }
 
 /* The made-up test event (BETS_FAKE_EVENT=1): an extra choice in the dropdown and a free-points button. */
-function showFakeEvent(fake) {
-	const grant = document.getElementById("grantPoints");
-	grant.hidden = !fake;
-	document.getElementById("resetPoints").hidden = !fake;
-	if (!fake || [...eventSelect.options].some(option => option.value === fake.key)) return;
+let pickedFakeEvent = false;
 
-	const option = new Option(`${fake.name} (for testing)`, fake.key);
-	option.setAttribute("data-keep", "");
-	eventSelect.add(option, 0);
-	eventSelect.value = fake.key;
+function showFakeEvent(fake) {
+	document.getElementById("adminUnlock").hidden = !fake || adminUnlocked;
+	document.getElementById("grantPoints").hidden = !fake || !adminUnlocked;
+	document.getElementById("resetPoints").hidden = !fake || !adminUnlocked;
+	const option = [...eventSelect.options].find(item => item.value === "2026fake");
+
+	/* Test mode is off on the server: take the choice away again (and don't leave it selected). */
+	if (!fake) {
+		if (eventSelect.value === "2026fake") eventSelect.selectedIndex = 0;
+		option?.remove();
+		return;
+	}
+
+	/* The first time, start on the test event. After that, leave the choice alone. */
+	if (!pickedFakeEvent) {
+		pickedFakeEvent = true;
+		eventSelect.value = "2026fake";
+	}
+}
+
+/* Checks the saved key with the server; the test buttons only appear if it works. */
+async function checkAdmin() {
+	if (!adminKey) {
+		adminUnlocked = false;
+		return;
+	}
+
+	try {
+		await api("/api/bets/admin/check", { method: "POST" });
+		adminUnlocked = true;
+	} catch {
+		adminUnlocked = false;
+		adminKey = "";
+		try { sessionStorage.removeItem("bets-admin-key"); } catch { /* ignore */ }
+	}
 }
 
 /* ----- balance, history, leaderboard ----- */
@@ -76,6 +112,7 @@ async function loadAccount() {
 	document.getElementById("earnMatch").textContent = me.rules.matchReport;
 	document.getElementById("earnPit").textContent = me.rules.pitReport;
 	showBalance(me.user.points);
+	await checkAdmin();
 	showFakeEvent(me.fakeEvent);
 
 	ledgerElement.innerHTML = me.ledger.length
@@ -165,7 +202,7 @@ function matchCard(match) {
         </div>
         <div class="picks">${allianceButton(match, "red")}${allianceButton(match, "blue")}</div>
         ${action}
-        ${eventSelect.value === "2026fake" ? `<button type="button" class="play-now" data-key="${escapeHtml(match.key)}">▶ Run this match now (test only)</button>` : ""}
+        ${eventSelect.value === "2026fake" && adminUnlocked ? `<button type="button" class="play-now" data-key="${escapeHtml(match.key)}">▶ Run this match now (test only)</button>` : ""}
         <p class="bet-error" role="alert" hidden></p>
       </article>`;
 }
@@ -264,6 +301,21 @@ async function refresh() {
 	await Promise.all([loadMyBets(), loadLeaderboard()]);
 	await loadMatches();
 }
+
+document.getElementById("adminUnlock").addEventListener("click", async () => {
+	const key = prompt("Admin key:");
+	if (!key) return;
+
+	adminKey = key.trim();
+	await checkAdmin();
+	if (!adminUnlocked) {
+		alert("That isn't the admin key.");
+		return;
+	}
+
+	try { sessionStorage.setItem("bets-admin-key", adminKey); } catch { /* ignore */ }
+	await refresh();
+});
 
 document.getElementById("grantPoints").addEventListener("click", async () => {
 	await api("/api/bets/fake/grant", { method: "POST" });
