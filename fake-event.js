@@ -41,12 +41,16 @@ const TEAMS = {
 };
 
 export let strengthSource = "made-up numbers (no saved Statbotics season download found)";
+let seasonLoaded = false;
 
-try {
-	const saved = JSON.parse(readFileSync(new URL(`./data/statbotics-team-years-${new Date().getFullYear()}.json`, import.meta.url), "utf8"));
+/* Switches the teams to their real season EPA. It only ever happens once: after that the numbers
+   are frozen, so a match's score can't change after bets were settled on it. Returns how many
+   teams got a real number. */
+export function applySeasonRows(rows) {
+	if (seasonLoaded) return 0;
 	let found = 0;
 
-	for (const row of saved.rows ?? []) {
+	for (const row of rows ?? []) {
 		const epa = Number(row.epa?.total_points?.mean ?? row.epa?.total_points);
 		if (row.team in TEAMS && Number.isFinite(epa) && epa > 0) {
 			TEAMS[row.team] = Math.round(epa * 10) / 10;
@@ -54,12 +58,25 @@ try {
 		}
 	}
 
-	if (found) strengthSource = `season EPA for ${found} of ${Object.keys(TEAMS).length} teams`;
-} catch {
-	/* No saved download yet: the made-up numbers are used. */
+	if (found) {
+		seasonLoaded = true;
+		strengthSource = `season EPA for ${found} of ${Object.keys(TEAMS).length} teams`;
+	}
+	return found;
 }
+
+/* Has the real season EPA been loaded (rather than the made-up fallback)? */
+export const usingSeasonStrengths = () => seasonLoaded;
+
+try {
+	const saved = JSON.parse(readFileSync(new URL(`./data/statbotics-team-years-${new Date().getFullYear()}.json`, import.meta.url), "utf8"));
+	applySeasonRows(saved.rows);
+} catch {
+	/* No saved download yet: the server fetches the season data at startup (see server.js). */
+}
+
 const TEAM_NUMBERS = Object.keys(TEAMS).map(Number);
-const AVERAGE_STRENGTH = TEAM_NUMBERS.reduce((sum, team) => sum + TEAMS[team], 0) / TEAM_NUMBERS.length;
+const averageStrength = () => TEAM_NUMBERS.reduce((sum, team) => sum + TEAMS[team], 0) / TEAM_NUMBERS.length;
 
 /* Small repeatable random numbers, so a match always has the same teams and score. */
 function random(seed) {
@@ -153,7 +170,7 @@ export function fakeEventResponse(path) {
 		return {
 			oprs: Object.fromEntries(TEAM_NUMBERS.map(team => [`frc${team}`, TEAMS[team]])),
 			dprs: Object.fromEntries(TEAM_NUMBERS.map(team => [`frc${team}`, 0])),
-			ccwms: Object.fromEntries(TEAM_NUMBERS.map(team => [`frc${team}`, TEAMS[team] - AVERAGE_STRENGTH]))
+			ccwms: Object.fromEntries(TEAM_NUMBERS.map(team => [`frc${team}`, TEAMS[team] - averageStrength()]))
 		};
 	}
 	if (rest === "/rankings") return { rankings: rankings() };
