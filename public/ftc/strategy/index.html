@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FTC Strategy Board | MakeShift Scouting</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400..700&display=swap">
+    <link rel="stylesheet" href="/theme.css">
+    <link rel="stylesheet" href="/ftc/ftc.css">
+    <link rel="stylesheet" href="/ftc/ftc-scout.css">
+    <link rel="stylesheet" href="/ftc/strategy/ftc-strategy.css">
+  </head>
+  <body>
+    <div class="top-bar" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+    <header>
+      <div class="header-content">
+        <a class="brand" href="/"><img src="/images/makeshift-logo-wide.png" alt="MakeShift 4039" width="707" height="78"></a>
+        <div class="eyebrow">FTC Strategy</div>
+        <h1>FTC Strategy<br>Board</h1>
+        <p class="header-description">Our scouting reports and every public FTC data source in one place: preview a match, compare the field and read up on any team.</p>
+        <div class="header-links">
+          <a class="back-link" href="/ftc/">← FTC Data Hub</a>
+          <a class="back-link" href="/ftc/scouting/">Match scouting →</a>
+          <a class="back-link" href="/ftc/pit/">Pit scouting →</a>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="controls strategy-controls">
+        <label for="seasonSelect">Season<select id="seasonSelect"></select></label>
+        <label for="eventSelect">Event<select id="eventSelect"><option>Loading events…</option></select></label>
+        <label for="customEvent">Event code not listed?<input id="customEvent" type="text" maxlength="20" placeholder="e.g. CAONBOQ" autocomplete="off"></label>
+        <button id="loadButton" type="button">Load event</button>
+      </section>
+      <p id="status" class="status" aria-live="polite"></p>
+
+      <h2 class="section-title">Match preview</h2>
+      <section class="controls preview-controls">
+        <label for="matchSelect">Scheduled match<select id="matchSelect"><option value="">Load an event first</option></select></label>
+        <div class="preview-teams">
+          <label>Red<span><input id="r1" type="number" inputmode="numeric" placeholder="Team"><input id="r2" type="number" inputmode="numeric" placeholder="Team"></span></label>
+          <label>Blue<span><input id="b1" type="number" inputmode="numeric" placeholder="Team"><input id="b2" type="number" inputmode="numeric" placeholder="Team"></span></label>
+        </div>
+        <button id="previewButton" type="button">Preview</button>
+      </section>
+      <section id="preview"><div class="empty-state">Pick a scheduled match, or type four teams to see how any alliances would match up.</div></section>
+
+      <h2 class="section-title">Event board</h2>
+      <section class="board-filters" id="filters">
+        <label class="board-filter"><input type="checkbox" data-filter="scouted"> Scouted only</label>
+        <label class="board-filter"><input type="checkbox" data-filter="tipper"> Tips the hive</label>
+        <label class="board-filter"><input type="checkbox" data-filter="blocker"> Plays blocker</label>
+        <label class="board-filter"><input type="checkbox" data-filter="removes"> Removes pollen</label>
+        <label class="board-filter"><input type="checkbox" data-filter="park"> Parks at the end</label>
+        <label class="board-filter"><input type="checkbox" data-filter="second"> Can start on the second side</label>
+        <label class="board-filter"><input type="checkbox" data-filter="reliable"> Rarely breaks down</label>
+      </section>
+      <div id="board" class="board-wrap"><div class="empty-state">Load an event to see every team.</div></div>
+
+      <div id="teamDetail"></div>
+
+      <h2 class="section-title">Reports and data sources</h2>
+      <section class="source-panel">
+        <div id="counts" class="source-counts"></div>
+        <div class="source-actions">
+          <a id="exportMatch" class="back-link" href="#">Download match reports (CSV)</a>
+          <a id="exportPit" class="back-link" href="#">Download pit reports (CSV)</a>
+        </div>
+        <ul id="sources" class="source-list"></ul>
+      </section>
+    </main>
+
+    <script src="/ftc/ftc-common.js"></script>
+    <script src="/ftc/ftc-scout.js"></script>
+    <script src="/ftc/strategy/ftc-strategy.js"></script>
+  </body>
+</html>

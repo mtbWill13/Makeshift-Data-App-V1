@@ -1,0 +1,388 @@
+/* FTC scouting forms: tap-friendly counters, radio buttons and the result message.
+   Colours and components come from /theme.css. */
+
+.scout-shell {
+	display: grid;
+	gap: 20px;
+}
+
+.setup-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+	gap: 16px;
+	align-items: end;
+}
+
+.setup-grid label,
+.field label {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.setup-note {
+	margin: 0;
+	color: var(--text-faint);
+	font-size: 0.85rem;
+}
+
+.scout-section {
+	padding: 20px;
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	background: var(--surface);
+}
+
+.scout-section > h2 {
+	margin: 0 0 14px;
+	font-size: 0.85rem;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+}
+
+.field-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 14px;
+}
+
+.field {
+	min-width: 0;
+}
+
+.field.wide {
+	grid-column: 1 / -1;
+}
+
+.field[hidden],
+.scout-section[hidden] {
+	display: none;
+}
+
+fieldset.field {
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+
+fieldset.field > legend,
+.field > .field-label {
+	margin-bottom: 8px;
+	padding: 0;
+	color: var(--text-muted);
+	font-size: 0.75rem;
+	font-weight: 600;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
+.field-hint {
+	color: var(--text-faint);
+	font-size: 0.75rem;
+	font-weight: 400;
+	letter-spacing: normal;
+	text-transform: none;
+}
+
+/* ----- + / − counters ----- */
+
+.count-tile {
+	display: grid;
+	gap: 8px;
+	padding: 12px;
+	border: 1px solid var(--border);
+	border-radius: var(--radius-sm);
+	background: var(--surface-2);
+}
+
+.count-tile.scored {
+	border-color: color-mix(in srgb, var(--ms-green) 40%, var(--border));
+}
+
+.count-label {
+	color: var(--text-muted);
+	font-size: 0.82rem;
+	font-weight: 600;
+	line-height: 1.25;
+}
+
+.count-controls {
+	display: grid;
+	grid-template-columns: 52px minmax(0, 1fr) 52px;
+	gap: 8px;
+}
+
+.count-controls input {
+	min-height: 52px;
+	padding: 0 4px;
+	font-size: 1.5rem;
+	font-weight: 700;
+	text-align: center;
+	font-variant-numeric: tabular-nums;
+}
+
+.count-button {
+	min-height: 52px;
+	padding: 0;
+	font-size: 1.4rem;
+	line-height: 1;
+}
+
+.count-button.minus {
+	background: var(--surface-3);
+	border-color: var(--border-strong);
+	color: var(--text);
+}
+
+/* ----- radio buttons and tick chips ----- */
+
+.choice-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.choice {
+	position: relative;
+	flex: 1 1 0;
+	min-width: 84px;
+	letter-spacing: normal;
+	text-transform: none;
+	cursor: pointer;
+}
+
+.choice input {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	min-height: 0;
+	margin: 0;
+	opacity: 0;
+	cursor: pointer;
+}
+
+.choice > span {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 1px;
+	min-height: 48px;
+	padding: 6px 12px;
+	border: 1px solid var(--border-strong);
+	border-radius: var(--radius-sm);
+	background: var(--field);
+	color: var(--text);
+	font-size: 0.95rem;
+	font-weight: 600;
+	line-height: 1.2;
+	text-align: center;
+	transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.choice > span small {
+	color: var(--text-muted);
+	font-size: 0.72rem;
+	font-weight: 500;
+}
+
+.choice:hover > span {
+	border-color: rgba(255, 255, 255, 0.3);
+}
+
+.choice input:checked + span {
+	border-color: var(--tone, var(--ms-blue));
+	background: var(--tone, var(--ms-blue));
+	color: var(--on-accent);
+}
+
+.choice input:checked + span small {
+	color: var(--on-accent);
+	opacity: 0.8;
+}
+
+.choice input:focus-visible + span {
+	outline: 2px solid var(--text);
+	outline-offset: 2px;
+}
+
+.choice.yes { --tone: var(--ms-green); }
+.choice.no { --tone: var(--ms-red); }
+.choice.red { --tone: var(--ms-red); }
+.choice.blue { --tone: var(--ms-blue); }
+
+.choice.checkbox > span::before {
+	content: "";
+	display: none;
+}
+
+.choice.checkbox input:checked + span {
+	--tone: var(--ms-yellow);
+}
+
+.scale-row .choice {
+	min-width: 52px;
+}
+
+/* ----- the assignment summary bar ----- */
+
+.assignment-bar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px 16px;
+	padding: 12px 16px;
+	border: 1px solid var(--border);
+	border-left: 3px solid var(--ms-blue);
+	border-radius: var(--radius);
+	background: var(--surface-2);
+}
+
+.assignment-bar[hidden] {
+	display: none;
+}
+
+.station-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 8px;
+}
+
+.flag-row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 14px 16px;
+	border: 1px solid var(--border);
+	border-radius: var(--radius-sm);
+	background: var(--surface-2);
+	color: var(--text);
+	font-size: 0.95rem;
+	letter-spacing: normal;
+	text-transform: none;
+	cursor: pointer;
+}
+
+.flag-row input {
+	flex: none;
+	width: 24px;
+	min-height: 24px;
+	height: 24px;
+	accent-color: var(--ms-orange);
+}
+
+.char-count {
+	margin-top: 4px;
+	color: var(--text-faint);
+	font-size: 0.78rem;
+	text-align: right;
+}
+
+.form-actions {
+	display: grid;
+	gap: 10px;
+}
+
+.form-actions button[type="submit"] {
+	min-height: 56px;
+	font-size: 1.05rem;
+}
+
+.queue-note {
+	margin: 0;
+	color: var(--ms-orange);
+	font-size: 0.9rem;
+	font-weight: 600;
+}
+
+.queue-note[hidden] {
+	display: none;
+}
+
+/* ----- the big result message ----- */
+
+.scout-toast {
+	position: fixed;
+	top: 12px;
+	right: 12px;
+	left: 12px;
+	z-index: 60;
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr) auto;
+	align-items: center;
+	gap: 14px;
+	max-width: 640px;
+	margin: 0 auto;
+	padding: 16px 18px;
+	border: 2px solid var(--tone);
+	border-radius: var(--radius);
+	background: color-mix(in srgb, var(--tone) 22%, var(--surface));
+	box-shadow: 0 18px 40px rgba(0, 0, 0, 0.6);
+	color: var(--text);
+}
+
+.scout-toast[hidden] { display: none; }
+.scout-toast.success { --tone: var(--ms-green); }
+.scout-toast.warn { --tone: var(--ms-orange); }
+.scout-toast.error { --tone: var(--ms-red); }
+
+.scout-toast .toast-icon {
+	display: grid;
+	place-items: center;
+	width: 40px;
+	height: 40px;
+	border-radius: 50%;
+	background: var(--tone);
+	color: var(--on-accent);
+	font-size: 1.3rem;
+	font-weight: 800;
+}
+
+.scout-toast strong {
+	display: block;
+	font-size: 1.1rem;
+	line-height: 1.25;
+}
+
+.scout-toast p {
+	margin: 2px 0 0;
+	color: var(--text-muted);
+	font-size: 0.9rem;
+	line-height: 1.4;
+}
+
+.scout-toast button {
+	min-height: 40px;
+	padding: 0 14px;
+	background: transparent;
+	border-color: var(--border-strong);
+	color: var(--text);
+}
+
+@media (max-width: 560px) {
+	.field-grid {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.count-controls {
+		grid-template-columns: 48px minmax(0, 1fr) 48px;
+	}
+
+	.field-grid.counts {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+
+/* What the manual says about a section, so scouts don't have to remember the rules. */
+.section-help {
+	margin: -6px 0 14px;
+	padding: 10px 12px;
+	border-left: 3px solid var(--ms-yellow);
+	border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+	background: var(--surface-2);
+	color: var(--text-muted);
+	font-size: 0.85rem;
+	line-height: 1.45;
+}

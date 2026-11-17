@@ -76,10 +76,22 @@ function matchLabel(match) {
 
 const LEVEL_ORDER = { Quals: 0, Semis: 1, DoubleElim: 2, Finals: 3 };
 
+/* FTCScout's full score breakdown for one alliance: every number and yes/no the game scores
+   (the field names change every season, so they are passed through as they come). */
+const SCORE_META = new Set(["season", "eventCode", "matchId", "alliance"]);
+
+function scoreDetails(scores) {
+	if (!scores) return {};
+	return Object.fromEntries(Object.entries(scores).filter(([key, value]) =>
+		!SCORE_META.has(key) && (typeof value === "number" || typeof value === "boolean")
+	));
+}
+
 function matchSummary(match) {
 	const side = colour => {
 		const scores = match.scores?.[colour.toLowerCase()];
 		return {
+			details: scoreDetails(scores),
 			teams: (match.teams ?? [])
 				.filter(team => team.alliance === colour)
 				.sort((a, b) => String(a.station).localeCompare(String(b.station)))
@@ -292,4 +304,6 @@ export function registerFtcRoutes(app, { cachedFetcher, mapLimit }) {
 			res.status(502).json({ error: error.message });
 		}
 	});
+
+	return { ftcscout, teamInfo, eventInfo, matchSummary, eventSummary, validSeason, validCode };
 }

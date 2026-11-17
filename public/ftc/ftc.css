@@ -138,3 +138,6 @@
 		grid-column: 1 / -1;
 	}
 }
+
+/* The strategy board tile on the FTC hub */
+.nav-strategy { --accent: var(--ms-yellow); }

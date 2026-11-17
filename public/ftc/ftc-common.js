@@ -6,7 +6,7 @@
 /* Seasons are named by their starting year on FTCScout (2025 = 2025–26 DECODE).
    2025 is the newest season with results; add new seasons to the top. */
 const FTC_SEASONS = [
-	{ year: "2026", label: "2026–27 (upcoming)" },
+	{ year: "2026", label: "2026–27 BIOBUZZ" },
 	{ year: "2025", label: "2025–26 DECODE" },
 	{ year: "2024", label: "2024–25 INTO THE DEEP" },
 	{ year: "2023", label: "2023–24 CENTERSTAGE" }
