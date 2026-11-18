@@ -34,8 +34,8 @@
               <option value="2026oncmp2">Provincials Technology Division</option>
               <option value="2026ontor">Humber</option>
               <option value="2026onwin">Windsor</option>
-              <option value="2026onsi">Southwest International</option>
-              <option value="2026test" selected>Test Event</option>
+              <option value="2026onsi" selected>Southwest International</option>
+              <option value="2026test">Test Event</option>
             </select>
           </div>
         </div>
@@ -58,6 +58,7 @@
         </section>
 
         <p id="formStatus" class="status" aria-live="polite">Choose an event to load its scouting form.</p>
+        <p id="schemaNote" class="queue-note" hidden>The sheet's questions changed. <button id="updateQuestions" type="button">Update questions</button></p>
         <p id="queueNote" class="queue-note" hidden></p>
         <form id="scoutingForm" hidden novalidate>
           <div id="formFields" class="form-fields"></div>

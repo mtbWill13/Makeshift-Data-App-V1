@@ -3,6 +3,8 @@ const scoutingForm = document.getElementById("scoutingForm");
 const formFields = document.getElementById("formFields");
 const formStatus = document.getElementById("formStatus");
 const queueNote = document.getElementById("queueNote");
+const schemaNote = document.getElementById("schemaNote");
+const updateQuestions = document.getElementById("updateQuestions");
 const submitButton = document.getElementById("submitButton");
 const messedUp = document.getElementById("messedUp");
 const startingMatch = document.getElementById("startingMatch");
@@ -26,6 +28,7 @@ let eventMatches = [];
 let eventTeamNumbers = new Set();   // teams known to be at this event (empty = unknown)
 let qualMax = DEFAULT_QUAL_MAX;
 let formHeaders = [];
+let formProblems = [];   // mistakes in the sheet's "Field Definitions" tab, shown under the form
 
 ScoutOffline.registerServiceWorker();
 ScoutUI.bindScoreButtons(formFields);
@@ -324,12 +327,37 @@ function columnIndexToLetter(index) {
 	return result;
 }
 
+/* A question with its own button layout. The options come from the sheet's Field Definitions row
+   when it has one (so changing them there changes the buttons), otherwise from `options` here.
+   When the first option is a "nothing happened" answer (no / x / none) it is a big button and
+   starts selected; everything else starts unanswered. */
+function bespokeChoice(field, { name, label, options }) {
+	const fromSheet = field.def?.options?.length ? field.def.options : null;
+	const chosen = (fromSheet ?? options).map(option => ({ ...options.find(item => item.value === option.value), ...option }));
+	const noneFirst = /^(no|none|x)$/i.test(chosen[0]?.value ?? "");
+	if (noneFirst) chosen[0] = { ...chosen[0], big: true };
+
+	return ScoutUI.radioGroup({
+		name, label, wide: true,
+		value: noneFirst ? chosen[0].value : "",
+		perRow: !noneFirst && chosen.length === 3 ? 3 : 0,
+		options: chosen
+	});
+}
+
 function fieldMarkup(field) {
 	const { header, index, isBoolean } = field;
 	const safeHeader = escapeHtml(header);
 	const name = `column-${index}`;
 	const id = `field-${columnIndexToLetter(index)}`;
 	const isScoutName = isScoutNameField(header);
+
+	/* A question the sheet defines (type, limits, options): drawn from that. The few with bespoke
+	   controls (station, match, team, scout, climb, defence rating, no show, start location) keep them;
+	   their limits are still enforced by the server. */
+	if (field.def && !/^(driver station|match number|team number|scout(er)? name|end ?game climb|no show|starting (location|position).*)$|^defen[cs]e rating|timestamp/i.test(header)) {
+		return ScoutUI.definedField({ def: field.def, name, id, label: header, defaultNo: true });
+	}
 
 	/* Which robot you're watching: six colour-coded buttons that also show the team there. */
 	if (/^driver station$/i.test(header)) {
@@ -338,13 +366,10 @@ function fieldMarkup(field) {
 
 	/* Climb is a level, not a yes/no. The sheet and the stats read "level 1/2/3". */
 	if (/^end ?game climb$/i.test(header)) {
-		return ScoutUI.radioGroup({
-			name,
-			label: header,
-			value: "no",
-			wide: true,
+		return bespokeChoice(field, {
+			name, label: header,
 			options: [
-				{ value: "no", label: "No climb", big: true },
+				{ value: "no", label: "No climb" },
 				{ value: "level 1", label: "Level 1" },
 				{ value: "level 2", label: "Level 2" },
 				{ value: "level 3", label: "Level 3" }
@@ -354,13 +379,10 @@ function fieldMarkup(field) {
 
 	/* 1 (incredible) to 5 (poor), or didn't play defense: stored the way the sheet's stats read it. */
 	if (/^defen[cs]e rating/i.test(header)) {
-		return ScoutUI.radioGroup({
-			name,
-			label: header,
-			value: "x",
-			wide: true,
+		return bespokeChoice(field, {
+			name, label: header,
 			options: [
-				{ value: "x", label: "None", sub: "No defense", big: true },
+				{ value: "x", label: "None", sub: "No defense" },
 				{ value: "1", label: "1", sub: "Incredible" },
 				{ value: "2", label: "2" },
 				{ value: "3", label: "3" },
@@ -386,11 +408,8 @@ function fieldMarkup(field) {
 
 	/* Where the robot starts, seen from the scouting seat. */
 	if (/^starting (location|position)/i.test(header)) {
-		return ScoutUI.radioGroup({
-			name,
-			label: header,
-			wide: true,
-			perRow: 3,
+		return bespokeChoice(field, {
+			name, label: header,
 			options: [
 				{ value: "Left", label: "Left" },
 				{ value: "Centre", label: "Centre" },
@@ -485,6 +504,29 @@ async function fetchJson(url, options) {
    the older load must not draw its fields over the newer event's form. */
 let formLoadCount = 0;
 
+/* The sheet can change while a form is open (a question renamed, a limit changed). Every 30 seconds,
+   and when the tab is looked at again, the questions are re-read; a difference offers an update. */
+let schemaSignature = "";
+const signatureOf = schema => JSON.stringify([schema.headers, schema.fields, schema.definitions]);
+
+async function checkSchemaChanged() {
+	if (document.hidden || scoutingForm.hidden || !schemaSignature || !navigator.onLine) return;
+
+	try {
+		const fresh = await fetchJson(`/api/scouting/${eventKey.value}/schema`);
+		if (signatureOf(fresh) !== schemaSignature) schemaNote.hidden = false;
+	} catch {
+		/* Offline or a hiccup: try again next time. */
+	}
+}
+
+setInterval(checkSchemaChanged, 30 * 1000);
+window.addEventListener("focus", checkSchemaChanged);
+updateQuestions.addEventListener("click", () => {
+	schemaNote.hidden = true;
+	loadForm();
+});
+
 async function loadForm() {
 	const thisLoad = ++formLoadCount;
 	scoutingForm.hidden = true;
@@ -492,16 +534,19 @@ async function loadForm() {
 
 	try {
 		await Promise.all([loadMatchSchedule(), loadEventTeams()]);
-		const { headers, booleanColumnIndexes = [], fields } = await fetchJson(`/api/scouting/${eventKey.value}/schema`);
+		const schema = await fetchJson(`/api/scouting/${eventKey.value}/schema`);
+		const { headers, booleanColumnIndexes = [], fields, definitions = [], definitionProblems = [] } = schema;
 		if (thisLoad !== formLoadCount) return;
-		ScoutOffline.saveSchema(FORM_TYPE, eventKey.value, { headers, booleanColumnIndexes, fields });
-		renderForm(headers, booleanColumnIndexes, false, fields);
+		schemaSignature = signatureOf(schema);
+		schemaNote.hidden = true;
+		ScoutOffline.saveSchema(FORM_TYPE, eventKey.value, { headers, booleanColumnIndexes, fields, definitions, definitionProblems });
+		renderForm(headers, booleanColumnIndexes, false, fields, definitions, definitionProblems);
 	} catch (error) {
 		if (thisLoad !== formLoadCount) return;
 		const cached = ScoutOffline.cachedSchema(FORM_TYPE, eventKey.value);
 
 		if (cached) {
-			renderForm(cached.headers, cached.booleanColumnIndexes ?? [], true, cached.fields);
+			renderForm(cached.headers, cached.booleanColumnIndexes ?? [], true, cached.fields, cached.definitions ?? [], cached.definitionProblems ?? []);
 			return;
 		}
 
@@ -513,7 +558,7 @@ async function loadForm() {
 /* `fields` is the list of column positions the server says to show (every
    column of a simple sheet). Without it (an older cached copy), fall back to
    the fixed column letters of the original 39-column sheet. */
-function renderForm(headers, booleanColumnIndexes, offline, fields) {
+function renderForm(headers, booleanColumnIndexes, offline, fields, definitions = [], problems = []) {
 	const selectedColumns = fields
 		? fields.map(index => ({ index })).filter(column => headers[column.index])
 		: SCOUTING_COLUMNS
@@ -526,8 +571,10 @@ function renderForm(headers, booleanColumnIndexes, offline, fields) {
 	const selectedFields = selectedColumns.map(column => ({
 		header: headers[column.index],
 		index: column.index,
-		isBoolean: booleanColumnIndexes.includes(column.index)
+		isBoolean: booleanColumnIndexes.includes(column.index),
+		def: definitions[column.index] ?? null
 	}));
+	formProblems = problems;
 
 	const unavailableColumns = fields ? [] : SCOUTING_COLUMNS.filter(columnLetter => {
 		const index = columnLetterToIndex(columnLetter);
@@ -567,6 +614,8 @@ function renderForm(headers, booleanColumnIndexes, offline, fields) {
 		: unavailableColumns.length
 			? `Ready: ${selectedFields.length} fields loaded. ${unavailableColumns.join(", ")} could not be found in this sheet.`
 			: `Ready: ${selectedFields.length} fields loaded.`;
+
+	if (formProblems.length) formStatus.textContent += ` Check the sheet's Field Definitions tab: ${formProblems.slice(0, 2).join(" ")}`;
 }
 
 /* "No show": only who/when questions stay; the rest go back to their defaults and hide.
@@ -656,11 +705,7 @@ async function syncOfflineQueue() {
 /* The answers from the form: only the sheet's columns, with the "messed up" flag
    added to the comment. */
 function collectAnswers() {
-	const answers = {};
-
-	for (const [key, value] of new FormData(scoutingForm).entries()) {
-		if (key.startsWith("column-")) answers[key] = String(value).trim();
-	}
+	const answers = ScoutUI.readAnswers(scoutingForm, key => key.startsWith("column-"));
 
 	const comments = fieldByHeader(formHeaders, /^comments?$/i);
 	if (messedUp.checked && comments) {

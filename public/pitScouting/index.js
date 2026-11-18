@@ -3,6 +3,8 @@ const pitScoutingForm = document.getElementById("pitScoutingForm");
 const formFields = document.getElementById("formFields");
 const formStatus = document.getElementById("formStatus");
 const queueNote = document.getElementById("queueNote");
+const schemaNote = document.getElementById("schemaNote");
+const updateQuestions = document.getElementById("updateQuestions");
 const submitButton = document.getElementById("submitButton");
 const messedUp = document.getElementById("messedUp");
 const SCOUT_NAME_STORAGE_KEY = "makeshift-scout-name";
@@ -58,11 +60,17 @@ function columnLetterToIndex(columnLetter) {
 /* A header turned into something safe to use as an id. */
 const idFor = header => `field-${header.replace(/[^a-z0-9]+/gi, "-").slice(0, 60)}`;
 
-function fieldMarkup({ header, isBoolean }) {
+function fieldMarkup({ header, isBoolean, def }) {
 	const safeHeader = escapeHtml(header);
 	const name = header;
 	const id = idFor(header);
 	const isScoutName = isScoutNameField(header);
+
+	/* A question the sheet defines (type, limits, options): drawn from that. Team number and
+	   scout name keep their own controls. */
+	if (def && !isTeamNumberField(header) && !isScoutName && !isTimestampField(header)) {
+		return ScoutUI.definedField({ def, name, id, label: header });
+	}
 
 	/* "If strategy requires it, would you play defense?": yes / maybe / no. */
 	if (/would you be open to playing defen[cs]e/i.test(header)) {
@@ -186,6 +194,29 @@ async function loadEventTeams() {
    the older load must not draw its fields over the newer event's form. */
 let formLoadCount = 0;
 
+/* The sheet can change while a form is open. Every 30 seconds, and when the tab is looked at again,
+   the questions are re-read; a difference offers an update. */
+let schemaSignature = "";
+const signatureOf = schema => JSON.stringify([schema.headers, schema.fields, schema.definitions]);
+
+async function checkSchemaChanged() {
+	if (document.hidden || pitScoutingForm.hidden || !schemaSignature || !navigator.onLine) return;
+
+	try {
+		const fresh = await fetchJson(`/api/pitscouting/${eventKey.value}/schema`);
+		if (signatureOf(fresh) !== schemaSignature) schemaNote.hidden = false;
+	} catch {
+		/* Offline or a hiccup: try again next time. */
+	}
+}
+
+setInterval(checkSchemaChanged, 30 * 1000);
+window.addEventListener("focus", checkSchemaChanged);
+updateQuestions.addEventListener("click", () => {
+	schemaNote.hidden = true;
+	loadForm();
+});
+
 async function loadForm() {
 	const thisLoad = ++formLoadCount;
 	pitScoutingForm.hidden = true;
@@ -193,16 +224,19 @@ async function loadForm() {
 
 	try {
 		loadEventTeams();
-		const { headers, fields, booleanColumnIndexes = [] } = await fetchJson(`/api/pitscouting/${eventKey.value}/schema`);
+		const schema = await fetchJson(`/api/pitscouting/${eventKey.value}/schema`);
+		const { headers, fields, booleanColumnIndexes = [], definitions = [], definitionProblems = [] } = schema;
 		if (thisLoad !== formLoadCount) return;
-		ScoutOffline.saveSchema(FORM_TYPE, eventKey.value, { headers, fields, booleanColumnIndexes });
-		renderForm(headers, false, fields, booleanColumnIndexes);
+		schemaSignature = signatureOf(schema);
+		schemaNote.hidden = true;
+		ScoutOffline.saveSchema(FORM_TYPE, eventKey.value, { headers, fields, booleanColumnIndexes, definitions, definitionProblems });
+		renderForm(headers, false, fields, booleanColumnIndexes, definitions, definitionProblems);
 	} catch (error) {
 		if (thisLoad !== formLoadCount) return;
 		const cached = ScoutOffline.cachedSchema(FORM_TYPE, eventKey.value);
 
 		if (cached) {
-			renderForm(cached.headers, true, cached.fields, cached.booleanColumnIndexes ?? []);
+			renderForm(cached.headers, true, cached.fields, cached.booleanColumnIndexes ?? [], cached.definitions ?? [], cached.definitionProblems ?? []);
 			return;
 		}
 
@@ -214,7 +248,7 @@ async function loadForm() {
 /* `fields` is the list of column positions the server says to show (every
    column of a simple sheet). Without it (an older cached copy), fall back to
    the fixed column letters of the original sheet. */
-function renderForm(headers, offline, fields, booleanColumnIndexes = []) {
+function renderForm(headers, offline, fields, booleanColumnIndexes = [], definitions = [], problems = []) {
 	const selectedColumns = fields
 		? fields.map(index => ({ index })).filter(column => headers[column.index])
 		: PIT_SCOUTING_COLUMNS
@@ -226,7 +260,8 @@ function renderForm(headers, offline, fields, booleanColumnIndexes = []) {
 
 	const selectedFields = selectedColumns.map(column => ({
 		header: headers[column.index],
-		isBoolean: booleanColumnIndexes.includes(column.index)
+		isBoolean: booleanColumnIndexes.includes(column.index),
+		def: definitions[column.index] ?? null
 	}));
 
 	const unavailableColumns = fields ? [] : PIT_SCOUTING_COLUMNS.filter(columnLetter => {
@@ -247,15 +282,14 @@ function renderForm(headers, offline, fields, booleanColumnIndexes = []) {
 		: unavailableColumns.length
 			? `Ready: ${selectedFields.length} configured fields loaded. ${unavailableColumns.join(", ")} could not be found in this sheet.`
 			: `Ready: ${selectedFields.length} configured fields loaded.`;
+
+	if (problems.length) formStatus.textContent += ` Check the sheet's Field Definitions tab: ${problems.slice(0, 2).join(" ")}`;
 }
 
 /* Saves the report on screen on this device (if there is one), then opens the transfer
    page, which makes the QR codes by itself. */
 document.getElementById("transferButton").addEventListener("click", async () => {
-	const answers = {};
-	for (const [key, value] of new FormData(pitScoutingForm).entries()) {
-		answers[key] = String(value).trim();
-	}
+	const answers = ScoutUI.readAnswers(pitScoutingForm);
 
 	const teamKey = Object.keys(answers).find(isTeamNumberField);
 
@@ -286,10 +320,7 @@ pitScoutingForm.addEventListener("submit", async event => {
 		return;
 	}
 
-	const answers = {};
-	for (const [key, value] of new FormData(pitScoutingForm).entries()) {
-		answers[key] = String(value).trim();
-	}
+	const answers = ScoutUI.readAnswers(pitScoutingForm);
 
 	const scouter = Object.keys(answers).find(isScoutNameField);
 	if (scouter && answers[scouter]) {

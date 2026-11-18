@@ -12,6 +12,7 @@ import { google } from "googleapis";
 import { startBehindTheBumpers, episodesForTeam } from "./behind-the-bumpers.js";
 import { createSupabaseMirror } from "./supabase-mirror.js";
 import { createBets } from "./bets.js";
+import { DEFINITION_TAB, DEFINITION_TABS, applyRoles, checkReport, combineDefinitions, definitionsForHeaders, parseDefinitions } from "./field-definitions.js";
 import { fakeEventEnabled, fakeEventResponse, isFakeEventPath, FAKE_EVENT_KEY } from "./fake-event.js";
 import { openPointsStore } from "./points-store.js";
 const app = express();
@@ -438,6 +439,25 @@ async function sheetTab(spreadsheetId, kind) {
 	if (titles.includes(tabs.simple)) return { title: tabs.simple, simple: true, kind };
 	if (titles.includes(tabs.legacy)) return { title: tabs.legacy, simple: false, kind };
 	return null;
+}
+
+/* The sheet's "Match Field Definitions" and "Pit Field Definitions" tabs (see field-definitions.js),
+   or an empty set if it has none. Read fresh so an edit to a tab shows up in the forms straight away. */
+const fieldDefinitions = cachedFetcher(5 * 1000, async spreadsheetId => {
+	const titles = await sheetTabTitles(spreadsheetId);
+	const read = async title => titles.includes(title)
+		? (await sheets.spreadsheets.values.get({ spreadsheetId, range: `'${title}'!A:I` })).data.values ?? []
+		: null;
+
+	const [match, pit, combined] = await Promise.all([read(DEFINITION_TABS.match), read(DEFINITION_TABS.pit), read(DEFINITION_TAB)]);
+	return combineDefinitions({ match, pit, combined });
+}, { staleOk: false });
+
+/* Rows for the stats pages, with the headings they expect added from the columns the sheet gave a role. */
+async function rowsWithRoles(values, spreadsheetId, kind, normalize) {
+	const rows = rowsToObjects(values, normalize);
+	const definitions = await fieldDefinitions(spreadsheetId).catch(() => null);
+	return definitions ? applyRoles(rows, (values?.[0] ?? []).map(header => String(header).trim()), definitions[kind]) : rows;
 }
 
 function letterToIndex(letter) {
@@ -1530,7 +1550,7 @@ app.get("/api/scouting/:eventKey", async (req, res) => {
 
 		console.log("Google Sheets request succeeded");
 
-		res.json(rowsToObjects(response.data.values, tab.simple ? normalizeSimpleMatchRow : undefined));
+		res.json(await rowsWithRoles(response.data.values, spreadsheetId, "match", tab.simple ? normalizeSimpleMatchRow : undefined));
 
 	} catch (error) {
 		console.error("SCOUTING ERROR:", error);
@@ -1581,7 +1601,12 @@ app.get("/api/scouting/:eventKey/schema", async (req, res) => {
 			})
 			.filter(Number.isInteger);
 
-		res.json({ headers, booleanColumnIndexes, fields: formFieldIndexes(headers, tab) });
+		const definitions = await fieldDefinitions(spreadsheetId).catch(() => parseDefinitions(null));
+		res.json({
+			headers, booleanColumnIndexes, fields: formFieldIndexes(headers, tab),
+			definitions: definitionsForHeaders(headers, definitions.match),
+			definitionProblems: definitions.problems
+		});
 	} catch (error) {
 		console.error("SCOUTING SCHEMA ERROR:", error);
 		res.status(500).json({ error: error.message });
@@ -1658,6 +1683,11 @@ app.post("/api/scouting/:eventKey", async (req, res) => {
 			}
 		}
 
+		/* The sheet's own rules for each question (types, limits, options, required). */
+		const definitions = await fieldDefinitions(spreadsheetId).catch(() => parseDefinitions(null));
+		const checked = checkReport(headers, answerFor, definitions.match);
+		if (checked.errors.length) return res.status(400).json({ error: checked.errors.slice(0, 3).join(" ") });
+
 		/* Two scouts on the same robot in the same match: ask before adding another
 		   report, unless the scout has already said to go ahead. */
 		if (team !== null && match !== null && req.body?.confirmDuplicate !== true) {
@@ -1679,7 +1709,7 @@ app.post("/api/scouting/:eventKey", async (req, res) => {
 			range: `'${tab.title}'!A${nextRow}:${lastColumn}${nextRow}`,
 			valueInputOption: "USER_ENTERED",
 			requestBody: {
-				values: [headers.map((header, index) => cleanCell(answerFor(index)))]
+				values: [headers.map((header, index) => cleanCell(checked.values.get(index) ?? answerFor(index)))]
 			}
 		});
 
@@ -1719,7 +1749,7 @@ app.get("/api/pitscouting/:eventKey", async (req, res) => {
 
 		console.log("Google Sheets request succeeded");
 
-		res.json(rowsToObjects(response.data.values));
+		res.json(await rowsWithRoles(response.data.values, spreadsheetId, "pit"));
 
 	} catch (error) {
 		console.error("SCOUTING ERROR:", error);
@@ -1758,7 +1788,12 @@ app.get("/api/pitscouting/:eventKey/schema", async (req, res) => {
 			.map((header, index) => /^(can|does|do|is|are|would|has|have|did|will)\b/i.test(header) || /^(shooter|shuttle|climber|defen[cs]e|same drive team.*)$/i.test(header) ? index : null)
 			.filter(Number.isInteger);
 
-		res.json({ headers, fields: formFieldIndexes(headers, tab), booleanColumnIndexes });
+		const definitions = await fieldDefinitions(spreadsheetId).catch(() => parseDefinitions(null));
+		res.json({
+			headers, fields: formFieldIndexes(headers, tab), booleanColumnIndexes,
+			definitions: definitionsForHeaders(headers, definitions.pit),
+			definitionProblems: definitions.problems
+		});
 	} catch (error) {
 		console.error("PIT SCOUTING SCHEMA ERROR:", error);
 		res.status(500).json({ error: error.message });
@@ -1799,6 +1834,12 @@ app.post("/api/pitscouting/:eventKey", async (req, res) => {
 			return res.status(400).json({ error: "Team number must be a whole number from 1 to 99999." });
 		}
 
+		/* Pit forms key answers by header; QR transfers key them by column. */
+		const pitAnswerFor = index => answers[`column-${index}`] ?? answers[headers[index]] ?? "";
+		const pitDefinitions = await fieldDefinitions(spreadsheetId).catch(() => parseDefinitions(null));
+		const pitChecked = checkReport(headers, pitAnswerFor, pitDefinitions.pit);
+		if (pitChecked.errors.length) return res.status(400).json({ error: pitChecked.errors.slice(0, 3).join(" ") });
+
 		await sheets.spreadsheets.values.append({
 			spreadsheetId,
 			range: tab.simple ? `'${tab.title}'!A:ZZ` : `'${tab.title}'!A:AL`,
@@ -1807,7 +1848,7 @@ app.post("/api/pitscouting/:eventKey", async (req, res) => {
 			requestBody: {
 				/* Pit forms key answers by header; QR transfers key them by column. */
 				values: [headers.map((header, index) =>
-					cleanCell(answers[`column-${index}`] ?? answers[header] ?? "")
+					cleanCell(pitChecked.values.get(index) ?? pitAnswerFor(index))
 				)]
 			}
 		});

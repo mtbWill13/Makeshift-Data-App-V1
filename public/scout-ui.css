@@ -344,3 +344,11 @@ fieldset.control-group > legend {
 .transfer-button:hover {
 	border-color: rgba(255, 255, 255, 0.3);
 }
+
+/* A short line under a question (from the Field Definitions "Help" column). */
+.field-help {
+	margin-top: 6px;
+	color: var(--text-faint);
+	font-size: 0.8rem;
+	line-height: 1.4;
+}

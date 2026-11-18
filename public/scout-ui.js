@@ -89,9 +89,87 @@ const ScoutUI = (() => {
 		});
 	}
 
+	/* Tick boxes: any number of the options (each one stored, joined with "; "). */
+	function checkboxGroup({ name, label, options, wide = true, help = "" }) {
+		const buttons = options.map(option => `
+			<label class="radio-option">
+				<input type="checkbox" name="${escapeHtml(name)}" value="${escapeHtml(option.value)}">
+				<span>${escapeHtml(option.label)}</span>
+			</label>`);
+
+		return `
+			<fieldset class="control-group${wide ? " full-width" : ""}">
+				<legend>${escapeHtml(label)}</legend>
+				<div class="radio-row">${buttons.join("")}</div>
+				${help ? `<div class="field-help">${escapeHtml(help)}</div>` : ""}
+			</fieldset>`;
+	}
+
+	/* A question drawn from its Field Definitions row (see field-definitions.js).
+	   `defaultNo` starts yes/no questions on "No" (match scouting does; pit scouting leaves them blank). */
+	function definedField({ def, name, id, label, defaultNo = false }) {
+		const help = def.help ? `<div class="field-help">${escapeHtml(def.help)}</div>` : "";
+		const required = def.required ? " required" : "";
+
+		switch (def.type) {
+			case "counter":
+				return scoreControl({ id, name, label, max: def.max ?? 999, min: def.min ?? 0 }).replace(/<\/div>\s*$/, `${help}</div>`);
+			case "yesno":
+				return radioGroup({
+					name, label, required: def.required, value: defaultNo ? "FALSE" : "",
+					options: [{ value: "TRUE", label: "Yes" }, { value: "FALSE", label: "No" }]
+				}).replace(/<\/fieldset>\s*$/, `${help}</fieldset>`);
+			case "choice":
+				return radioGroup({
+					name, label, required: def.required, wide: true, perRow: def.options.length === 3 ? 3 : 0,
+					options: def.options.map(option => ({ value: option.value, label: option.label }))
+				}).replace(/<\/fieldset>\s*$/, `${help}</fieldset>`);
+			case "multi":
+				return checkboxGroup({ name, label, options: def.options, help: def.help ?? "" });
+			case "scale": {
+				const values = Array.from({ length: def.max - def.min + 1 }, (_, index) => def.min + index);
+				return radioGroup({ name, label, required: def.required, wide: true, options: values.map(value => ({ value, label: String(value) })) })
+					.replace(/<\/fieldset>\s*$/, `${help}</fieldset>`);
+			}
+			case "number":
+			case "decimal":
+				return `
+					<div class="control-group">
+						<label for="${id}">${escapeHtml(label)}</label>
+						<input id="${id}" name="${escapeHtml(name)}" type="number" inputmode="${def.type === "decimal" ? "decimal" : "numeric"}" min="${def.min}" max="${def.max}" step="${def.type === "decimal" ? "any" : 1}"${required}>
+						${help}
+					</div>`;
+			case "longtext":
+				return `
+					<div class="control-group full-width">
+						<label for="${id}">${escapeHtml(label)}</label>
+						<textarea id="${id}" name="${escapeHtml(name)}" rows="4" maxlength="${def.max}"${required}></textarea>
+						${help}
+					</div>`;
+			default:
+				return `
+					<div class="control-group">
+						<label for="${id}">${escapeHtml(label)}</label>
+						<input id="${id}" name="${escapeHtml(name)}" type="text" maxlength="${def.max}"${required} autocomplete="off">
+						${help}
+					</div>`;
+		}
+	}
+
+	/* Answers from a form: tick boxes with the same name are joined into one answer. */
+	function readAnswers(form, keep = () => true) {
+		const answers = {};
+		for (const [key, value] of new FormData(form).entries()) {
+			if (!keep(key)) continue;
+			const text = String(value).trim();
+			answers[key] = key in answers && text ? `${answers[key]}; ${text}` : (key in answers ? answers[key] : text);
+		}
+		return answers;
+	}
+
 	/* ----- score control: -5 -1 [number] +1 +5 ----- */
 
-	function scoreControl({ id, name, label, max = 999 }) {
+	function scoreControl({ id, name, label, max = 999, min = 0 }) {
 		const button = (delta, text, extra = "") => `<button class="score-button${delta < 0 ? " minus" : ""}" type="button" data-score-field="${id}" data-delta="${delta}" aria-label="${text} points"${extra}>${text}</button>`;
 
 		return `
@@ -99,7 +177,7 @@ const ScoutUI = (() => {
 				<label for="${id}">${escapeHtml(label)}</label>
 				<div class="score-clicker">
 					${button(-5, "−5")}${button(-1, "−1")}
-					<input id="${id}" name="${escapeHtml(name)}" type="number" inputmode="numeric" value="0" min="0" max="${max}" step="1">
+					<input id="${id}" name="${escapeHtml(name)}" type="number" inputmode="numeric" value="${min}" min="${min}" max="${max}" step="1">
 					${button(1, "+1")}${button(5, "+5")}
 				</div>
 			</div>`;
@@ -193,5 +271,5 @@ const ScoutUI = (() => {
 		return null;
 	}
 
-	return { addCounters, applyFlag, bindScoreButtons, escapeHtml, flagRow, pickEventByDate, radioGroup, scoreControl, toast, hideToast, yesNoGroup };
+	return { addCounters, applyFlag, bindScoreButtons, checkboxGroup, definedField, escapeHtml, flagRow, pickEventByDate, radioGroup, readAnswers, scoreControl, toast, hideToast, yesNoGroup };
 })();
