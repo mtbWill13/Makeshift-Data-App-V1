@@ -141,3 +141,8 @@
 
 /* The strategy board tile on the FTC hub */
 .nav-strategy { --accent: var(--ms-yellow); }
+
+/* The camera box only shows while the scanner is running. */
+video[hidden] {
+	display: none;
+}

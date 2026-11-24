@@ -93,11 +93,25 @@ async function loadSchedule() {
 	applyAssignment();
 }
 
+/* The event setup folds up once scouting has started, leaving a one-line summary. */
+function updateEventSummary() {
+	const event = picker.current();
+	document.getElementById("eventSummary").textContent = `${els.event.selectedOptions[0]?.text.split(" · ")[0] || event.code} (${event.season}) · ${els.scout.value.trim() || "no name yet"}`;
+}
+
+function foldEventSetup(assignment) {
+	updateEventSummary();
+	document.getElementById("eventDetails").open = !assignment;
+}
+
+els.scout.addEventListener("input", () => picker && updateEventSummary());
+
 /* Fills the match, alliance and team from the saved assignment. */
 function applyAssignment() {
 	const assignment = currentAssignment();
 	els.panel.hidden = Boolean(assignment);
 	els.bar.hidden = !assignment;
+	foldEventSetup(assignment);
 	if (!assignment) return;
 
 	const station = STATIONS.find(item => item.code === assignment.station);

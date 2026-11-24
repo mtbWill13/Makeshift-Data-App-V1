@@ -95,6 +95,10 @@ fieldset.field > legend,
 	background: var(--surface-2);
 }
 
+.count-tile.missed {
+	border-color: color-mix(in srgb, var(--ms-red) 35%, var(--border));
+}
+
 .count-tile.scored {
 	border-color: color-mix(in srgb, var(--ms-green) 40%, var(--border));
 }
@@ -402,4 +406,113 @@ fieldset.field > legend,
 	font-weight: 600;
 	text-align: center;
 	text-decoration: none;
+}
+
+/* ----- scored | missed pairs: the number on top, big buttons under it (fits a phone) ----- */
+
+.count-pair {
+	grid-column: 1 / -1;
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 10px;
+}
+
+.count-pair .count-tile {
+	padding: 12px 10px;
+}
+
+.count-pair .count-controls {
+	grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr);
+	grid-template-areas: "value value" "minus plus";
+	gap: 8px;
+}
+
+.count-pair .count-controls input {
+	grid-area: value;
+	min-height: 60px;
+	font-size: 2rem;
+}
+
+.count-pair .count-button.minus { grid-area: minus; }
+.count-pair .count-button:not(.minus) { grid-area: plus; }
+
+.count-pair .count-button {
+	min-height: 56px;
+	font-size: 1.6rem;
+}
+
+.count-pair .count-label {
+	min-height: 2.5em;
+}
+
+/* The event setup folds away once you're scouting, so the form is what you see. */
+.event-details > summary {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	margin: 0;
+	list-style: none;
+	cursor: pointer;
+}
+
+.event-details > summary::-webkit-details-marker { display: none; }
+
+.event-details > summary h2 { margin: 0; }
+
+.event-details > summary .summary-text {
+	color: var(--text-muted);
+	font-size: 0.85rem;
+	text-align: right;
+}
+
+.event-details[open] > summary { margin-bottom: 14px; }
+
+.event-details > summary::after {
+	content: "▾";
+	color: var(--text-muted);
+}
+
+.event-details[open] > summary::after { content: "▴"; }
+
+/* Station buttons keep their alliance colour even before they are picked. */
+.station-grid .choice.red > span { border-color: color-mix(in srgb, var(--ms-red) 55%, transparent); }
+.station-grid .choice.blue > span { border-color: color-mix(in srgb, var(--ms-blue) 55%, transparent); }
+
+.setup-note + .setup-grid,
+.setup-note + .field { margin-top: 12px; }
+
+/* "Change" is a small second-level button, not a call to action. */
+.assignment-bar button {
+	min-height: 40px;
+	padding: 0 16px;
+	background: transparent;
+	border-color: var(--border-strong);
+	color: var(--text);
+}
+
+/* The + buttons match their tile: green for scored, red for missed. */
+.count-tile.scored .count-button:not(.minus) {
+	background: var(--ms-green);
+	border-color: var(--ms-green);
+	color: var(--on-accent);
+}
+
+.count-tile.missed .count-button:not(.minus) {
+	background: var(--ms-red);
+	border-color: var(--ms-red);
+	color: var(--on-accent);
+}
+
+/* "No" is the usual answer, so it is calm; "Yes" is what stands out. */
+.choice.no input:checked + span {
+	border-color: var(--text-muted);
+	background: var(--surface-3);
+	color: var(--text);
+}
+
+@media (max-width: 560px) {
+	.choice-row.stack .choice {
+		flex: 1 1 100%;
+	}
 }

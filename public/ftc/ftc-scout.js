@@ -60,6 +60,9 @@ const FtcScout = (() => {
         <span>${ftcEscape(label)}${hint ? `<small>${ftcEscape(hint)}</small>` : ""}</span>
       </label>`;
 
+	/* Long option names get a full-width button each on a phone, instead of a cramped row. */
+	const stacks = field => field.options.some(option => option.label.length > 14);
+
 	function fieldHtml(field, { defaultNo }) {
 		const id = ftcEscape(field.id);
 		const show = field.showIf ? ` data-show-field="${ftcEscape(field.showIf.field)}" data-show-value="${ftcEscape(field.showIf.value)}" hidden` : "";
@@ -67,7 +70,7 @@ const FtcScout = (() => {
 
 		switch (field.type) {
 			case "count": {
-				const tone = /Scored$/.test(field.id) ? " scored" : "";
+				const tone = /Scored$/.test(field.id) ? " scored" : /Missed$/.test(field.id) ? " missed" : "";
 				return `
       <div class="field count-tile${tone}${field.wide ? " wide" : ""}" data-field="${id}" data-max="${field.max ?? 999}"${show}>
         <span class="count-label">${ftcEscape(field.label)}</span>
@@ -89,12 +92,12 @@ const FtcScout = (() => {
 			case "choice":
 				return `
       <fieldset class="field wide" data-field="${id}"${show}><legend>${legend}</legend>
-        <div class="choice-row">${field.options.map(option => choiceButton({ type: "radio", name: field.id, value: option.value, label: option.label, hint: option.hint })).join("")}</div>
+        <div class="choice-row${stacks(field) ? " stack" : ""}">${field.options.map(option => choiceButton({ type: "radio", name: field.id, value: option.value, label: option.label, hint: option.hint })).join("")}</div>
       </fieldset>`;
 			case "multi":
 				return `
       <fieldset class="field wide" data-field="${id}"${show}><legend>${legend}</legend>
-        <div class="choice-row">${field.options.map(option => choiceButton({ type: "checkbox", name: field.id, value: option.value, label: option.label, hint: option.hint })).join("")}</div>
+        <div class="choice-row${stacks(field) ? " stack" : ""}">${field.options.map(option => choiceButton({ type: "checkbox", name: field.id, value: option.value, label: option.label, hint: option.hint })).join("")}</div>
       </fieldset>`;
 			case "scale":
 				return `
@@ -121,17 +124,25 @@ const FtcScout = (() => {
 		}
 	}
 
-	/* Draws the sections into `container`. Counts sit two to a row (shot | scored). */
+	/* Draws the sections into `container`. Counts sit two to a row (scored | missed). */
 	function render(container, sections, { defaultNo = false } = {}) {
-		container.innerHTML = sections.map(section => {
-			const counts = section.fields.every(field => field.type === "count");
-			return `
+		/* "Scored" and the "Missed" right after it sit side by side, on a phone too. */
+		const fieldsHtml = fields => fields.map((field, index) => {
+			const next = fields[index + 1];
+			const base = /^(.*)Scored$/.exec(field.id)?.[1];
+			if (field.type === "count" && base && next?.id === `${base}Missed`) {
+				return `<div class="count-pair">${fieldHtml(field, { defaultNo })}${fieldHtml(next, { defaultNo })}</div>`;
+			}
+			if (field.type === "count" && /Missed$/.test(field.id) && fields[index - 1]?.id === field.id.replace(/Missed$/, "Scored")) return "";
+			return fieldHtml(field, { defaultNo });
+		}).join("");
+
+		container.innerHTML = sections.map(section => `
       <section class="scout-section" data-section="${ftcEscape(section.id)}">
         <h2>${ftcEscape(section.title)}</h2>
         ${section.help ? `<p class="section-help">${ftcEscape(section.help)}</p>` : ""}
-        <div class="field-grid${counts ? " counts" : ""}">${section.fields.map(field => fieldHtml(field, { defaultNo })).join("")}</div>
-      </section>`;
-		}).join("");
+        <div class="field-grid">${fieldsHtml(section.fields)}</div>
+      </section>`).join("");
 
 		bind(container);
 		for (const area of container.querySelectorAll("textarea[maxlength]")) addCounter(area);
@@ -155,26 +166,11 @@ const FtcScout = (() => {
 			const input = tile.querySelector("input");
 			const next = (Math.trunc(Number(input.value)) || 0) + Number(button.dataset.delta);
 			input.value = Math.min(Number(tile.dataset.max), Math.max(0, next));
-			keepShotAtLeastScored(container, tile.dataset.field);
 			input.dispatchEvent(new Event("input", { bubbles: true }));
 		});
 
 		container.addEventListener("change", () => showConditional(container));
 		showConditional(container);
-	}
-
-	/* A scored element was also a shot: scoring one raises "shot" to match, and lowering "shot"
-	   below "scored" lowers "scored". Pairs are ...Shot and ...Scored. */
-	function keepShotAtLeastScored(container, fieldId) {
-		const pair = /^(.*)(Shot|Scored)$/.exec(fieldId);
-		if (!pair) return;
-
-		const shot = container.querySelector(`[data-field="${pair[1]}Shot"] input`);
-		const scored = container.querySelector(`[data-field="${pair[1]}Scored"] input`);
-		if (!shot || !scored) return;
-
-		if (pair[2] === "Scored" && Number(scored.value) > Number(shot.value)) shot.value = scored.value;
-		if (pair[2] === "Shot" && Number(scored.value) > Number(shot.value)) scored.value = shot.value;
 	}
 
 	/* Questions that only appear once another one has a given answer. */

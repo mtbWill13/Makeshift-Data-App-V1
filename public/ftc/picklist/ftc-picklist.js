@@ -188,8 +188,8 @@ function buildStats() {
 	addStat("pieces", { ...scouting, label: "Scored", title: "Pollen and nectar scored per match" });
 	addStat("autoPieces", { ...scouting, label: "Auto scored", title: "Pollen and nectar scored in auto per match" });
 	addStat("telePieces", { ...scouting, label: "Teleop scored", title: "Pollen and nectar scored in teleop per match" });
-	addStat("pollenAcc", { ...scouting, label: "Pollen acc.", title: "Teleop pollen scored / shot", percent: true });
-	addStat("nectarAcc", { ...scouting, label: "Nectar acc.", title: "Teleop nectar scored / shot", percent: true });
+	addStat("pollenAcc", { ...scouting, label: "Pollen acc.", title: "Teleop pollen scored / (scored + missed)", percent: true });
+	addStat("nectarAcc", { ...scouting, label: "Nectar acc.", title: "Teleop nectar scored / (scored + missed)", percent: true });
 	addStat("noShowRate", { ...scouting, label: "No show %", percent: true, lower: true });
 
 	for (const field of fieldsOf("match")) {
@@ -220,10 +220,10 @@ function scoutingStats(reports) {
 	const mean = values => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
 	const per = measure => played.length ? mean(played.map(measure)) : null;
 
-	const accuracy = (scoredIds, shotIds) => {
+	const accuracy = (scoredIds, missedIds) => {
 		const hit = played.reduce((total, report) => total + count(report, scoredIds), 0);
-		const shot = played.reduce((total, report) => total + count(report, shotIds), 0);
-		return shot ? hit / shot * 100 : null;
+		const missed = played.reduce((total, report) => total + count(report, missedIds), 0);
+		return hit + missed ? hit / (hit + missed) * 100 : null;
 	};
 
 	const result = {
@@ -234,8 +234,8 @@ function scoutingStats(reports) {
 		pieces: per(report => count(report, scored)),
 		autoPieces: per(report => count(report, scored.filter(id => id.startsWith("auto")))),
 		telePieces: per(report => count(report, scored.filter(id => id.startsWith("tele")))),
-		pollenAcc: accuracy(["telePollenHiveScored", "telePollenFlowerScored", "telePollenGardenScored"], ["telePollenHiveShot", "telePollenFlowerShot", "telePollenGardenShot"]),
-		nectarAcc: accuracy(["teleNectarFlowerScored", "teleNectarHiveScored", "teleNectarGardenScored"], ["teleNectarFlowerShot", "teleNectarHiveShot", "teleNectarGardenShot"])
+		pollenAcc: accuracy(["telePollenHiveScored", "telePollenFlowerScored", "telePollenGardenScored"], ["telePollenHiveMissed", "telePollenFlowerMissed", "telePollenGardenMissed"]),
+		nectarAcc: accuracy(["teleNectarFlowerScored", "teleNectarHiveScored", "teleNectarGardenScored"], ["teleNectarFlowerMissed", "teleNectarHiveMissed", "teleNectarGardenMissed"])
 	};
 
 	for (const field of fields) {

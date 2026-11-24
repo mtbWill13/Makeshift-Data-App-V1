@@ -5,7 +5,7 @@
 // Nothing else needs to know what "pollen" or "nectar" is.
 //
 // Field types
-//   count    whole number with + / − buttons (shot, scored...). max is optional.
+//   count    whole number with + / − buttons (scored, missed...). max is optional.
 //   yesno    Yes / No. Left unanswered is stored as "".
 //   choice   pick one option.
 //   multi    pick any number of options.
@@ -14,8 +14,7 @@
 //   text / longtext   typed answers.
 // `showIf: { field, value }` only shows a question once another one has that answer.
 //
-// `groups` pair "shot" and "scored" counts so the stats can show accuracy (a scored element
-// is also a shot, so scored can never be more than shot).
+// `groups` pair "scored" and "missed" counts so the stats can show accuracy.
 // `points` says how many points each "scored" count is worth. It is empty on purpose:
 // fill it in from the game manual (field id -> points) and the pages start showing
 // scouted points per match and a scouted-points prediction. Until then nothing is guessed.
@@ -47,10 +46,10 @@ export const FTC_GAME = {
 						]
 					},
 					{ id: "autoTips", label: "Hive tips it caused in auto", type: "count", max: 10, wide: true },
-					{ id: "autoPollenHiveShot", label: "Pollen shot at the hive", type: "count", max: 99 },
 					{ id: "autoPollenHiveScored", label: "Pollen scored in the hive", type: "count", max: 99 },
-					{ id: "autoNectarHiveShot", label: "Nectar shot at the hive", type: "count", max: 99 },
-					{ id: "autoNectarHiveScored", label: "Nectar scored in the hive", type: "count", max: 99 }
+					{ id: "autoPollenHiveMissed", label: "Pollen missed (hive)", type: "count", max: 99 },
+					{ id: "autoNectarHiveScored", label: "Nectar scored in the hive", type: "count", max: 99 },
+					{ id: "autoNectarHiveMissed", label: "Nectar missed (hive)", type: "count", max: 99 }
 				]
 			},
 			{
@@ -58,12 +57,12 @@ export const FTC_GAME = {
 				title: "Teleop: pollen",
 				help: "Teleop is 2 minutes. Pollen can go in the hive, a flower or the garden. Flowers only score in the last 60 seconds, 2 pts per element for the alliance that owns the flower. A garden element is 1 pt.",
 				fields: [
-					{ id: "telePollenHiveShot", label: "Pollen shot at the hive", type: "count", max: 99 },
 					{ id: "telePollenHiveScored", label: "Pollen scored in the hive", type: "count", max: 99 },
-					{ id: "telePollenFlowerShot", label: "Pollen shot at a flower", type: "count", max: 99 },
+					{ id: "telePollenHiveMissed", label: "Pollen missed (hive)", type: "count", max: 99 },
 					{ id: "telePollenFlowerScored", label: "Pollen scored in a flower", type: "count", max: 99 },
-					{ id: "telePollenGardenShot", label: "Pollen shot at the garden", type: "count", max: 99 },
-					{ id: "telePollenGardenScored", label: "Pollen scored in the garden", type: "count", max: 99 }
+					{ id: "telePollenFlowerMissed", label: "Pollen missed (flower)", type: "count", max: 99 },
+					{ id: "telePollenGardenScored", label: "Pollen scored in the garden", type: "count", max: 99 },
+					{ id: "telePollenGardenMissed", label: "Pollen missed (garden)", type: "count", max: 99 }
 				]
 			},
 			{
@@ -71,12 +70,12 @@ export const FTC_GAME = {
 				title: "Teleop: nectar",
 				help: "Each alliance has its own nectar colour, and a robot may not control the other alliance's nectar. Nectar can only be entered into a flower in the last 60 seconds. The alliance with the top-most nectar owns the flower; the bottom-most nectar earns 5 pts.",
 				fields: [
-					{ id: "teleNectarFlowerShot", label: "Nectar shot at a flower", type: "count", max: 99 },
 					{ id: "teleNectarFlowerScored", label: "Nectar scored in a flower", type: "count", max: 99 },
-					{ id: "teleNectarHiveShot", label: "Nectar shot at the hive", type: "count", max: 99 },
+					{ id: "teleNectarFlowerMissed", label: "Nectar missed (flower)", type: "count", max: 99 },
 					{ id: "teleNectarHiveScored", label: "Nectar scored in the hive", type: "count", max: 99 },
-					{ id: "teleNectarGardenShot", label: "Nectar shot at the garden", type: "count", max: 99 },
-					{ id: "teleNectarGardenScored", label: "Nectar scored in the garden", type: "count", max: 99 }
+					{ id: "teleNectarHiveMissed", label: "Nectar missed (hive)", type: "count", max: 99 },
+					{ id: "teleNectarGardenScored", label: "Nectar scored in the garden", type: "count", max: 99 },
+					{ id: "teleNectarGardenMissed", label: "Nectar missed (garden)", type: "count", max: 99 }
 				]
 			},
 			{
@@ -113,12 +112,12 @@ export const FTC_GAME = {
 			}
 		],
 
-		/* Accuracy = scored / shot. */
+		/* Accuracy = scored / (scored + missed). */
 		groups: [
-			{ id: "autoPollen", label: "Auto pollen", scored: ["autoPollenHiveScored"], shot: ["autoPollenHiveShot"] },
-			{ id: "autoNectar", label: "Auto nectar", scored: ["autoNectarHiveScored"], shot: ["autoNectarHiveShot"] },
-			{ id: "telePollen", label: "Teleop pollen", scored: ["telePollenHiveScored", "telePollenFlowerScored", "telePollenGardenScored"], shot: ["telePollenHiveShot", "telePollenFlowerShot", "telePollenGardenShot"] },
-			{ id: "teleNectar", label: "Teleop nectar", scored: ["teleNectarFlowerScored", "teleNectarHiveScored", "teleNectarGardenScored"], shot: ["teleNectarFlowerShot", "teleNectarHiveShot", "teleNectarGardenShot"] }
+			{ id: "autoPollen", label: "Auto pollen", scored: ["autoPollenHiveScored"], missed: ["autoPollenHiveMissed"] },
+			{ id: "autoNectar", label: "Auto nectar", scored: ["autoNectarHiveScored"], missed: ["autoNectarHiveMissed"] },
+			{ id: "telePollen", label: "Teleop pollen", scored: ["telePollenHiveScored", "telePollenFlowerScored", "telePollenGardenScored"], missed: ["telePollenHiveMissed", "telePollenFlowerMissed", "telePollenGardenMissed"] },
+			{ id: "teleNectar", label: "Teleop nectar", scored: ["teleNectarFlowerScored", "teleNectarHiveScored", "teleNectarGardenScored"], missed: ["teleNectarFlowerMissed", "teleNectarHiveMissed", "teleNectarGardenMissed"] }
 		],
 
 		/* Points per count (or per "Yes"), from Table 10-2. Elements launched into the hive earn
@@ -296,13 +295,6 @@ export function cleanAnswers(kind, input) {
 		}
 	}
 
-	/* Every scored element was shot first, so "scored" can't be more than "shot". */
-	for (const [id, field] of fields) {
-		if (!/Scored$/.test(id) || clean[id] === undefined) continue;
-		const shot = fields.get(id.replace(/Scored$/, "Shot"));
-		if (shot && clean[id] > (clean[shot.id] ?? 0)) throw new Error(`${field.label} (${clean[id]}) can't be more than ${shot.label.toLowerCase()} (${clean[shot.id] ?? 0}).`);
-	}
-
 	return clean;
 }
 
@@ -354,11 +346,11 @@ export function summarizeTeam(matchReports, pitReport) {
 	for (const group of FTC_GAME.match.groups) {
 		const sum = ids => played.reduce((total, report) => total + ids.reduce((inner, id) => inner + (Number(report.data[id]) || 0), 0), 0);
 		const scored = sum(group.scored);
-		const shot = sum(group.shot);
+		const missed = sum(group.missed);
 		groups[group.id] = {
 			scoredPerMatch: played.length ? scored / played.length : null,
-			shotPerMatch: played.length ? shot / played.length : null,
-			accuracy: shot ? scored / shot : null
+			missedPerMatch: played.length ? missed / played.length : null,
+			accuracy: scored + missed ? scored / (scored + missed) : null
 		};
 	}
 

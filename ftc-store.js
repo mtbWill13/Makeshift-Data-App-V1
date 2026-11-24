@@ -55,6 +55,24 @@ export function openFtcStore(file) {
 			db.exec(`UPDATE ${table} SET owner = '4039'`);
 		}
 	}
+	/* Reports made while the form asked "shot" and "scored" are changed to "scored" and "missed"
+	   (missed = shot - scored), once. */
+	if (db.prepare("PRAGMA user_version").get().user_version < 1) {
+		const update = db.prepare("UPDATE match_reports SET data = ? WHERE id = ?");
+		for (const row of db.prepare("SELECT id, data FROM match_reports").all()) {
+			const data = JSON.parse(row.data);
+			let changed = false;
+			for (const key of Object.keys(data)) {
+				if (!key.endsWith("Shot")) continue;
+				const base = key.slice(0, -4);
+				data[`${base}Missed`] = Math.max(0, Number(data[key]) - (Number(data[`${base}Scored`]) || 0));
+				delete data[key];
+				changed = true;
+			}
+			if (changed) update.run(JSON.stringify(data), row.id);
+		}
+		db.exec("PRAGMA user_version = 1");
+	}
 	db.exec("CREATE INDEX IF NOT EXISTS match_owner ON match_reports (owner, season, event); CREATE INDEX IF NOT EXISTS pit_owner ON pit_reports (owner, season, event);");
 
 	const statements = {

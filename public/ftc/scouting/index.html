@@ -31,7 +31,8 @@
 
     <main class="scout-shell">
       <section class="scout-section">
-        <h2>Event</h2>
+       <details class="event-details" id="eventDetails" open>
+        <summary><h2>Event</h2><span class="summary-text" id="eventSummary"></span></summary>
         <div class="setup-grid">
           <label for="seasonSelect">Season<select id="seasonSelect"></select></label>
           <label for="eventSelect">Event<select id="eventSelect"><option>Loading events…</option></select></label>
@@ -40,6 +41,7 @@
         </div>
         <p id="scheduleNote" class="setup-note"></p>
         <p id="sheetNote" class="setup-note"></p>
+       </details>
       </section>
 
       <section id="assignmentPanel" class="scout-section">

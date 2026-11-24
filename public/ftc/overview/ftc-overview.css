@@ -195,3 +195,14 @@
 	.pv-alliances { grid-template-columns: minmax(0, 1fr); }
 	.strategy-controls, .preview-controls { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* On a phone the two alliances get a row each, so the team boxes are wide enough to read. */
+@media (max-width: 560px) {
+	.preview-teams {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.preview-teams input {
+		font-size: 1rem;
+	}
+}
