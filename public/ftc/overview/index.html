@@ -3,28 +3,30 @@
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FTC Strategy Board | MakeShift Scouting</title>
+    <title>FTC Event Overview | MakeShift Scouting</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400..700&display=swap">
     <link rel="stylesheet" href="/theme.css">
+    <link rel="stylesheet" href="/team.css">
+    <link rel="stylesheet" href="/overview/overview.css">
     <link rel="stylesheet" href="/ftc/ftc.css">
     <link rel="stylesheet" href="/ftc/ftc-scout.css">
     <link rel="stylesheet" href="/ftc/ftc-team-scouting.css">
-    <link rel="stylesheet" href="/ftc/strategy/ftc-strategy.css">
+    <link rel="stylesheet" href="/ftc/overview/ftc-overview.css">
   </head>
   <body>
     <div class="top-bar" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
     <header>
       <div class="header-content">
         <a class="brand" href="/"><img src="/images/makeshift-logo-wide.png" alt="MakeShift 4039" width="707" height="78"></a>
-        <div class="eyebrow">FTC Strategy</div>
-        <h1>FTC Strategy<br>Board</h1>
-        <p class="header-description">Our scouting reports and every public FTC data source in one place: preview a match, compare the field and read up on any team.</p>
+        <div class="eyebrow">FTC Analysis</div>
+        <h1>FTC Event<br>Overview</h1>
+        <p class="header-description">Event-wide graphs from our scouting plus FTCScout OPR, a match lookup with predictions and a chart builder for any stat and any set of teams.</p>
         <div class="header-links">
           <a class="back-link" href="/ftc/">← FTC Data Hub</a>
-          <a class="back-link" href="/ftc/scouting/">Match scouting →</a>
-          <a class="back-link" href="/ftc/pit/">Pit scouting →</a>
+          <a class="back-link" href="#matchLookup">Match lookup ↓</a>
+          <a class="back-link" href="#builder">Chart builder ↓</a>
         </div>
       </div>
     </header>
@@ -33,12 +35,14 @@
       <section class="controls strategy-controls">
         <label for="seasonSelect">Season<select id="seasonSelect"></select></label>
         <label for="eventSelect">Event<select id="eventSelect"><option>Loading events…</option></select></label>
-        <label for="customEvent">Event code not listed?<input id="customEvent" type="text" maxlength="20" placeholder="e.g. CAONBOQ" autocomplete="off"></label>
+        <label for="customEvent">Event code not listed?<input id="customEvent" type="text" maxlength="20" placeholder="e.g. CAONSCQ" autocomplete="off"></label>
         <button id="loadButton" type="button">Load event</button>
       </section>
       <p id="status" class="status" aria-live="polite"></p>
 
-      <h2 class="section-title">Match preview</h2>
+      <section id="summary" class="overview-summary"></section>
+
+      <h2 class="section-title" id="matchLookup">Match lookup</h2>
       <section class="controls preview-controls">
         <label for="matchSelect">Scheduled match<select id="matchSelect"><option value="">Load an event first</option></select></label>
         <div class="preview-teams">
@@ -48,6 +52,37 @@
         <button id="previewButton" type="button">Preview</button>
       </section>
       <section id="preview"><div class="empty-state">Pick a scheduled match, or type four teams to see how any alliances would match up.</div></section>
+
+      <h2 class="section-title">Event graphs</h2>
+      <section id="dashboard" class="overview-grid"><div class="loading">Loading event data…</div></section>
+
+      <h2 class="section-title" id="builder">Chart builder</h2>
+      <section class="controls builder-controls">
+        <label for="builderStat">Stat<select id="builderStat"></select></label>
+        <label for="builderChart">Chart type<select id="builderChart"></select></label>
+        <label for="builderAggregate" id="aggregateGroup">Per team<select id="builderAggregate"></select></label>
+        <label for="builderX" id="xGroup" hidden>Against (x axis)<select id="builderX"></select></label>
+        <label for="builderTeams" class="builder-teams">Teams
+          <input id="builderTeams" type="text" inputmode="numeric" placeholder="All teams, or e.g. 4039, 19502, 16417" autocomplete="off">
+        </label>
+        <label for="builderShow">Show
+          <select id="builderShow">
+            <option value="all">All</option>
+            <option value="top10">Top 10</option>
+            <option value="top20">Top 20</option>
+            <option value="bottom10">Bottom 10</option>
+          </select>
+        </label>
+        <label for="builderSort">Order
+          <select id="builderSort">
+            <option value="best">Best first</option>
+            <option value="high">Highest first</option>
+            <option value="low">Lowest first</option>
+            <option value="team">Team number</option>
+          </select>
+        </label>
+      </section>
+      <section id="builderOutput" class="builder-output"></section>
 
       <h2 class="section-title">Event board</h2>
       <section class="board-filters" id="filters">
@@ -60,8 +95,6 @@
         <label class="board-filter"><input type="checkbox" data-filter="reliable"> Rarely breaks down</label>
       </section>
       <div id="board" class="board-wrap"><div class="empty-state">Load an event to see every team.</div></div>
-
-      <div id="teamDetail"></div>
 
       <h2 class="section-title">Reports and data sources</h2>
       <section class="source-panel">
@@ -77,9 +110,11 @@
       </section>
     </main>
 
+    <script src="/global.js"></script>
     <script src="/ftc/ftc-common.js"></script>
     <script src="/ftc/ftc-scout.js"></script>
     <script src="/ftc/ftc-team-scouting.js"></script>
-    <script src="/ftc/strategy/ftc-strategy.js"></script>
+    <script src="/overview/charts.js"></script>
+    <script src="/ftc/overview/ftc-overview.js"></script>
   </body>
 </html>

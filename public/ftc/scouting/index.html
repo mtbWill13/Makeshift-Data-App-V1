@@ -8,6 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400..700&display=swap">
     <link rel="stylesheet" href="/theme.css">
+    <link rel="stylesheet" href="/team.css">
     <link rel="stylesheet" href="/ftc/ftc.css">
     <link rel="stylesheet" href="/ftc/ftc-scout.css">
   </head>
@@ -22,7 +23,7 @@
         <div class="header-links">
           <a class="back-link" href="/ftc/">← FTC Data Hub</a>
           <a class="back-link" href="/ftc/pit/">Pit scouting →</a>
-          <a class="back-link" href="/ftc/strategy/">Strategy board →</a>
+          <a class="back-link" href="/ftc/overview/">Event overview →</a>
           <a class="back-link" href="https://ftc-resources.firstinspires.org/ftc/game/manual" target="_blank" rel="noopener noreferrer">Game manual ↗</a>
         </div>
       </div>
@@ -86,9 +87,14 @@
         <div id="sections" class="scout-shell"></div>
 
         <label class="flag-row"><input type="checkbox" id="messedUp"><span>I think I messed this up, please double check.</span></label>
-        <div class="form-actions"><button id="submitButton" type="submit">Submit match report</button></div>
+        <div class="form-actions">
+          <button id="submitButton" type="submit">Submit match report</button>
+          <a class="transfer-button" id="transferButton" href="/ftc/transfer/">Save &amp; Offline Transfer</a>
+        </div>
       </form>
     </main>
+
+    <script src="/global.js"></script>
 
     <script src="/ftc/ftc-common.js"></script>
     <script src="/ftc/ftc-scout.js"></script>

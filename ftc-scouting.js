@@ -45,6 +45,8 @@ export function registerFtcScouting(app, ftc) {
 		console.error("FTC scouting database unavailable (the rest of the site still works):", error.message);
 	}
 
+	/* Whose reports: the logged-in team's number (every page here is behind the team login). */
+	const ownerOf = req => String(req.team?.number ?? "");
 	const needStore = (req, res, next) => store ? next() : res.status(503).json({ error: "The FTC scouting database couldn't be opened on this server." });
 	const eventCode = value => String(value ?? "").toUpperCase();
 	const checkEvent = (req, res, next) => {
@@ -118,14 +120,15 @@ export function registerFtcScouting(app, ftc) {
 
 	/* A saved report also goes into the event's sheet, if one is linked. Never holds up the report:
 	   it is already safe in the database, and "sync" can rewrite the sheet from it. */
-	function mirrorToSheet(kind, report) {
-		const id = ftcSheets && sheetIdFor(report.season, report.event);
+	function mirrorToSheet(req, kind, report) {
+		/* The sheet links come from .env, so they belong to the original team (the legacy account). */
+		const id = ftcSheets && req.team?.legacy && sheetIdFor(report.season, report.event);
 		if (!id) return;
 		ftcSheets.appendReport(id, kind, { ...report, createdAt: Date.now() }).catch(error => console.warn(`FTC sheet (${report.event}): couldn't add the report: ${error.message}`));
 	}
 
 	app.get("/api/ftc/sheet/:season/:event", checkEvent, (req, res) => {
-		const id = sheetIdFor(req.params.season, req.params.event);
+		const id = req.team?.legacy ? sheetIdFor(req.params.season, req.params.event) : null;
 		res.json({ linked: Boolean(id), url: id ? `https://docs.google.com/spreadsheets/d/${id}/edit` : null });
 	});
 
@@ -134,7 +137,7 @@ export function registerFtcScouting(app, ftc) {
 	app.post("/api/ftc/sheet/:season/:event/sync", checkEvent, needStore, async (req, res) => {
 		const { season } = req.params;
 		const code = eventCode(req.params.event);
-		const id = sheetIdFor(season, code);
+		const id = req.team?.legacy ? sheetIdFor(season, code) : null;
 
 		if (!ftcSheets || !id) return res.status(404).json({ error: `No Google Sheet is linked to ${code} yet. Add FTC_SHEET_${season}_${code} to .env.` });
 		if (Date.now() - (lastSync.get(id) ?? 0) < 10 * 1000) return res.status(429).json({ error: "Synced a moment ago. Give it 10 seconds." });
@@ -150,8 +153,8 @@ export function registerFtcScouting(app, ftc) {
 			const teams = await mapLimit(teamEntries ?? [], 8, async entry => ({ ...await teamInfo(entry.teamNumber), stats: eventStats(entry.stats) }));
 			const summary = await ftcSheets.syncAll(id, {
 				event: { ...event, season, code },
-				matchReports: store.matchReports(season, code),
-				pitReports: store.pitReports(season, code),
+				matchReports: store.matchReports(ownerOf(req), season, code),
+				pitReports: store.pitReports(ownerOf(req), season, code),
 				teams,
 				schedule: (schedule ?? []).map(matchSummary).sort((a, b) => a.order[0] - b.order[0] || a.order[1] - b.order[1] || a.order[2] - b.order[2])
 			});
@@ -195,8 +198,8 @@ export function registerFtcScouting(app, ftc) {
 	app.post("/api/ftc/scouting/match", needStore, (req, res) => {
 		try {
 			const report = readReport("match", req.body);
-			const already = store.hasMatchSubmission(report.submissionId);
-			const earlier = !already && req.body?.confirmDuplicate !== true ? store.matchDuplicate(report.season, report.event, report.matchNumber, report.team) : null;
+			const already = store.hasMatchSubmission(ownerOf(req), report.submissionId);
+			const earlier = !already && req.body?.confirmDuplicate !== true ? store.matchDuplicate(ownerOf(req), report.season, report.event, report.matchNumber, report.team) : null;
 
 			if (earlier) {
 				return res.status(409).json({
@@ -205,8 +208,8 @@ export function registerFtcScouting(app, ftc) {
 				});
 			}
 
-			const saved = store.addMatch(report);
-			if (!saved.repeat) mirrorToSheet("match", report);
+			const saved = store.addMatch(ownerOf(req), report);
+			if (!saved.repeat) mirrorToSheet(req, "match", report);
 			res.status(saved.repeat ? 200 : 201).json({ ok: true, id: saved.id, repeat: saved.repeat });
 		} catch (error) {
 			res.status(400).json({ error: error.message });
@@ -216,8 +219,8 @@ export function registerFtcScouting(app, ftc) {
 	app.post("/api/ftc/scouting/pit", needStore, (req, res) => {
 		try {
 			const report = readReport("pit", req.body);
-			const already = store.hasPitSubmission(report.submissionId);
-			const earlier = !already && req.body?.confirmDuplicate !== true ? store.pitDuplicate(report.season, report.event, report.team) : null;
+			const already = store.hasPitSubmission(ownerOf(req), report.submissionId);
+			const earlier = !already && req.body?.confirmDuplicate !== true ? store.pitDuplicate(ownerOf(req), report.season, report.event, report.team) : null;
 
 			if (earlier) {
 				return res.status(409).json({
@@ -226,8 +229,8 @@ export function registerFtcScouting(app, ftc) {
 				});
 			}
 
-			const saved = store.addPit(report);
-			if (!saved.repeat) mirrorToSheet("pit", report);
+			const saved = store.addPit(ownerOf(req), report);
+			if (!saved.repeat) mirrorToSheet(req, "pit", report);
 			res.status(saved.repeat ? 200 : 201).json({ ok: true, id: saved.id, repeat: saved.repeat });
 		} catch (error) {
 			res.status(400).json({ error: error.message });
@@ -240,8 +243,8 @@ export function registerFtcScouting(app, ftc) {
 	app.get("/api/ftc/scouting/:season/:event/summary", checkEvent, needStore, (req, res) => {
 		const { season } = req.params;
 		const event = eventCode(req.params.event);
-		const matches = store.matchReports(season, event);
-		const pits = store.pitReports(season, event);
+		const matches = store.matchReports(ownerOf(req), season, event);
+		const pits = store.pitReports(ownerOf(req), season, event);
 
 		const teams = new Set([...matches.map(report => report.team), ...pits.map(report => report.team)]);
 		const summary = {};
@@ -252,7 +255,18 @@ export function registerFtcScouting(app, ftc) {
 			);
 		}
 
-		res.json({ counts: store.counts(season, event), teams: summary });
+		res.json({ counts: store.counts(ownerOf(req), season, event), teams: summary });
+	});
+
+	/* Every match report (and each team's latest pit answers), for the overview's graphs. */
+	app.get("/api/ftc/scouting/:season/:event/reports", checkEvent, needStore, (req, res) => {
+		const { season } = req.params;
+		const event = eventCode(req.params.event);
+
+		res.json({
+			match: store.matchReports(ownerOf(req), season, event).map(report => ({ team: report.team, matchNumber: report.matchNumber, alliance: report.alliance, noShow: report.noShow, flagged: report.flagged, scout: report.scout, data: report.data })),
+			pit: store.pitReports(ownerOf(req), season, event).map(report => ({ team: report.team, scout: report.scout, data: report.data }))
+		});
 	});
 
 	app.get("/api/ftc/scouting/:season/:event/team/:team", checkEvent, needStore, (req, res) => {
@@ -261,8 +275,8 @@ export function registerFtcScouting(app, ftc) {
 		const team = Number(req.params.team);
 		if (!Number.isInteger(team)) return res.status(400).json({ error: "Invalid team number." });
 
-		const matches = store.teamMatchReports(season, event, team);
-		const pits = store.teamPitReports(season, event, team);
+		const matches = store.teamMatchReports(ownerOf(req), season, event, team);
+		const pits = store.teamPitReports(ownerOf(req), season, event, team);
 		const open = report => ({ id: report.id, scout: report.scout, flagged: report.flagged, createdAt: report.createdAt, matchNumber: report.matchNumber, alliance: report.alliance, noShow: report.noShow, data: report.data });
 
 		res.json({
@@ -277,7 +291,7 @@ export function registerFtcScouting(app, ftc) {
 		const { season } = req.params;
 		const event = eventCode(req.params.event);
 		const kind = req.query.kind === "pit" ? "pit" : "match";
-		const reports = kind === "pit" ? store.pitReports(season, event) : store.matchReports(season, event);
+		const reports = kind === "pit" ? store.pitReports(ownerOf(req), season, event) : store.matchReports(ownerOf(req), season, event);
 		const head = reportHeadings(kind);
 		const rows = reports.map(report => reportCells(kind, report));
 
@@ -293,6 +307,6 @@ export function registerFtcScouting(app, ftc) {
 		if (!sameKey(req.get("x-admin-key"), key)) return res.status(403).json({ error: "Admin key needed." });
 		if (req.params.kind !== "match" && req.params.kind !== "pit") return res.status(400).json({ error: "Unknown report type." });
 
-		res.json({ ok: store.deleteReport(req.params.kind, Number(req.params.id)) });
+		res.json({ ok: store.deleteReport(ownerOf(req), req.params.kind, Number(req.params.id)) });
 	});
 }

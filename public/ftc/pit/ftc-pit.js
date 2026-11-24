@@ -83,6 +83,22 @@ function resetForm() {
 	els.teamNote.textContent = "";
 }
 
+/* Saves the report on screen on this phone (if there is one), then opens the transfer page. */
+document.getElementById("transferButton").addEventListener("click", event => {
+	const chosen = picker.current();
+	const scout = els.scout.value.trim();
+	const team = Number(els.team.value);
+	if (!els.team.value.trim() || !chosen.code) return;          // nothing on screen: just open the page
+
+	event.preventDefault();
+	if (!scout) return FtcScout.toast("error", "Not saved", "Enter your name at the top first.");
+	if (!Number.isInteger(team) || team < 1) return FtcScout.toast("error", "Not saved", "Enter the team number.");
+
+	FtcScout.store.set(FtcScout.NAME_KEY, scout);
+	FtcScout.queueOnly("pit", { season: chosen.season, event: chosen.code, team, scout, flagged: els.flag.checked, answers: FtcScout.collect(els.sections, game.pit.sections) });
+	window.location.href = "/ftc/transfer/";
+});
+
 els.form.addEventListener("submit", async event => {
 	event.preventDefault();
 	const chosen = picker.current();

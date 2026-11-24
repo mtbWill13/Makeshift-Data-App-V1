@@ -5,11 +5,19 @@ const baseNote = document.getElementById("baseNote");
 const cards = document.getElementById("cards");
 const STORAGE_KEY = "makeshift-qr-base-url";
 
-const PAGES = [
-	{ path: "/scouting/", title: "Match Scouting", hint: "Scan to scout a match" },
-	{ path: "/pitScouting/", title: "Pit Scouting", hint: "Scan to scout a robot in the pits" },
-	{ path: "/", title: "Data Hub", hint: "Scan to open the scouting site" }
-];
+/* The FRC and FTC QR pages share this script: the page says which site it is for. */
+const SITE = document.body.dataset.site === "ftc" ? "ftc" : "frc";
+const PAGES = SITE === "ftc"
+	? [
+		{ path: "/ftc/scouting/", title: "FTC Match Scouting", hint: "Scan to scout an FTC match" },
+		{ path: "/ftc/pit/", title: "FTC Pit Scouting", hint: "Scan to scout an FTC robot in the pits" },
+		{ path: "/ftc/", title: "FTC Data Hub", hint: "Scan to open the FTC scouting site" }
+	]
+	: [
+		{ path: "/scouting/", title: "Match Scouting", hint: "Scan to scout a match" },
+		{ path: "/pitScouting/", title: "Pit Scouting", hint: "Scan to scout a robot in the pits" },
+		{ path: "/", title: "Data Hub", hint: "Scan to open the scouting site" }
+	];
 
 function savedBase() {
 	try {

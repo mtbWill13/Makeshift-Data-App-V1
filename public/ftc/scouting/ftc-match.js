@@ -226,6 +226,29 @@ els.form.addEventListener("submit", async event => {
 	}
 });
 
+/* Saves the report on screen on this phone (if there is one), then opens the transfer page. */
+document.getElementById("transferButton").addEventListener("click", event => {
+	const event_ = picker.current();
+	const scout = els.scout.value.trim();
+	const matchNumber = Number(els.matchNumber.value);
+	const team = Number(els.team.value);
+	if (!els.team.value.trim() || !event_.code) return;          // nothing on screen: just open the page
+
+	event.preventDefault();
+	if (!scout) return problem("Enter your name at the top first.", els.scout);
+	if (!Number.isInteger(matchNumber) || matchNumber < 1) return problem("Enter the match number.", els.matchNumber);
+	if (!Number.isInteger(team) || team < 1) return problem("Enter the team number.", els.team);
+
+	FtcScout.store.set(FtcScout.NAME_KEY, scout);
+	FtcScout.queueOnly("match", {
+		season: event_.season, event: event_.code, matchNumber, team,
+		alliance: els.form.querySelector('input[name="alliance"]:checked')?.value ?? null, scout,
+		noShow: noShowChoice(), flagged: els.flag.checked, answers: FtcScout.collect(els.sections, game.match.sections)
+	});
+	advance();
+	window.location.href = "/ftc/transfer/";
+});
+
 function problem(message, element) {
 	FtcScout.toast("error", "Not submitted", message);
 	element?.focus();

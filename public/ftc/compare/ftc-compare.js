@@ -109,7 +109,29 @@ function renderSeason(dataA, dataB, season) {
       <p class="ftc-source-note">Data from FTCScout. Scrimmages are left out of records and event counts.</p>`;
 }
 
-function renderEvent(eventData, numberA, numberB, season) {
+/* Our own scouting for both teams at this event (nothing if neither has been scouted). */
+function scoutingTable(a, b, summary) {
+	if (!summary || (!summary.teams[a.number] && !summary.teams[b.number])) return "";
+	const pa = FtcTeamScouting.profile({ s: summary.teams[a.number] ?? null });
+	const pb = FtcTeamScouting.profile({ s: summary.teams[b.number] ?? null });
+	const percent = value => Number.isFinite(value) ? value * 100 : null;
+	const rate = (label, key, lowerIsBetter = false) => numericRow(label, percent(pa[key]), percent(pb[key]), { digits: 0, suffix: "%", lowerIsBetter });
+
+	return table("Our scouting", a, b, [
+		numericRow("Match reports", pa.reports, pb.reports, { digits: 0 }),
+		numericRow("Estimated points per match", pa.points, pb.points),
+		numericRow("Hive tips per match", pa.tips, pb.tips),
+		numericRow("Auto scored per match", pa.autoPieces, pb.autoPieces),
+		numericRow("Teleop scored per match", pa.telePieces, pb.telePieces),
+		rate("Leaves in auto", "leave"),
+		rate("Parks at the end", "endPark"),
+		rate("Plays blocker", "blocker"),
+		rate("Breakdowns", "breakdown", true),
+		numericRow("Driver skill (1-5)", pa.driver, pb.driver)
+	]);
+}
+
+function renderEvent(eventData, numberA, numberB, season, summary) {
 	const { event, teams, matches } = eventData;
 	const find = number => teams.find(team => team.number === number);
 	const entryA = find(numberA);
@@ -145,6 +167,7 @@ function renderEvent(eventData, numberA, numberB, season) {
 		numericRow("Average score", a.stats?.avg?.total, b.stats?.avg?.total),
 		textRow("Record", ftcRecord(a.stats), ftcRecord(b.stats))
 	])}
+      ${scoutingTable(a, b, summary)}
       <h3 class="section-title">Matches together or against each other</h3>
       ${shared.length
 		? `<section class="match-list">${shared.map(match => ftcMatchCard(match, event, numberA, season)).join("")}</section>`
@@ -181,8 +204,13 @@ async function compare() {
 			]);
 			if (thisLoad === loadId) renderSeason(dataA, dataB, season);
 		} else {
-			const eventData = await ftcFetch(`/api/ftc/event/${season}/${encodeURIComponent(event)}`);
-			if (thisLoad === loadId) renderEvent(eventData, numberA, numberB, season);
+			const game = await ftcFetch("/api/ftc/game").catch(() => null);
+			if (game) FtcTeamScouting.setGame(game);
+			const [eventData, summary] = await Promise.all([
+				ftcFetch(`/api/ftc/event/${season}/${encodeURIComponent(event)}`),
+				game ? ftcFetch(`/api/ftc/scouting/${season}/${encodeURIComponent(event)}/summary`).catch(() => null) : null
+			]);
+			if (thisLoad === loadId) renderEvent(eventData, numberA, numberB, season, summary);
 		}
 	} catch (error) {
 		if (thisLoad === loadId) results.innerHTML = `<div class="empty-state">${ftcEscape(error.message)}</div>`;

@@ -50,7 +50,40 @@ function chart(title, red, blue, key) {
       </article>`;
 }
 
-function render(red, blue, scope, isSeason) {
+/* Our scouting per team, plus what each alliance adds up to (only teams we have reports for count). */
+function scoutingSection(red, blue, summary) {
+	if (!summary || ![...red, ...blue].some(team => summary.teams[team.number])) return "";
+	const prof = team => FtcTeamScouting.profile({ s: summary.teams[team.number] ?? null });
+	const totalOf = (teams, key) => {
+		const known = teams.map(team => prof(team)[key]).filter(Number.isFinite);
+		return known.length ? known.reduce((total, value) => total + value, 0) : null;
+	};
+	const metrics = [["Match reports", "reports", 0], ["Est. points", "points"], ["Hive tips", "tips"], ["Auto scored", "autoPieces"], ["Teleop scored", "telePieces"]];
+	const perTeam = teams => `
+        <table class="comparison-table">
+          <thead><tr><th>Stat</th>${teams.map(team => `<th><a href="${ftcTeamUrl(team.number, seasonSelect.value)}">${team.number}</a></th>`).join("")}</tr></thead>
+          <tbody>${metrics.map(([label, key, digits = 1]) => `<tr><td>${ftcEscape(label)}</td>${teams.map(team => `<td>${ftcFormat(prof(team)[key], digits)}</td>`).join("")}</tr>`).join("")}</tbody>
+        </table>`;
+
+	return `
+      <h3 class="section-title">Our scouting</h3>
+      <table class="comparison-table">
+        <thead><tr><th>Per match, from our reports</th><th>Red Alliance</th><th>Blue Alliance</th></tr></thead>
+        <tbody>
+          ${row("Estimated points", totalOf(red, "points"), totalOf(blue, "points"))}
+          ${row("Hive tips", totalOf(red, "tips"), totalOf(blue, "tips"))}
+          ${row("Leave + park points", totalOf(red, "swarm"), totalOf(blue, "swarm"))}
+          ${row("Auto scored", totalOf(red, "autoPieces"), totalOf(blue, "autoPieces"))}
+          ${row("Teleop scored", totalOf(red, "telePieces"), totalOf(blue, "telePieces"))}
+        </tbody>
+      </table>
+      <section class="individual-tables">
+        <article class="individual-table-card red"><h4>Red alliance</h4>${perTeam(red)}</article>
+        <article class="individual-table-card blue"><h4>Blue alliance</h4>${perTeam(blue)}</article>
+      </section>`;
+}
+
+function render(red, blue, scope, isSeason, summary = null) {
 	const total = (teams, key) => sum(teams.map(team => team[key]));
 	const redScore = total(red, "opr");
 	const blueScore = total(blue, "opr");
@@ -89,6 +122,8 @@ function render(red, blue, scope, isSeason) {
         ${teamTable("Blue alliance", "blue", blue, metrics)}
       </section>
 
+      ${scoutingSection(red, blue, summary)}
+
       <h3 class="section-title">Team charts</h3>
       <section class="charts-grid">
         ${chart("OPR", red, blue, "opr")}
@@ -96,7 +131,7 @@ function render(red, blue, scope, isSeason) {
         ${chart("Teleop OPR", red, blue, "teleop")}
       </section>
 
-      <p class="ftc-source-note">Data from FTCScout.</p>`;
+      <p class="ftc-source-note">Data from FTCScout${summary ? ", plus our own scouting reports" : ""}.</p>`;
 }
 
 async function compare() {
@@ -142,7 +177,12 @@ async function compare() {
 			const teams = seasons.map(profile);
 			render(teams.slice(0, 2), teams.slice(2), FTC_SEASONS.find(item => item.year === season)?.label ?? season, true);
 		} else {
-			const data = await ftcFetch(`/api/ftc/event/${season}/${encodeURIComponent(event)}`);
+			const game = await ftcFetch("/api/ftc/game").catch(() => null);
+			if (game) FtcTeamScouting.setGame(game);
+			const [data, summary] = await Promise.all([
+				ftcFetch(`/api/ftc/event/${season}/${encodeURIComponent(event)}`),
+				game ? ftcFetch(`/api/ftc/scouting/${season}/${encodeURIComponent(event)}/summary`).catch(() => null) : null
+			]);
 			if (thisLoad !== loadId) return;
 			const missing = all.filter(number => !data.teams.some(team => team.number === number));
 			if (missing.length) {
@@ -161,7 +201,7 @@ async function compare() {
 					rp: team.stats?.rp ?? null
 				};
 			};
-			render(red.map(profile), blue.map(profile), data.event.name, false);
+			render(red.map(profile), blue.map(profile), data.event.name, false, summary);
 		}
 	} catch (error) {
 		if (thisLoad === loadId) results.innerHTML = `<div class="empty-state">${ftcEscape(error.message)}</div>`;

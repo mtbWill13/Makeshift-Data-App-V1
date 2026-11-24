@@ -317,6 +317,11 @@ const FtcScout = (() => {
 		}
 	}
 
+	/* Saves a report on this device only (for "Save & Offline Transfer"): it uploads later like any queued report. */
+	function queueOnly(kind, payload) {
+		writeQueue([...readQueue(), { kind, payload: { ...payload, submissionId: newId() } }]);
+	}
+
 	/* Sends reports saved while offline. Returns how many went. */
 	async function syncQueue() {
 		let sent = 0;
@@ -343,5 +348,5 @@ const FtcScout = (() => {
 
 	const queuedCount = kind => readQueue().filter(item => item.kind === kind).length;
 
-	return { loadGame, render, collect, eventPicker, submit, syncQueue, queuedCount, toast, store, NAME_KEY, trackSheetNote };
+	return { loadGame, render, collect, eventPicker, submit, queueOnly, syncQueue, queuedCount, toast, store, NAME_KEY, trackSheetNote };
 })();

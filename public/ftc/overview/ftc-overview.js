@@ -1,16 +1,20 @@
 /* =================================
-   FTC STRATEGY BOARD
-   Puts our own scouting reports next to FTCScout (and, when set up, FIRST's official
-   feed and The Orange Alliance): a match preview with predictions, a sortable board of
-   every team at the event, and a page per team.
+   FTC EVENT OVERVIEW
+   Our own scouting reports next to FTCScout (and, when set up, FIRST's official feed and
+   The Orange Alliance): event-wide graphs, a chart builder, a match lookup with predictions
+   and a sortable board of every team. A team's own page is on the FTC Data Hub.
 ================================= */
 
 const $ = id => document.getElementById(id);
 const els = {
 	season: $("seasonSelect"), event: $("eventSelect"), custom: $("customEvent"), load: $("loadButton"),
-	status: $("status"), matchSelect: $("matchSelect"), previewButton: $("previewButton"), preview: $("preview"),
+	status: $("status"), summary: $("summary"), dashboard: $("dashboard"), matchSelect: $("matchSelect"), previewButton: $("previewButton"), preview: $("preview"),
 	inputs: { r1: $("r1"), r2: $("r2"), b1: $("b1"), b2: $("b2") },
-	filters: $("filters"), board: $("board"), detail: $("teamDetail"),
+	filters: $("filters"), board: $("board"),
+	builder: {
+		stat: $("builderStat"), chart: $("builderChart"), aggregate: $("builderAggregate"), x: $("builderX"), teams: $("builderTeams"),
+		show: $("builderShow"), sort: $("builderSort"), output: $("builderOutput"), aggregateGroup: $("aggregateGroup"), xGroup: $("xGroup")
+	},
 	counts: $("counts"), sources: $("sources"), exportMatch: $("exportMatch"), exportPit: $("exportPit"),
 	openSheet: $("openSheet"), syncSheet: $("syncSheet"), sheetStatus: $("sheetStatus")
 };
@@ -50,11 +54,12 @@ async function loadEvent() {
 	}
 
 	els.status.textContent = "Loading the event…";
-	const [event, scouting, schedule, sources] = await Promise.all([
+	const [event, scouting, schedule, sources, reports] = await Promise.all([
 		ftcFetch(`/api/ftc/event/${season}/${code}`).catch(() => null),
 		ftcFetch(`/api/ftc/scouting/${season}/${code}/summary`).catch(() => ({ counts: { matches: 0, pits: 0 }, teams: {} })),
 		ftcFetch(`/api/ftc/schedule/${season}/${code}`).catch(() => ({ source: null, matches: [] })),
-		ftcFetch("/api/ftc/sources").catch(() => null)
+		ftcFetch("/api/ftc/sources").catch(() => null),
+		ftcFetch(`/api/ftc/scouting/${season}/${code}/reports`).catch(() => ({ match: [], pit: [] }))
 	]);
 
 	const byTeam = new Map();
@@ -75,7 +80,7 @@ async function loadEvent() {
 	}
 	for (const [team, summary] of Object.entries(scouting.teams)) row(Number(team)).s = summary;
 
-	state = { season, code, event, schedule: schedule.matches, scheduleSource: schedule.source, scouting, rows: [...byTeam.values()], sources };
+	state = { season, code, event, schedule: schedule.matches, scheduleSource: schedule.source, scouting, rows: [...byTeam.values()], sources, reports };
 
 	els.status.textContent = event
 		? `${event.event.name}${event.event.start ? ` · ${event.event.start}` : ""} · ${plural(state.rows.length, "team")}`
@@ -84,7 +89,11 @@ async function loadEvent() {
 	fillMatches();
 	renderBoard();
 	renderSources();
-	els.detail.innerHTML = "";
+	buildStats();
+	renderSummary();
+	renderDashboard();
+	fillBuilder();
+	renderBuilder();
 	els.preview.innerHTML = `<div class="empty-state">Pick a scheduled match, or type four teams to see how any alliances would match up.</div>`;
 }
 
@@ -215,7 +224,7 @@ els.board.addEventListener("click", event => {
 	}
 
 	const team = event.target.closest("button[data-team]");
-	if (team) openTeam(Number(team.dataset.team));
+	if (team) window.location.href = teamUrl(Number(team.dataset.team));
 });
 
 els.filters.addEventListener("change", () => state && renderBoard());
@@ -280,6 +289,9 @@ function oprSpread() {
 
 	return errors.length >= 8 ? Math.sqrt(errors.reduce((sum, error) => sum + error ** 2, 0) / errors.length) : null;
 }
+
+/* A team's page on the FTC Data Hub (stats, our scouting, every match). */
+const teamUrl = team => ftcTeamUrl(team, state.season, state.code);
 
 const teamRow = team => state.rows.find(row => row.team === team) ?? { team, name: null, rank: null, opr: null, stats: null, s: null };
 
@@ -455,51 +467,333 @@ function scoreDetailsTable(match) {
 
 els.preview.addEventListener("click", event => {
 	const team = event.target.closest("button[data-team]");
-	if (team) openTeam(Number(team.dataset.team));
+	if (team) window.location.href = teamUrl(Number(team.dataset.team));
 });
 
-/* ----- one team ----- */
+/* =================================
+   STATS, SUMMARY AND GRAPHS
+   Built from the questions in ftc-game.js, so a new season's questions are charted without changes here.
+   Kinds: "match" (a number per report), "flag" (yes = 1 / no = 0 per report) and "team" (one number, e.g. OPR).
+================================= */
 
-async function openTeam(team) {
-	els.detail.innerHTML = `<div class="team-detail"><div class="loading">Loading team ${team}…</div></div>`;
-	els.detail.scrollIntoView({ behavior: "smooth", block: "start" });
+let stats = [];
+const LINE_COLOURS = [BRAND.red, BRAND.orange, BRAND.yellow, BRAND.green, BRAND.blue, "#c08de8", "#ef8fb7", "#9be3d6"];
 
-	const [mine, links, season] = await Promise.all([
-		ftcFetch(`/api/ftc/scouting/${state.season}/${state.code}/team/${team}`).catch(() => null),
-		ftcFetch(`/api/ftc/team-links/${state.season}/${team}`).catch(() => null),
-		ftcFetch(`/api/ftc/team/${team}/${state.season}`).catch(() => null)
-	]);
+const AGGREGATES = {
+	mean: { label: "Average", apply: values => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null },
+	median: { label: "Median", apply: values => values.length ? quantile([...values].sort((a, b) => a - b), 0.5) : null },
+	max: { label: "Best match (max)", apply: values => values.length ? Math.max(...values) : null },
+	min: { label: "Worst match (min)", apply: values => values.length ? Math.min(...values) : null },
+	total: { label: "Total", apply: values => values.length ? values.reduce((sum, value) => sum + value, 0) : null },
+	count: { label: "Count (times yes)", apply: values => values.length ? values.filter(Boolean).length : null },
+	rate: { label: "% of matches", apply: values => values.length ? values.filter(Boolean).length / values.length * 100 : null }
+};
 
-	const row = { ...teamRow(team), s: mine?.summary ?? teamRow(team).s };
-	const info = links?.toa ?? links?.team ?? {};
-	const place = [info.city, info.state, info.country].filter(Boolean).join(", ");
-	const quick = season?.quickStats;
-	const card = (label, value, note = "") => `<div><dt>${label}</dt><dd>${value}${note ? `<small>${ftcEscape(note)}</small>` : ""}</dd></div>`;
-	const reports = mine?.matchReports ?? [];
-	const flagged = reports.filter(report => report.flagged).length;
+const statById = id => stats.find(stat => stat.id === id);
 
-	els.detail.innerHTML = `
-      <section class="team-detail">
-        <h3>${team}${info.name ? ` · ${ftcEscape(info.name)}` : ""}</h3>
-        <p class="team-subtitle">${ftcEscape(place)}${info.rookieYear ? ` · rookie year ${info.rookieYear}` : ""}${links?.team?.school ? ` · ${ftcEscape(links.team.school)}` : ""}</p>
-        <div class="links">${(links?.links ?? []).map(link => `<a class="back-link" href="${ftcEscape(link.url)}" target="_blank" rel="noopener noreferrer">${ftcEscape(link.label)} ↗</a>`).join("")}${state.event ? "" : ""}</div>
-        <dl class="detail-grid">
-          ${card("Event rank", finite(row.rank) ? row.rank : "—", row.stats ? ftcRecord(row.stats) : "")}
-          ${card("Event OPR", num(row.opr?.total), row.opr ? `auto ${num(row.opr.auto)} · teleop ${num(row.opr.teleop)}` : "")}
-          ${card("Season OPR", num(quick?.total?.value), quick?.total?.rank ? `world rank ${quick.total.rank} of ${quick.teamCount}` : "")}
-          ${FtcTeamScouting.cardsHtml(row, mine)}
-        </dl>
-        ${flagged ? `<p class="check-this">${plural(flagged, "report")} flagged "check this": the scout wasn't sure they got ${flagged === 1 ? "it" : "them"} right.</p>` : ""}
-        ${tagHtml(tagsFor(row))}
-        ${FtcTeamScouting.pitHtml(mine)}
-        <h4 class="pv-subtitle">Match reports (${reports.length})</h4>
-        <div class="report-list">${FtcTeamScouting.reportCardsHtml(mine) || `<div class="empty-state">No match reports for this team yet.</div>`}</div>
-      </section>`;
+/* Every team's reports at this event: all of them, and the ones where the robot played. */
+function reportsByTeam() {
+	const byTeam = new Map();
+	for (const report of state.reports.match ?? []) {
+		if (!byTeam.has(report.team)) byTeam.set(report.team, { rows: [], played: [] });
+		const entry = byTeam.get(report.team);
+		entry.rows.push(report);
+		if (report.noShow !== "yes") entry.played.push(report);
+	}
+	return byTeam;
 }
 
-els.detail.addEventListener("click", event => {
-	const team = event.target.closest("button[data-team]");
-	if (team) openTeam(Number(team.dataset.team));
+function buildStats() {
+	stats = [];
+	state.byTeam = reportsByTeam();
+
+	const sections = game.match.sections;
+	const fields = sections.flatMap(section => section.fields.map(field => ({ ...field, section: section.title })));
+	const count = (report, ids) => ids.reduce((total, id) => total + (Number(report.data[id]) || 0), 0);
+	const scored = fields.filter(field => field.type === "count" && /Scored$/.test(field.id)).map(field => field.id);
+	const worth = (report, id, value) => report.data[id] === "yes" ? value : (Number(report.data[id]) || 0) * value;
+
+	const add = (id, label, short, value, extra = {}) => stats.push({ id, label, short, kind: "match", value, ...extra });
+	const points = game.match.points;
+	const ranking = game.match.rankingPoints;
+
+	if (Object.keys(points).length) add("points", "Estimated points per match (from the game's point values)", "Est. points", report => Object.entries(points).reduce((total, [id, value]) => total + worth(report, id, value), 0));
+	add("tips", "Hive tips (auto + teleop)", "Hive tips", report => count(report, ranking.tipFields));
+	add("pieces", "Pollen and nectar scored (all)", "Pieces scored", report => count(report, scored));
+	add("autoPieces", "Pollen and nectar scored in auto", "Auto scored", report => count(report, scored.filter(id => id.startsWith("auto"))));
+	add("telePieces", "Pollen and nectar scored in teleop", "Teleop scored", report => count(report, scored.filter(id => id.startsWith("tele"))));
+	add("swarm", "Leave + park points", "Leave + park", report => Object.entries(ranking.swarm.fields).reduce((total, [id, value]) => total + worth(report, id, value), 0));
+
+	for (const field of fields) {
+		if (field.type === "count") {
+			add(`field:${field.id}`, `${field.section}: ${field.label}`, field.label, report => report.data[field.id] === undefined ? null : Number(report.data[field.id]));
+		} else if (field.type === "yesno") {
+			stats.push({ id: `field:${field.id}`, label: field.label, short: field.label, kind: "flag", value: report => report.data[field.id] === "yes" ? 1 : report.data[field.id] === "no" ? 0 : null });
+		} else if (field.type === "scale") {
+			add(`field:${field.id}`, `${field.label} (1 poor, 5 excellent)`, field.label, report => report.data[field.id] === undefined ? null : Number(report.data[field.id]));
+		}
+	}
+	stats.push({ id: "noShow", label: "No shows", short: "No shows", kind: "flag", includeNoShows: true, value: report => report.noShow === "yes" ? 1 : 0 });
+
+	stats.push({ id: "opr", label: "OPR (FTCScout)", short: "OPR", kind: "team", value: team => teamRow(team).opr?.total ?? null });
+	stats.push({ id: "autoOpr", label: "Auto OPR (FTCScout)", short: "Auto OPR", kind: "team", value: team => teamRow(team).opr?.auto ?? null });
+	stats.push({ id: "teleOpr", label: "Teleop OPR (FTCScout)", short: "Teleop OPR", kind: "team", value: team => teamRow(team).opr?.teleop ?? null });
+}
+
+function teamValues(stat, team) {
+	const entry = state.byTeam.get(team);
+	if (!entry || stat.kind === "team") return [];
+	return (stat.includeNoShows ? entry.rows : entry.played).map(stat.value).filter(value => value !== null);
+}
+
+const aggregatesFor = stat => stat.kind === "team" ? [] : stat.kind === "flag" ? ["count", "rate"] : ["mean", "median", "max", "min", "total"];
+const teamValue = (stat, team, aggregate) => stat.kind === "team" ? stat.value(team) : AGGREGATES[aggregate ?? (stat.kind === "flag" ? "rate" : "mean")].apply(teamValues(stat, team));
+const allTeams = () => state.rows.map(row => row.team).sort((a, b) => a - b);
+
+/* ----- summary cards ----- */
+
+function renderSummary() {
+	const reports = state.reports.match ?? [];
+	const played = reports.filter(report => report.noShow !== "yes");
+	const scouts = new Set([...reports, ...(state.reports.pit ?? [])].map(report => String(report.scout ?? "").trim()).filter(Boolean));
+	const best = statById("points") ?? statById("tips");
+	const top = best ? [...state.byTeam.keys()].map(team => ({ team, value: teamValue(best, team, "mean") })).filter(item => item.value !== null).sort((a, b) => b.value - a.value)[0] : null;
+
+	els.summary.innerHTML = `
+      <div class="stat-card"><div class="stat-label">Teams at the event</div><div class="stat-value">${state.rows.length}</div><div class="stat-description">${state.byTeam.size} scouted so far</div></div>
+      <div class="stat-card"><div class="stat-label">Match reports</div><div class="stat-value">${played.length}</div><div class="stat-description">${reports.length - played.length} no-shows left out</div></div>
+      <div class="stat-card"><div class="stat-label">Scouts</div><div class="stat-value">${scouts.size}</div><div class="stat-description">People who submitted reports</div></div>
+      <div class="stat-card"><div class="stat-label">Top scouted average</div><div class="stat-value">${top ? top.team : "—"}</div><div class="stat-description">${top ? `${top.value.toFixed(1)} ${best.short.toLowerCase()} per match` : "No scouting data yet"}</div></div>`;
+}
+
+/* ----- graph cards ----- */
+
+const chartCard = (id, title, description, chartHtml) => `
+      <article class="overview-chart" data-chart-id="${id}">
+        <div class="overview-chart-heading">
+          <div><h3>${ftcEscape(title)}</h3><p>${ftcEscape(description)}</p></div>
+          <button class="secondary-button download-chart" type="button" data-title="${ftcEscape(title)}">Download PNG</button>
+        </div>
+        <div class="chart-scroll">${chartHtml}</div>
+      </article>`;
+
+function rankedBoxPlot(stat, yLabel) {
+	const groups = [...state.byTeam.keys()]
+		.map(team => ({ team, values: teamValues(stat, team) }))
+		.filter(group => group.values.length)
+		.map(group => ({ ...group, mean: AGGREGATES.mean.apply(group.values) }))
+		.sort((a, b) => b.mean - a.mean);
+
+	return boxPlot(groups.map((group, index) => ({
+		label: String(group.team), values: group.values,
+		colour: rankColour(groups.length > 1 ? index / (groups.length - 1) : 0), href: teamUrl(group.team)
+	})), { yLabel, xLabel: "Team number", title: stat.label });
+}
+
+function countBars(stat, yLabel) {
+	const items = [...state.byTeam.keys()]
+		.map(team => ({ team, values: teamValues(stat, team) }))
+		.map(item => ({ ...item, count: item.values.filter(Boolean).length }))
+		.filter(item => item.count > 0)
+		.sort((a, b) => b.count - a.count || a.team - b.team);
+	const max = Math.max(1, ...items.map(item => item.count));
+
+	return barChart(items.map(item => ({
+		label: String(item.team), value: item.count, colour: heatColour(max > 1 ? (item.count - 1) / (max - 1) : 1),
+		title: `${item.team}: ${item.count} of ${item.values.length} matches`, href: teamUrl(item.team)
+	})), { yLabel, xLabel: "Team number", title: stat.label, empty: `No ${stat.label.toLowerCase()} reported at this event.` });
+}
+
+function rateBars(stat, yLabel) {
+	const items = [...state.byTeam.keys()]
+		.map(team => ({ team, values: teamValues(stat, team) }))
+		.filter(item => item.values.length)
+		.map(item => ({ ...item, rate: item.values.filter(Boolean).length / item.values.length * 100 }))
+		.sort((a, b) => b.rate - a.rate || a.team - b.team);
+
+	return barChart(items.map((item, index) => ({
+		label: String(item.team), value: item.rate, colour: rankColour(items.length > 1 ? index / (items.length - 1) : 0),
+		title: `${item.team}: ${Math.round(item.rate)}% (${item.values.filter(Boolean).length} of ${item.values.length} matches)`, href: teamUrl(item.team)
+	})), { yLabel, xLabel: "Team number", title: stat.label, yMax: 100 });
+}
+
+function averageBars(stat, yLabel) {
+	const items = [...state.byTeam.keys()]
+		.map(team => ({ team, values: teamValues(stat, team) }))
+		.filter(item => item.values.length)
+		.map(item => ({ ...item, mean: AGGREGATES.mean.apply(item.values) }))
+		.sort((a, b) => b.mean - a.mean);
+
+	return barChart(items.map((item, index) => ({
+		label: String(item.team), value: item.mean, colour: rankColour(items.length > 1 ? index / (items.length - 1) : 0),
+		title: `${item.team}: ${item.mean.toFixed(1)} on average over ${item.values.length} matches`, href: teamUrl(item.team)
+	})), { yLabel, xLabel: "Team number", title: stat.label });
+}
+
+function teamStatBars(stat) {
+	const items = allTeams().map(team => ({ team, value: stat.value(team) })).filter(item => Number.isFinite(item.value)).sort((a, b) => b.value - a.value);
+	return barChart(items.map((item, index) => ({
+		label: String(item.team), value: item.value, colour: rankColour(items.length > 1 ? index / (items.length - 1) : 0),
+		title: `${item.team}: ${item.value.toFixed(1)}`, href: teamUrl(item.team)
+	})), { yLabel: stat.short, xLabel: "Team number", title: stat.label, empty: `No ${stat.short} data for this event.` });
+}
+
+function scoutingVsOpr() {
+	const stat = statById("points") ?? statById("pieces");
+	const opr = statById("opr");
+	const points = [...state.byTeam.keys()].map(team => ({ label: String(team), x: opr.value(team), y: teamValue(stat, team, "mean"), colour: BRAND.orange, href: teamUrl(team) }));
+	return scatterChart(points, { xLabel: "OPR (FTCScout)", yLabel: `${stat.short} (scouted average)`, xName: "OPR", yName: stat.short, title: `${stat.short} vs OPR` });
+}
+
+function renderDashboard() {
+	const cards = [];
+	const add = (id, title, description, html) => cards.push(chartCard(id, title, description, html));
+	const has = id => statById(id) && state.reports.match?.length;
+
+	if (!state.reports.match?.length) {
+		cards.push(`<div class="empty-state">No match reports for this event yet, so only FTCScout's OPR is graphed. Scout a match and it appears here.</div>`);
+	}
+
+	if (has("points")) add("points", "Estimated Points", "Points each robot adds per match, from the game's point values (hive tips, parking, flowers, gardens).", rankedBoxPlot(statById("points"), "Estimated points"));
+	if (has("tips")) add("tips", "Hive Tips", "Hive tips per match (20 points each, and the ranking points at 4 and 7).", rankedBoxPlot(statById("tips"), "Hive tips"));
+	if (has("telePieces")) add("tele", "Teleop Scoring", "Pollen and nectar scored in teleop per match.", rankedBoxPlot(statById("telePieces"), "Teleop scored"));
+	if (has("autoPieces")) add("auto", "Auto Scoring", "Pollen and nectar scored in auto per match.", rankedBoxPlot(statById("autoPieces"), "Auto scored"));
+	if (has("field:teleParks")) add("parks", "Parks at the End", "How often each robot ended teleop parked.", rateBars(statById("field:teleParks"), "% of matches"));
+	if (has("field:autoLeave")) add("leave", "Leaves in Auto", "How often each robot left the wall in auto.", rateBars(statById("field:autoLeave"), "% of matches"));
+	if (has("field:breakdown")) add("breakdown", "Breakdown Counts", "Matches where the robot broke down.", countBars(statById("field:breakdown"), "Breakdowns"));
+	if (has("field:blocker")) add("blocker", "Blocker Counts", "Matches where the robot played blocker.", countBars(statById("field:blocker"), "Matches as blocker"));
+	if (has("field:minorFouls")) add("fouls", "Minor Fouls", "Minor fouls scouts saw, per match.", averageBars(statById("field:minorFouls"), "Minor fouls per match"));
+	if (has("field:driver")) add("driver", "Driver Skill", "Scouts rate each driver 1 (poor) to 5 (excellent).", averageBars(statById("field:driver"), "Driver skill"));
+	if ((statById("points") || statById("pieces")) && state.byTeam.size && state.rows.some(row => finite(row.opr?.total))) add("vs-opr", "Scouting vs OPR", "Does our scouting agree with FTCScout's OPR? Each dot is a team.", scoutingVsOpr());
+	if (state.rows.some(row => finite(row.opr?.total))) add("opr", "OPR", "Offensive Power Rating from FTCScout (penalties left out).", teamStatBars(statById("opr")));
+
+	els.dashboard.innerHTML = cards.join("");
+}
+
+/* ----- chart builder ----- */
+
+const CHART_TYPES = {
+	box: { label: "Box plot (spread per match)", kinds: ["match"] },
+	bar: { label: "Bar chart", kinds: ["match", "flag", "team"] },
+	line: { label: "Line over matches", kinds: ["match", "flag"] },
+	scatter: { label: "Scatter vs another stat", kinds: ["match", "flag", "team"] }
+};
+
+function fillBuilder() {
+	const builder = els.builder;
+	const groups = [["Our scouting", stats.filter(stat => stat.kind !== "team")], ["FTCScout", stats.filter(stat => stat.kind === "team")]];
+	const options = groups.map(([name, list]) => `<optgroup label="${name}">${list.map(stat => `<option value="${ftcEscape(stat.id)}">${ftcEscape(stat.label)}</option>`).join("")}</optgroup>`).join("");
+	builder.stat.innerHTML = options;
+	builder.x.innerHTML = options;
+	builder.stat.value = statById("points") ? "points" : statById("tips") ? "tips" : "opr";
+	builder.x.value = "opr";
+	syncBuilderControls();
+}
+
+function syncBuilderControls() {
+	const builder = els.builder;
+	const stat = statById(builder.stat.value);
+	if (!stat) return;
+
+	const allowed = Object.entries(CHART_TYPES).filter(([, type]) => type.kinds.includes(stat.kind));
+	const wantedChart = builder.chart.value;
+	builder.chart.innerHTML = allowed.map(([id, type]) => `<option value="${id}">${type.label}</option>`).join("");
+	builder.chart.value = allowed.some(([id]) => id === wantedChart) ? wantedChart : allowed[0][0];
+
+	const aggregates = aggregatesFor(stat);
+	builder.aggregate.innerHTML = aggregates.map(id => `<option value="${id}">${AGGREGATES[id].label}</option>`).join("");
+	builder.aggregate.value = aggregates.includes(stat.kind === "flag" ? "rate" : "mean") ? (stat.kind === "flag" ? "rate" : "mean") : (aggregates[0] ?? "");
+
+	builder.aggregateGroup.hidden = builder.chart.value !== "bar" || !aggregates.length;
+	builder.xGroup.hidden = builder.chart.value !== "scatter";
+}
+
+/* The teams to chart: those typed in the box, or everyone, then trimmed and ordered. */
+function chosenTeams(stat, aggregate) {
+	const builder = els.builder;
+	const typed = [...new Set(builder.teams.value.match(/\d{1,5}/g) ?? [])].map(Number);
+	const base = typed.length ? typed : [...new Set([...state.byTeam.keys(), ...(stat.kind === "team" ? allTeams() : [])])];
+	let picked = base.map(team => ({ team, value: teamValue(stat, team, aggregate) })).filter(item => typed.length || Number.isFinite(item.value));
+
+	const better = stat.lowerIsBetter ? (a, b) => a.value - b.value : (a, b) => b.value - a.value;
+	const sortMode = builder.sort.value;
+	picked.sort((a, b) => {
+		if (sortMode === "team") return a.team - b.team;
+		if (!Number.isFinite(a.value)) return 1;
+		if (!Number.isFinite(b.value)) return -1;
+		return sortMode === "low" ? a.value - b.value : better(a, b) * (sortMode === "high" ? 1 : 1) || a.team - b.team;
+	});
+
+	const show = builder.show.value;
+	if (!typed.length && show !== "all") {
+		const size = show === "top20" ? 20 : 10;
+		picked = show === "bottom10" ? [...picked].reverse().slice(0, size).reverse() : picked.slice(0, size);
+	}
+
+	return { picked, typed };
+}
+
+function renderBuilder() {
+	const builder = els.builder;
+	const stat = statById(builder.stat.value);
+	if (!stat || !state) return;
+
+	const chart = builder.chart.value;
+	const aggregate = builder.aggregate.value || undefined;
+	const unit = stat.kind === "flag" && aggregate === "rate" ? `${stat.short} (% of matches)` : stat.kind === "flag" ? `${stat.short} (count)` : stat.short;
+	const { picked, typed } = chosenTeams(stat, aggregate);
+	const colourAt = index => rankColour(picked.length > 1 ? index / (picked.length - 1) : 0);
+	let html;
+	let title;
+
+	if (chart === "box") {
+		title = `${stat.short} per match`;
+		html = boxPlot(picked.map((item, index) => ({ label: String(item.team), values: teamValues(stat, item.team), colour: colourAt(index), href: teamUrl(item.team) })), { yLabel: stat.short, xLabel: "Team number", title });
+	} else if (chart === "bar") {
+		title = stat.kind === "team" ? stat.short : stat.kind === "flag" ? `${stat.short} (${aggregate === "rate" ? "% of matches" : "count"})` : `${AGGREGATES[aggregate].label} ${stat.short.toLowerCase()}`;
+		html = barChart(picked.map((item, index) => ({
+			label: String(item.team), value: item.value, colour: colourAt(index),
+			title: `${item.team}: ${Number.isFinite(item.value) ? item.value.toFixed(1) : "no data"}${stat.kind === "team" ? "" : ` (${teamValues(stat, item.team).length} matches)`}`, href: teamUrl(item.team)
+		})), { yLabel: unit, xLabel: "Team number", title, empty: "No values for these teams." });
+	} else if (chart === "line") {
+		const lineTeams = typed.length ? picked.slice(0, 8) : picked.slice(0, 6);
+		title = `${stat.short} by match`;
+		html = lineChart(lineTeams.map((item, index) => ({
+			label: String(item.team), colour: LINE_COLOURS[index % LINE_COLOURS.length],
+			points: (state.byTeam.get(item.team)?.[stat.includeNoShows ? "rows" : "played"] ?? []).map(report => ({ x: report.matchNumber, y: stat.value(report) })).filter(point => point.y !== null)
+		})), { yLabel: stat.short, xLabel: "Qualification match", xName: "match", title })
+			+ (!typed.length && picked.length > 6 ? `<p class="chart-caption">Showing the top 6 teams. Type team numbers above to choose which lines to show (up to 8).</p>` : "");
+	} else {
+		const xStat = statById(builder.x.value);
+		const xAggregate = xStat.kind === "flag" ? "rate" : "mean";
+		title = `${stat.short} vs ${xStat.short}`;
+		html = scatterChart(picked.map(item => ({ label: String(item.team), x: teamValue(xStat, item.team, xAggregate), y: item.value, colour: BRAND.orange, href: teamUrl(item.team) })), {
+			xLabel: `${xStat.short}${xStat.kind === "match" ? " (average)" : xStat.kind === "flag" ? " (% of matches)" : ""}`, yLabel: unit, xName: xStat.short, yName: stat.short, title
+		});
+	}
+
+	const missing = typed.filter(team => stat.kind === "team" ? !Number.isFinite(stat.value(team)) : !teamValues(stat, team).length);
+	if (missing.length) html += `<p class="chart-caption">No ${ftcEscape(stat.short.toLowerCase())} data at this event for team ${missing.join(", ")}.</p>`;
+
+	builder.output.innerHTML = chartCard("builder", title, `${state.event?.event.name ?? state.code} • ${picked.length - missing.length} team${picked.length - missing.length === 1 ? "" : "s"}`, html);
+}
+
+els.builder.stat.addEventListener("change", () => { syncBuilderControls(); renderBuilder(); });
+els.builder.chart.addEventListener("change", () => { syncBuilderControls(); renderBuilder(); });
+[els.builder.aggregate, els.builder.x, els.builder.show, els.builder.sort].forEach(control => control.addEventListener("change", renderBuilder));
+els.builder.teams.addEventListener("input", () => {
+	clearTimeout(els.builder.teams.timer);
+	els.builder.teams.timer = setTimeout(renderBuilder, 300);
+});
+
+document.addEventListener("click", event => {
+	const button = event.target.closest(".download-chart");
+	if (!button) return;
+	const svgElement = button.closest(".overview-chart")?.querySelector("svg");
+	if (svgElement) {
+		const name = button.dataset.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+		downloadChartPng(svgElement, `${state.code}-${name}.png`, `${button.dataset.title}: ${state.event?.event.name ?? state.code}`);
+	}
 });
 
 /* ----- start ----- */
