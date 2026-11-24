@@ -70,7 +70,7 @@ function addClickers() {
 			element.addEventListener("click", () => step(delta));
 			return element;
 		};
-		row.append(button("−", -1, "Subtract 1 from"), input, button("+", 1, "Add 1 to"), button("+5", 5, "Add 5 to"));
+		row.append(button("−", -1, "Subtract 1 from"), input, button("+", 1, "Add 1 to"), button("+20", 20, "Add 20 to"));
 	}
 }
 
