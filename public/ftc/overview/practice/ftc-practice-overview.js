@@ -7,7 +7,7 @@
 const $ = id => document.getElementById(id);
 const els = {
 	season: $("seasonSelect"), driver: $("driverFilter"), operator: $("operatorFilter"), last: $("lastFilter"),
-	summary: $("summary"), graphs: $("graphs"), table: $("table"), exportCsv: $("exportCsv"), openSheet: $("openSheet")
+	summary: $("summary"), graphs: $("graphs"), table: $("table"), exportCsv: $("exportCsv"), openSheet: $("openSheet"), syncSheet: $("syncSheet")
 };
 
 const PALETTE = [BRAND.blue, BRAND.orange, BRAND.green, BRAND.red, "#c08de8", "#ef8fb7", "#9be3d6", BRAND.yellow];
@@ -152,12 +152,27 @@ async function load() {
 
 		els.exportCsv.href = `/api/ftc/practice/${els.season.value}/export.csv`;
 		els.openSheet.hidden = !data.sheetUrl;
+		els.syncSheet.hidden = !data.sheetUrl;
 		if (data.sheetUrl) els.openSheet.href = data.sheetUrl;
 		render();
 	} catch (error) {
 		if (thisLoad === loadId) els.graphs.innerHTML = `<div class="empty-state">${ftcEscape(error.message)}</div>`;
 	}
 }
+
+els.syncSheet.addEventListener("click", async () => {
+	els.syncSheet.disabled = true;
+	const label = els.syncSheet.textContent;
+	els.syncSheet.textContent = "Sending…";
+	try {
+		const response = await fetch(`/api/ftc/practice/${els.season.value}/sync-sheet`, { method: "POST" });
+		const data = await response.json().catch(() => ({}));
+		els.syncSheet.textContent = response.ok ? (data.added ? `Added ${data.added} run${data.added === 1 ? "" : "s"} to the sheet` : "Sheet is up to date") : (data.error || "Couldn't reach the sheet");
+	} catch {
+		els.syncSheet.textContent = "Couldn't reach the server";
+	}
+	setTimeout(() => { els.syncSheet.textContent = label; els.syncSheet.disabled = false; }, 4000);
+});
 
 els.season.addEventListener("change", load);
 els.driver.addEventListener("change", render);

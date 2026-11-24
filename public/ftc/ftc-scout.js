@@ -293,8 +293,8 @@ const FtcScout = (() => {
 		for (let confirmed = false; ;) {
 			try {
 				if (!navigator.onLine) throw new TypeError("offline");
-				await post(kind, { ...payload, confirmDuplicate: confirmed });
-				return { saved: true };
+				const data = await post(kind, { ...payload, confirmDuplicate: confirmed });
+				return { saved: true, sheet: data.sheet, sheetError: data.sheetError };
 			} catch (error) {
 				if (error.status === 409 && error.data?.duplicate && !confirmed) {
 					if (confirm(`${error.message}\n\nSubmit another report for it anyway?`)) {

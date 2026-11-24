@@ -116,6 +116,7 @@ els.form.addEventListener("submit", async event => {
 
 	try {
 		const result = await FtcScout.submit("practice", payload);
+		if (result.sheet === "failed") FtcScout.toast("warn", "Saved, but not on the Google Sheet", `The Practice tab couldn't be updated (${result.sheetError}). Use "Send logs to the sheet" on the practice tracker to retry; nothing is lost.`);
 		FtcScout.toast(result.queued ? "warn" : "success", result.queued ? "Saved on this phone (offline)" : "Run logged!", `${[payload.driver, payload.operator].filter(Boolean).join(" / ")} · ${els.total.value} points${result.queued ? " will upload when you're back online." : "."}`);
 		rememberNames(payload);
 		for (const input of [els.auto, els.tele, els.total, els.notes]) input.value = "";

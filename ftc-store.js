@@ -116,11 +116,17 @@ export function openFtcStore(file) {
 		addPractice: db.prepare("INSERT INTO practice_runs (submission_id, owner, season, run_date, drivers, driver, operator, auto_points, tele_points, total_points, notes, scout, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"),
 		practiceBySubmission: db.prepare("SELECT id FROM practice_runs WHERE owner = ? AND submission_id = ?"),
 		practice: db.prepare("SELECT * FROM practice_runs WHERE owner = ? AND season = ? ORDER BY run_date, id"),
+		practiceAll: db.prepare("SELECT * FROM practice_runs WHERE owner = ? ORDER BY id"),
 		deletePractice: db.prepare("DELETE FROM practice_runs WHERE owner = ? AND id = ?"),
 		counts: db.prepare("SELECT (SELECT COUNT(*) FROM match_reports WHERE owner = ? AND season = ? AND event = ?) AS matches, (SELECT COUNT(*) FROM pit_reports WHERE owner = ? AND season = ? AND event = ?) AS pits")
 	};
 
-	const openMatch = row => row && { ...row, flagged: Boolean(row.flagged), noShow: row.no_show, matchNumber: row.match_number, createdAt: row.created_at, data: JSON.parse(row.data) };
+	const openPractice = row => ({
+	id: row.id, date: row.run_date, driver: row.driver, operator: row.operator, drivers: [row.driver, row.operator].filter(Boolean).join(" / "),
+	autoPoints: row.auto_points, telePoints: row.tele_points, totalPoints: row.total_points, notes: row.notes, scout: row.scout, createdAt: row.created_at
+});
+
+const openMatch = row => row && { ...row, flagged: Boolean(row.flagged), noShow: row.no_show, matchNumber: row.match_number, createdAt: row.created_at, data: JSON.parse(row.data) };
 	const openPit = row => row && { ...row, flagged: Boolean(row.flagged), createdAt: row.created_at, data: JSON.parse(row.data) };
 
 	/* Every method takes the owner (the logged-in team's number) first: one team never sees another's reports. */
@@ -158,10 +164,8 @@ export function openFtcStore(file) {
 			return { id: Number(saved.lastInsertRowid), repeat: false };
 		},
 
-		practiceRuns: (owner, season) => statements.practice.all(owner, season).map(row => ({
-			id: row.id, date: row.run_date, driver: row.driver, operator: row.operator, drivers: [row.driver, row.operator].filter(Boolean).join(" / "), autoPoints: row.auto_points, telePoints: row.tele_points,
-			totalPoints: row.total_points, notes: row.notes, scout: row.scout, createdAt: row.created_at
-		})),
+		practiceRuns: (owner, season) => statements.practice.all(owner, season).map(openPractice),
+		allPracticeRuns: owner => statements.practiceAll.all(owner).map(openPractice),
 		deletePractice: (owner, id) => statements.deletePractice.run(owner, id).changes > 0,
 
 		deleteReport: (owner, kind, id) => (kind === "pit" ? statements.deletePit : statements.deleteMatch).run(owner, id).changes > 0,

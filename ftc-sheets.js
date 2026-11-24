@@ -28,8 +28,9 @@ export const PRACTICE_HEADINGS = ["Run", "Date", "Driver", "Operator", "Auto poi
 
 /* The sheet for practice runs: FTC_PRACTICE_SHEET in .env, else the first FTC event sheet linked for that season. */
 export function practiceSheetIdFor(season) {
-	const id = process.env.FTC_PRACTICE_SHEET
-		|| Object.entries(process.env).find(([key, value]) => key.startsWith(`FTC_SHEET_${season}_`) && value)?.[1];
+	const linked = prefix => Object.entries(process.env).find(([key, value]) => key.startsWith(prefix) && value?.trim())?.[1];
+	/* The sheet for that season's event, else any linked FTC sheet: practice isn't tied to one season. */
+	const id = process.env.FTC_PRACTICE_SHEET?.trim() || linked(`FTC_SHEET_${season}_`) || linked("FTC_SHEET_");
 	return id ? (String(id).match(/\/d\/([\w-]+)/)?.[1] ?? String(id).trim()) : null;
 }
 
@@ -87,14 +88,21 @@ export function createFtcSheets({ sheets }) {
 		});
 	}
 
-	const practiceRow = (run, number) => [number, run.date, run.driver, run.operator, run.autoPoints ?? "", run.telePoints ?? "", run.totalPoints, run.notes ?? ""];
+	const practiceRow = run => [run.id, run.date, run.driver, run.operator, run.autoPoints ?? "", run.telePoints ?? "", run.totalPoints, run.notes ?? ""];
 
-	/* A practice run as a new row, numbered by its place in the log. */
-	async function appendPractice(spreadsheetId, run, number) {
+	/* Adds every logged run the sheet doesn't have yet. The Run column is the run's id, so a run is
+	   added once; nothing already on the tab is changed or removed (manual rows are safe). */
+	async function syncPractice(spreadsheetId, runs) {
+		const existing = (await sheets.spreadsheets.values.get({ spreadsheetId, range: `'${TAB.practice}'!A2:A` })).data.values ?? [];
+		const have = new Set(existing.map(row => String(row[0]).trim()));
+		const missing = runs.filter(run => !have.has(String(run.id)));
+		if (!missing.length) return 0;
+
 		await sheets.spreadsheets.values.append({
 			spreadsheetId, range: `'${TAB.practice}'!A:A`, valueInputOption: "RAW", insertDataOption: "INSERT_ROWS",
-			requestBody: { values: [practiceRow(run, number)] }
+			requestBody: { values: missing.map(practiceRow) }
 		});
+		return missing.length;
 	}
 
 	/* Replaces everything below the headings with `rows`. */
@@ -136,5 +144,5 @@ export function createFtcSheets({ sheets }) {
 		return { matches: matchReports.length, pits: pitReports.length, teams: teams.length, scheduled: schedule.length };
 	}
 
-	return { setup, appendReport, appendPractice, syncAll };
+	return { setup, appendReport, syncPractice, syncAll };
 }

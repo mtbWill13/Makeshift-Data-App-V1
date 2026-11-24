@@ -257,22 +257,42 @@ export function registerFtcScouting(app, ftc) {
 		return { season, date, driver, operator, autoPoints, telePoints, totalPoints, notes, scout: cleanScout(body?.scout), submissionId: cleanSubmissionId(body?.submissionId) };
 	}
 
-	app.post("/api/ftc/scouting/practice", needStore, (req, res) => {
+	/* Adds any logged runs the Practice tab is missing. Returns how it went: added (a number), "none"
+	   (nothing linked / not the main team) or "failed". Never throws: the run is already saved. */
+	async function sendPracticeToSheet(req, season) {
+		const sheetId = ftcSheets && req.team?.legacy ? practiceSheetIdFor(season) : null;
+		if (!sheetId) return { sheet: "none" };
 		try {
-			const run = readPractice(req.body);
-			const saved = store.addPractice(ownerOf(req), run);
-
-			/* Also a new row on the Practice tab of the linked sheet, if there is one (best effort). */
-			const sheetId = !saved.repeat && ftcSheets && req.team?.legacy ? practiceSheetIdFor(run.season) : null;
-			if (sheetId) {
-				const number = store.practiceRuns(ownerOf(req), run.season).length;
-				ftcSheets.appendPractice(sheetId, run, number).catch(error => console.warn(`FTC sheet: couldn't add the practice run: ${error.message}`));
-			}
-
-			res.status(saved.repeat ? 200 : 201).json({ ok: true, id: saved.id, repeat: saved.repeat });
+			return { sheet: "ok", added: await ftcSheets.syncPractice(sheetId, store.allPracticeRuns(ownerOf(req))) };
 		} catch (error) {
-			res.status(400).json({ error: error.message });
+			console.warn(`FTC sheet: couldn't update the Practice tab: ${error.message}`);
+			return { sheet: "failed", sheetError: error.message };
 		}
+	}
+
+	app.post("/api/ftc/scouting/practice", needStore, async (req, res) => {
+		let run;
+		try {
+			run = readPractice(req.body);
+		} catch (error) {
+			return res.status(400).json({ error: error.message });
+		}
+
+		try {
+			const saved = store.addPractice(ownerOf(req), run);
+			/* Even a retried upload re-checks the sheet, so a run that missed it the first time gets added. */
+			res.status(saved.repeat ? 200 : 201).json({ ok: true, id: saved.id, repeat: saved.repeat, ...await sendPracticeToSheet(req, run.season) });
+		} catch (error) {
+			res.status(500).json({ error: error.message });
+		}
+	});
+
+	app.post("/api/ftc/practice/:season/sync-sheet", needStore, async (req, res) => {
+		if (!validSeason(req.params.season)) return res.status(400).json({ error: "Invalid season." });
+		const result = await sendPracticeToSheet(req, req.params.season);
+		if (result.sheet === "none") return res.status(404).json({ error: "No Google Sheet is linked for practice (add FTC_PRACTICE_SHEET or an FTC_SHEET_… to .env), or this isn't the main team account." });
+		if (result.sheet === "failed") return res.status(502).json({ error: `Google Sheets said: ${result.sheetError}` });
+		res.json(result);
 	});
 
 	app.get("/api/ftc/practice/:season", needStore, (req, res) => {
