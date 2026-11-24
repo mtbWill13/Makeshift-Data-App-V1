@@ -1,0 +1,85 @@
+/* Login layout — colours, type and components live in /theme.css */
+
+.login-page {
+	display: grid;
+	align-content: center;
+	justify-items: center;
+	gap: 32px;
+	min-height: calc(100vh - 4px);
+	padding: 40px 0;
+}
+
+.login-page .brand {
+	margin: 0;
+}
+
+.login-page .brand img {
+	height: 30px;
+}
+
+.login-card {
+	display: grid;
+	gap: 16px;
+	width: min(100%, 420px);
+	padding: 32px;
+	border: 1px solid var(--border);
+	border-radius: var(--radius-lg);
+	background: var(--surface);
+	box-shadow: 0 24px 48px -24px rgba(0, 0, 0, 0.7);
+}
+
+.login-card .eyebrow,
+.login-card h1,
+.login-note {
+	margin: 0;
+}
+
+.login-card h1 {
+	font-size: 2.4rem;
+}
+
+.login-note {
+	color: var(--text-muted);
+}
+
+.login-message {
+	min-height: 1.4em;
+	margin: 0;
+	color: var(--ms-red);
+	font-size: 0.9rem;
+	font-weight: 600;
+}
+
+@media (max-width: 480px) {
+	.login-card {
+		padding: 22px;
+	}
+}
+
+.signup-prompt {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: center;
+	gap: 8px 14px;
+	color: var(--text-muted);
+	font-size: 0.95rem;
+}
+
+.signup-button {
+	display: inline-flex;
+	align-items: center;
+	padding: 9px 18px;
+	border: 1px solid var(--border-strong);
+	border-radius: 999px;
+	background: rgba(255, 255, 255, 0.03);
+	color: var(--text);
+	font-weight: 700;
+	text-decoration: none;
+	transition: background 160ms ease, border-color 160ms ease;
+}
+
+.signup-button:hover {
+	border-color: var(--brand);
+	background: color-mix(in srgb, var(--brand) 12%, transparent);
+}

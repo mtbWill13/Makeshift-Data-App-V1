@@ -102,7 +102,7 @@ const ScoutOffline = (() => {
     const columns = [];
 
     for (const [key, value] of Object.entries(report.answers || {})) {
-      const columnMatch = /^column-(\d+)$/.exec(key);
+      const columnMatch = /^(?:column-)?(\d+)$/.exec(key);
       const index = columnMatch ? Number(columnMatch[1]) : headers.indexOf(key);
 
       if (index >= 0) {

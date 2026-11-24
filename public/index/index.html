@@ -5,11 +5,23 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   <title>MakeShift Scouting Data Hub</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400..700&display=swap">
+    <link rel="preload" href="/fonts/dm-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="/theme.css">
+    <link rel="stylesheet" href="/team.css">
     <link rel="stylesheet" href="index.css">
+    <script>
+      /* ?embed=1 shows just the team view, compact, for other pages to frame
+         (e.g. the picklist). Links open in a new tab instead of inside the frame. */
+      if (new URLSearchParams(location.search).has("embed")) {
+        document.documentElement.classList.add("embed");
+        const style = document.createElement("style");
+        style.textContent = ".top-bar, body > header, main > .controls { display: none !important; }";
+        document.head.append(style);
+        const base = document.createElement("base");
+        base.target = "_blank";
+        document.head.append(base);
+      }
+    </script>
 </head>
 
 <body>
@@ -19,11 +31,16 @@
   <header>
     <div class="header-content">
       <a class="brand" href="/"><img src="/images/makeshift-logo-wide.png" alt="MakeShift 4039" width="707" height="78"></a>
+      <div class="header-actions">
+        <a class="logout-button bets-button" href="/bets/">I'm feeling lucky (beta)</a>
+        <a class="logout-button" id="settingsLink" data-team-settings hidden href="/settings/">Team settings</a>
+        <button id="logoutButton" class="logout-button" type="button">Log out</button>
+      </div>
 
       <div class="hero">
-        <div>
+        <div class="hero-intro">
           <div class="eyebrow">
-            <span>FRC 4039 • Powered by
+            <span>FRC <span data-team-number>4039</span> • Powered by
               <a href="https://www.thebluealliance.com/" target="_blank" rel="noopener noreferrer">The Blue Alliance</a> &amp;
               <a href="https://www.statbotics.io/" target="_blank" rel="noopener noreferrer">Statbotics</a></span>
           </div>
@@ -37,20 +54,31 @@
         </div>
 
         <nav class="nav-grid" aria-label="Tools">
+          <div class="nav-group nav-analysis" data-label="Analyze">
           <a class="nav-tile nav-event" href="/event/"><strong>Event Rankings</strong><span>Every team at an event, ranked</span></a>
+          <a class="nav-tile nav-overview" href="/overview/"><strong>Event Overview</strong><span>Event-wide graphs &amp; chart builder</span></a>
           <a class="nav-tile nav-compare" href="/compare/"><strong>Compare Teams</strong><span>Two teams side by side</span></a>
           <a class="nav-tile nav-alliance" href="/alliance/"><strong>Compare Alliances</strong><span>Project a 3 v 3 match-up</span></a>
           <a class="nav-tile nav-prescout" href="/prescout/"><strong>Prescouting</strong><span>Rank the field at an upcoming event</span></a>
+          <a class="nav-tile nav-picklist" href="/picklist/"><strong>Picklist</strong><span>Draft our alliance selection order</span></a>
+          </div>
+          <div class="nav-group nav-scouting" data-label="Scout">
           <a class="nav-tile nav-match" href="/scouting/"><strong>Match Scouting</strong><span>Record match performance</span></a>
           <a class="nav-tile nav-pit" href="/pitScouting/"><strong>Pit Scouting</strong><span>Robot capabilities &amp; strategy</span></a>
           <a class="nav-tile nav-transfer" href="/transfer/"><strong>Offline Transfer</strong><span>Move reports by QR code</span></a>
-          <a class="nav-tile nav-ftc" href="/ftc/"><strong>FTC Data Hub</strong><span>FIRST Tech Challenge teams &amp; events</span></a>
+          <a class="nav-tile nav-qr" href="/qr/"><strong>QR Codes</strong><span>Print signs scouts can scan</span></a>
+          </div>
         </nav>
       </div>
     </div>
   </header>
 
   <main>
+
+    <div id="noSheetNotice" class="empty-state sheet-notice" hidden>
+      <span id="noSheetText"></span>
+      <a href="/settings/">Open Team settings →</a>
+    </div>
 
     <section class="controls">
 
@@ -66,6 +94,7 @@
           <option value="2026oncmp1">Provincials Science Division</option>
           <option value="2026ontor">Humber</option>
           <option value="2026onwin">Windsor</option>
+          <option value="2026onsi">Southwest International</option>
           <option value="2026test">test</option>
 
         </select>
@@ -94,7 +123,17 @@
 
   </main>
   <script src="../utils.js"></script>
+	<script src="/global.js"></script>
   <script src="index.js"></script>
+  <script>
+    document.getElementById("logoutButton").addEventListener("click", logoutTeam);
+    if (window.TEAM && !window.TEAM.legacy && !window.TEAM.events.some(event => event.hasSheet)) {
+      document.getElementById("noSheetText").textContent = window.TEAM.events.length
+        ? "None of your events has a Google Sheet connected yet, so scouting data isn't showing."
+        : "Your team hasn't added any events yet. Add the events you scout (name, key and Google Sheet) to get started.";
+      document.getElementById("noSheetNotice").hidden = false;
+    }
+  </script>
 
 </body>
 </html>

@@ -4,10 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Offline Transfer | MakeShift Scouting</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400..700&display=swap">
+    <link rel="preload" href="/fonts/dm-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="/theme.css">
+    <link rel="stylesheet" href="/team.css">
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
@@ -18,7 +17,7 @@
         <div class="eyebrow">Tools</div>
         <h1>Offline<br>Transfer</h1>
         <p class="header-description">Move saved scouting reports to the strategy computer without internet, then export or upload them when ready.</p>
-        <div class="header-links"><a class="back-link" href="/">← Data Hub</a></div>
+        <div class="header-links"><a class="back-link" href="/">← Data Hub</a><a class="back-link" id="backToScouting" href="/scouting/">← Back to Scouting</a></div>
       </div>
     </header>
     <main>
@@ -34,6 +33,7 @@
           <option value="2026oncmp1">Provincials Science Division</option>
           <option value="2026ontor">Humber</option>
           <option value="2026onwin">Windsor</option>
+          <option value="2026onsi">Southwest International</option>
           <option value="2026test">test</option>
 
         </select></label>
@@ -58,13 +58,13 @@
         <div id="receivedActions" class="actions" hidden>
           <button id="downloadCsv" type="button">Download CSV</button>
           <button id="downloadReceivedBackup" type="button">Download received backup</button>
-          <label class="passcode-label">Scout passcode<input id="receiverPasscode" type="password" autocomplete="off"></label>
           <button id="uploadToSheets" type="button">Upload verified reports to Sheets</button>
         </div>
       </section>
     </main>
     <script src="/offline.js"></script>
     <script src="/vendor/qrcode.js"></script>
+	<script src="/global.js"></script>
     <script src="index.js"></script>
   </body>
 </html>

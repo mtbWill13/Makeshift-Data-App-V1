@@ -1,0 +1,98 @@
+/* Settings layout — colours, type and components live in /theme.css and /team-forms.css */
+
+main {
+	display: grid;
+	justify-items: start;
+}
+
+.event-list {
+	display: grid;
+	gap: 8px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.event-list li {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px 14px;
+	padding: 12px 14px;
+	border: 1px solid var(--border);
+	border-radius: var(--radius-sm);
+	background: var(--surface-2);
+}
+
+.event-list strong {
+	flex: 1;
+	min-width: 160px;
+}
+
+.event-list span {
+	color: var(--text-faint);
+	font-size: 0.82rem;
+}
+
+.event-list .sheet-on {
+	color: var(--ms-green);
+	font-weight: 600;
+}
+
+.event-list .sheet-off {
+	color: var(--text-muted);
+}
+
+.event-list .no-sheets {
+	display: block;
+	color: var(--text-muted);
+	font-size: 0.92rem;
+	line-height: 1.55;
+}
+
+.add-event {
+	display: grid;
+	gap: 14px;
+	padding-top: 16px;
+	border-top: 1px solid var(--border);
+}
+
+.add-event h3 {
+	margin: 0;
+	font-size: 0.95rem;
+}
+
+.form-section button[type="submit"] {
+	width: fit-content;
+}
+
+.danger-zone {
+	border-color: color-mix(in srgb, var(--ms-red) 45%, transparent);
+}
+
+.danger-zone h2 {
+	color: var(--ms-red);
+}
+
+.danger-button {
+	border-color: var(--ms-red);
+	background: transparent;
+	color: var(--ms-red);
+}
+
+.danger-button:hover:not(:disabled) {
+	background: var(--ms-red);
+	color: var(--on-accent);
+}
+
+.logout-wide {
+	width: fit-content;
+}
+
+code {
+	padding: 2px 6px;
+	border-radius: 6px;
+	background: var(--field);
+	font-size: 0.85em;
+	overflow-wrap: anywhere;
+}

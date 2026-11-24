@@ -4,12 +4,13 @@
    TBA records and finishes) and writes a short overview of each.
 ================================= */
 
-const OUR_TEAM = 4039;
+const OUR_TEAM = Number(window.TEAM?.number ?? 4039);
 const MAX_TEAMS = 80;
 const MEDIA_CONCURRENCY = 4;
 
 const teamsInput = document.getElementById("teamsInput");
 const eventImport = document.getElementById("eventImport");
+const savedLists = document.getElementById("savedLists");
 const importButton = document.getElementById("importButton");
 const seasonSelect = document.getElementById("seasonSelect");
 const prescoutButton = document.getElementById("prescoutButton");
@@ -39,6 +40,7 @@ let teams = [];
 let year = seasonSelect.value;
 let sortKey = "epa";
 let runId = 0;
+let statboticsDown = false;   // true when the server had to carry on without Statbotics
 
 
 /* =================================
@@ -173,6 +175,11 @@ async function prescout() {
 		if (thisRun !== runId) return;
 		if (!response.ok) throw new Error(data.error || "Couldn't load these teams.");
 
+		/* Statbotics didn't answer: EPA and world rank are blank, so rank by the
+		   OPR from The Blue Alliance instead (unless a non-EPA sort was picked). */
+		statboticsDown = response.headers.get("X-Statbotics") === "down";
+		if (statboticsDown && ["epa", "auto", "teleop", "endgame", "peak"].includes(sortKey)) sortKey = "opr";
+
 		const seasons = new Map(data.map(season => [season.team, season]));
 		teams = numbers.map(number => {
 			const season = seasons.get(number);
@@ -209,6 +216,13 @@ async function importEvent() {
 	try {
 		const response = await fetch(`/api/events/${encodeURIComponent(key)}/teams`);
 		const data = await response.json().catch(() => ({}));
+		const known = KNOWN_EVENT_TEAMS[key];
+
+		/* TBA has no teams for it (yet), but we have the event's attendance list. */
+		if ((!response.ok || !data.length) && known) {
+			loadSavedList(key);
+			return;
+		}
 
 		if (!response.ok) throw new Error(data.error || "Event not found.");
 		if (!data.length) throw new Error(`${key} has no teams published on TBA yet.`);
@@ -222,6 +236,27 @@ async function importEvent() {
 		importButton.disabled = false;
 	}
 }
+
+
+/* Saved team lists (public/event-lists.js): an event's attendance list, for
+   events TBA doesn't have teams for yet. */
+function loadSavedList(key) {
+	const list = KNOWN_EVENT_TEAMS[key];
+	if (!list) return;
+
+	teamsInput.value = list.teams.map(([number]) => number).join(", ");
+	savedLists.value = key;
+	status.textContent = `Loaded the ${list.name} team list (${list.teams.length} teams attending).`;
+	prescout();
+}
+
+for (const [key, list] of Object.entries(KNOWN_EVENT_TEAMS)) {
+	savedLists.add(new Option(`${list.name} (${list.teams.length})`, key));
+}
+
+savedLists.addEventListener("change", () => {
+	if (savedLists.value) loadSavedList(savedLists.value);
+});
 
 
 /* =================================
@@ -446,13 +481,24 @@ function fieldSummary(group) {
 	const us = byEpa.findIndex(team => team.number === OUR_TEAM);
 	const top = byEpa[0];
 
+	/* Without Statbotics there's no EPA, so the last tile goes by average OPR instead. */
+	const byOpr = group.filter(team => team.hasData && team.avgOpr !== null).sort((a, b) => b.avgOpr - a.avgOpr);
+	const usOpr = byOpr.findIndex(team => team.number === OUR_TEAM);
+	const topOpr = byOpr[0];
+
 	const lastTile = us !== -1
 		? { label: `Where ${OUR_TEAM} ranks`, value: `#${us + 1} of ${byEpa.length}`, note: "by EPA in this group" }
-		: { label: "Top team", value: top ? `${top.number}` : "—", note: top ? `${escapeHtml(top.name)} • EPA ${format(top.epa)}` : "" };
+		: top
+			? { label: "Top team", value: `${top.number}`, note: `${escapeHtml(top.name)} • EPA ${format(top.epa)}` }
+			: usOpr !== -1
+				? { label: `Where ${OUR_TEAM} ranks`, value: `#${usOpr + 1} of ${byOpr.length}`, note: "by average OPR in this group" }
+				: topOpr
+					? { label: "Top team", value: `${topOpr.number}`, note: `${escapeHtml(topOpr.name)} • avg OPR ${format(topOpr.avgOpr)}` }
+					: { label: "Top team", value: "—", note: "" };
 
 	return `
       <section class="field-summary">
-        <div class="stat-card"><div class="stat-label">Teams</div><div class="stat-value">${group.length}</div><div class="stat-description">${withData.length} with ${year} results</div></div>
+        <div class="stat-card"><div class="stat-label">Teams</div><div class="stat-value">${group.length}</div><div class="stat-description">${group.filter(team => team.hasData).length} with ${year} results</div></div>
         <div class="stat-card"><div class="stat-label">Average EPA</div><div class="stat-value">${format(average)}</div><div class="stat-description">Field strength</div></div>
         <div class="stat-card"><div class="stat-label">Elite teams</div><div class="stat-value">${elite}</div><div class="stat-description">Top 5% worldwide by EPA</div></div>
         <div class="stat-card"><div class="stat-label">${lastTile.label}</div><div class="stat-value">${lastTile.value}</div><div class="stat-description">${lastTile.note}</div></div>
@@ -469,13 +515,14 @@ function render() {
 	const done = loaded === teams.length;
 
 	status.textContent = done
-		? `Ranked ${teams.length} team${teams.length === 1 ? "" : "s"} on ${year} results.`
+		? `Ranked ${teams.length} team${teams.length === 1 ? "" : "s"} on ${year} results${statboticsDown ? " (without Statbotics)" : ""}.`
 		: `Loading ${teams.length} team${teams.length === 1 ? "" : "s"}…`;
 
 	const ordered = sortedTeams();
 	let position = 0;
 
 	results.innerHTML = `
+      ${statboticsDown ? `<div class="empty-state statbotics-notice">Statbotics isn't responding right now, so EPA, world rank and tiers are blank. Records, events and OPR still come from The Blue Alliance, and teams are ranked by average OPR. Click <strong>Prescout Teams</strong> again later to get EPA.</div>` : ""}
       ${fieldSummary(teams)}
       <div class="results-toolbar">
         <h3 class="section-title">Ranked by ${escapeHtml(SORTS[sortKey].label)}</h3>

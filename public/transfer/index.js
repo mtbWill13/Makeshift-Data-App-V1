@@ -17,7 +17,6 @@ const fileInput = document.getElementById("fileInput");
 const receivedActions = document.getElementById("receivedActions");
 const downloadCsv = document.getElementById("downloadCsv");
 const downloadReceivedBackup = document.getElementById("downloadReceivedBackup");
-const receiverPasscode = document.getElementById("receiverPasscode");
 const uploadToSheets = document.getElementById("uploadToSheets");
 const receivedList = document.getElementById("receivedList");
 
@@ -55,7 +54,7 @@ function reportLabel(report) {
 	const headers = ScoutOffline.cachedSchema(report.type, report.eventKey)?.headers || [];
 	const answerFor = expression => {
 		const index = headers.findIndex(header => expression.test(header));
-		return index < 0 ? "" : report.answers?.[`column-${index}`] ?? report.answers?.[headers[index]] ?? "";
+		return index < 0 ? "" : report.answers?.[`column-${index}`] ?? report.answers?.[index] ?? report.answers?.[headers[index]] ?? "";
 	};
 	const match = answerFor(/^match number$/i);
 	const team = answerFor(/team number/i);
@@ -99,7 +98,7 @@ async function prepareTransfer() {
 		await showFrame();
 		qrPanel.hidden = false;
 		downloadButton.disabled = false;
-		sendStatus.textContent = `${frames.length} report${frames.length === 1 ? "" : "s"} prepared, one QR code each. The passcode is not included.`;
+		sendStatus.textContent = `${frames.length} report${frames.length === 1 ? "" : "s"} prepared, one QR code each.`;
 	} catch (error) {
 		sendStatus.textContent = error.message;
 	} finally {
@@ -175,7 +174,7 @@ function receivedCsv() {
 	const columnCount = Math.max(
 		headers.length,
 		...reports.flatMap(report => Object.keys(report.answers || {})
-			.map(key => /^column-(\d+)$/.exec(key))
+			.map(key => /^(?:column-)?(\d+)$/.exec(key))
 			.filter(Boolean)
 			.map(match => Number(match[1]) + 1))
 	);
@@ -184,7 +183,7 @@ function receivedCsv() {
 	const rows = reports.map(report => [
 		report.type,
 		report.eventKey,
-		...columnHeaders.map((header, index) => report.answers?.[`column-${index}`] ?? report.answers?.[header] ?? "")
+		...columnHeaders.map((header, index) => report.answers?.[`column-${index}`] ?? report.answers?.[index] ?? report.answers?.[header] ?? "")
 	]);
 
 	return [["Type", "Event", ...columnHeaders], ...rows].map(row => row.map(csvCell).join(",")).join("\n");
@@ -264,11 +263,6 @@ downloadReceivedBackup.addEventListener("click", () => {
 });
 uploadToSheets.addEventListener("click", async () => {
 	if (!receivedReports.size) return;
-	if (!receiverPasscode.value) {
-		receiveStatus.textContent = "Enter the scout passcode before uploading to Google Sheets.";
-		return;
-	}
-
 	uploadToSheets.disabled = true;
 	let uploaded = 0;
 	let alreadyUploaded = 0;
@@ -286,7 +280,7 @@ uploadToSheets.addEventListener("click", async () => {
 			const response = await fetch(`${endpoint}/${report.eventKey}`, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ submissionToken: receiverPasscode.value, answers: report.answers })
+				body: JSON.stringify({ answers: report.answers, confirmDuplicate: true })
 			});
 			const body = await response.json().catch(() => ({}));
 			if (!response.ok) throw new Error(body.error || "Google Sheets upload failed.");
@@ -304,3 +298,26 @@ uploadToSheets.addEventListener("click", async () => {
 	}
 });
 window.addEventListener("beforeunload", stopScanner);
+
+/* Opened from a scouting form: pick that event and make the QR codes right away. */
+(() => {
+	const params = new URLSearchParams(location.search);
+	const type = params.get("type");
+	const event = params.get("event");
+
+	if (!type || !event) return;
+
+	if ([...sendType.options].some(option => option.value === type)) sendType.value = type;
+	if ([...sendEvent.options].some(option => option.value === event)) sendEvent.value = event;
+	prepareTransfer();
+})();
+
+/* "Back to Scouting" goes to whichever form the selected report type comes from. */
+const backToScouting = document.getElementById("backToScouting");
+function updateBackLink() {
+	const pit = sendType.value === "pit-scouting";
+	backToScouting.href = pit ? "/pitScouting/" : "/scouting/";
+	backToScouting.textContent = pit ? "← Back to Pit Scouting" : "← Back to Scouting";
+}
+sendType.addEventListener("change", updateBackLink);
+updateBackLink();

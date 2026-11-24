@@ -1,0 +1,404 @@
+/* Scout Bets layout — colours, type and components live in /theme.css */
+
+.balance-bar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px 32px;
+	padding: 20px 24px;
+	border: 1px solid var(--border-strong);
+	border-radius: var(--radius);
+	background: var(--surface-2);
+}
+
+.balance-bar[hidden] {
+	display: none;
+}
+
+.balance-label {
+	display: block;
+	color: var(--text-muted);
+	font-size: 0.75rem;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+}
+
+.balance-bar strong {
+	font-size: 3rem;
+	line-height: 1.1;
+	font-variant-numeric: tabular-nums;
+}
+
+.balance-bar small {
+	display: block;
+	color: var(--text-muted);
+}
+
+.earn-list {
+	display: grid;
+	gap: 6px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	color: var(--text-muted);
+	font-size: 0.92rem;
+}
+
+.earn-list b {
+	color: var(--ms-yellow, #e8b63f);
+}
+
+.bets-controls {
+	display: grid;
+	grid-template-columns: minmax(0, 360px) minmax(0, 1fr);
+	gap: 16px 24px;
+	align-items: end;
+	margin-top: 20px;
+}
+
+.bets-controls label {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.bets-hint {
+	margin: 0;
+	color: var(--text-faint);
+	font-size: 0.85rem;
+}
+
+.bet-matches {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+	gap: 16px;
+}
+
+.bet-matches > .loading,
+.bet-matches > .empty-state {
+	grid-column: 1 / -1;
+}
+
+.bet-match {
+	display: grid;
+	gap: 12px;
+	padding: 18px;
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	background: var(--surface);
+}
+
+.bet-match-head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 4px 12px;
+}
+
+.bet-match-head h3 {
+	margin: 0;
+	font-size: 1.15rem;
+}
+
+.bet-match-head span {
+	color: var(--text-muted);
+	font-size: 0.85rem;
+}
+
+.bet-match-head a {
+	margin-left: auto;
+	font-size: 0.85rem;
+}
+
+.picks {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 10px;
+}
+
+.pick {
+	position: relative;
+	cursor: pointer;
+	letter-spacing: normal;
+	text-transform: none;
+}
+
+.pick input {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	min-height: 0;
+	margin: 0;
+	opacity: 0;
+	cursor: pointer;
+}
+
+.pick > span {
+	display: grid;
+	gap: 2px;
+	justify-items: center;
+	height: 100%;
+	padding: 12px 8px;
+	border: 2px solid color-mix(in srgb, var(--tone) 45%, transparent);
+	border-radius: var(--radius-sm);
+	background: var(--surface-2);
+	text-align: center;
+	transition: background 120ms ease, border-color 120ms ease;
+}
+
+.pick.red { --tone: var(--ms-red); }
+.pick.blue { --tone: var(--ms-blue); }
+
+.pick b {
+	color: var(--tone);
+	font-size: 0.75rem;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+}
+
+.pick em {
+	color: var(--text-muted);
+	font-size: 0.8rem;
+	font-style: normal;
+}
+
+.pick strong {
+	font-size: 1.6rem;
+	font-variant-numeric: tabular-nums;
+}
+
+.pick small {
+	color: var(--text-muted);
+	font-size: 0.78rem;
+}
+
+.pick:hover > span {
+	border-color: var(--tone);
+}
+
+.pick input:checked + span {
+	border-color: var(--tone);
+	background: color-mix(in srgb, var(--tone) 22%, var(--surface-2));
+}
+
+.pick input:focus-visible + span {
+	outline: 2px solid var(--text);
+	outline-offset: 2px;
+}
+
+.stake-row {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: 10px;
+	align-items: end;
+}
+
+.stake-row label {
+	display: grid;
+	gap: 6px;
+}
+
+.stake-row .quick {
+	display: flex;
+	gap: 6px;
+}
+
+.stake-row .quick button {
+	min-height: 48px;
+	padding: 0 12px;
+	background: var(--surface-3);
+	border-color: var(--border-strong);
+	color: var(--text);
+}
+
+.place-bet {
+	grid-column: 1 / -1;
+	min-height: 48px;
+}
+
+.would-win,
+.placed,
+.closed {
+	margin: 0;
+	color: var(--text-muted);
+	font-size: 0.9rem;
+}
+
+.would-win b,
+.placed b {
+	color: var(--text);
+}
+
+.would-win b.red, .placed.red b:nth-of-type(2) { color: var(--ms-red); }
+.would-win b.blue, .placed.blue b:nth-of-type(2) { color: var(--ms-blue); }
+
+.placed {
+	padding: 10px 12px;
+	border-radius: var(--radius-sm);
+	background: var(--surface-2);
+}
+
+.bet-error {
+	margin: 0;
+	color: var(--ms-red);
+	font-size: 0.9rem;
+	font-weight: 600;
+}
+
+.bet-error[hidden] {
+	display: none;
+}
+
+/* My bets, leaderboard, ledger */
+
+.my-bets,
+.leaderboard,
+.ledger {
+	display: grid;
+	gap: 8px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.my-bets li,
+.leaderboard li,
+.ledger li {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 12px 14px;
+	border: 1px solid var(--border);
+	border-radius: var(--radius-sm);
+	background: var(--surface-2);
+}
+
+.my-bets li.red { border-left: 3px solid var(--ms-red); }
+.my-bets li.blue { border-left: 3px solid var(--ms-blue); }
+
+.my-bets small,
+.leaderboard small {
+	display: block;
+	color: var(--text-muted);
+	font-size: 0.8rem;
+	font-weight: 400;
+}
+
+.win { color: var(--green, #5ec27a); }
+.loss { color: var(--ms-red); }
+.open { color: var(--ms-yellow, #e8b63f); }
+
+.bets-columns {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 24px;
+}
+
+.leaderboard {
+	counter-reset: place;
+}
+
+.leaderboard li::before {
+	counter-increment: place;
+	content: counter(place);
+	min-width: 1.6em;
+	color: var(--text-faint);
+	font-weight: 700;
+}
+
+.leaderboard .name {
+	flex: 1;
+}
+
+.leaderboard li.you {
+	border-color: var(--ms-blue);
+}
+
+.leaderboard strong {
+	font-size: 1.2rem;
+	font-variant-numeric: tabular-nums;
+}
+
+.ledger li {
+	justify-content: flex-start;
+}
+
+.ledger b {
+	min-width: 3em;
+	font-variant-numeric: tabular-nums;
+}
+
+.ledger .plus { color: var(--green, #5ec27a); }
+.ledger .minus { color: var(--ms-red); }
+
+@media (max-width: 760px) {
+	.bets-controls,
+	.bets-columns {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.bet-matches {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}
+
+.name-form {
+	display: flex;
+	gap: 8px;
+	margin-top: 10px;
+}
+
+.name-form[hidden] {
+	display: none;
+}
+
+.name-form input {
+	min-width: 0;
+	max-width: 200px;
+	min-height: 40px;
+}
+
+.name-form button {
+	min-height: 40px;
+	padding: 0 14px;
+	background: var(--surface-3);
+	border-color: var(--border-strong);
+	color: var(--text);
+}
+
+.grant-points {
+	margin-top: 10px;
+	min-height: 36px;
+	padding: 0 14px;
+	background: var(--surface-3);
+	border-color: var(--border-strong);
+	color: var(--text);
+	font-size: 0.85rem;
+}
+
+.grant-points[hidden] {
+	display: none;
+}
+
+.pick-teams {
+	display: grid;
+	gap: 2px;
+	margin: 4px 0 0;
+	padding: 0;
+	list-style: none;
+	font-size: 1.5rem;
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+	line-height: 1.2;
+}
+
+.play-now {
+	min-height: 40px;
+	background: transparent;
+	border-color: var(--border-strong);
+	color: var(--text-muted);
+	font-size: 0.85rem;
+}

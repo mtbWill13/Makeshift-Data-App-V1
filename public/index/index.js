@@ -1,3 +1,28 @@
+let trendRows = [];   // the scouting rows behind the by-match chart
+let trendChosen = ["total"];   // stats ticked above that chart; kept when the page refreshes itself
+
+/* The by-match chart for the ticked stats: one stat draws the usual chart with its
+   running average; several draw one coloured line each. */
+function trendChartHtml(rows, statIds) {
+	const chosen = statIds.map(id => TREND_STATS.find(stat => stat.id === id)).filter(Boolean);
+
+	if (chosen.length <= 1) {
+		const stat = chosen[0] ?? TREND_STATS[0];
+		return performanceTrendChart(
+			performanceTrendPoints(rows, stat.value),
+			stat.id === "total" ? "Scouting by match" : `${stat.label} by match`,
+			"Match",
+			{ clickable: true, valueName: stat.valueName, note: stat.note }
+		);
+	}
+
+	return performanceMultiTrendChart(
+		chosen.map(stat => ({ id: stat.id, label: stat.label, rating: stat.rating, points: performanceTrendPoints(rows, stat.value) })),
+		"Stats by match",
+		"Match",
+		{ clickable: true }
+	);
+}
 
 /* =================================
    DOM ELEMENTS
@@ -711,6 +736,37 @@ function formatOwnScoreDelta(clutch) {
    RENDER TEAM
 ================================= */
 
+/* How long the team page waits for Statbotics before drawing without it. */
+const SLOW_LOOKUP_MS = 2500;
+
+/* Statbotics EPA, Statbotics match history and the TBA team name for one team at
+   one event. Kept per load so reloadData() can start them early. */
+const teamExtras = new Map();
+
+function teamExtrasFor(teamNumber, event) {
+	const key = `${teamNumber}|${event}`;
+
+	if (!teamExtras.has(key)) {
+		teamExtras.set(key, {
+			epa: loadStatboticsEPA(teamNumber, event).catch(error => {
+				console.log("Statbotics error:", error.message);
+				return null;
+			}),
+			matches: loadStatboticsMatchHistory(teamNumber, event).catch(error => {
+				console.log("Statbotics match-history error:", error.message);
+				return [];
+			}),
+			name: fetch(`/api/teamName/${teamNumber}`)
+				.then(response => response.ok ? response.json() : {})
+				.then(data => data.name ?? null)
+				.catch(() => null)
+		});
+	}
+
+	return teamExtras.get(key);
+}
+
+
 async function printTeamData() {
 	const teamNumber =
 		teamNumberInput.value.trim();
@@ -730,8 +786,15 @@ async function printTeamData() {
 	const teamKey =
 		`frc${teamNumber}`;
 
+	/* TBA has no record of the team at this event when it's a practice/test event
+	   (not on TBA) or an event whose teams aren't published yet; scouting data can
+	   still be shown for it, so a missing team is fine here. */
 	const team =
-		teamData[teamKey];
+		teamData[teamKey]
+
+	if (team) {
+		team.matches = team.matches.filter(el => el.level === "qm");
+	}
 
 
 	const scoutingRows = scoutingData.filter(row =>
@@ -849,28 +912,30 @@ async function printTeamData() {
 
 	/* EPA */
 
-	/* These three are independent, so fetch them together rather than one
-	   after another (Statbotics alone can take several seconds per request). */
-	const [statbotics, statboticsMatches, tbaTeamName] = await Promise.all([
-
-		loadStatboticsEPA(teamNumber, eventKey)
-			.catch(error => {
-				console.log("Statbotics error:", error.message);
-				return null;
-			}),
-
-		loadStatboticsMatchHistory(teamNumber, eventKey)
-			.catch(error => {
-				console.log("Statbotics match-history error:", error.message);
-				return [];
-			}),
-
-		fetch(`/api/teamName/${teamNumber}`)
-			.then(response => response.ok ? response.json() : {})
-			.then(data => data.name ?? null)
-			.catch(() => null)
-
+	/* Started alongside the event data in reloadData(), so usually already done.
+	   Statbotics can be slow or down: wait at most a couple of seconds, show the
+	   page without EPA, then redraw once Statbotics answers. */
+	const extras = teamExtrasFor(teamNumber, eventKey);
+	const LATE = Symbol("late");
+	const atMost = promise => Promise.race([promise, new Promise(resolve => setTimeout(() => resolve(LATE), SLOW_LOOKUP_MS))]);
+	const [epaResult, matchesResult, tbaTeamName] = await Promise.all([
+		atMost(extras.epa),
+		atMost(extras.matches),
+		extras.name
 	]);
+
+	if (epaResult === LATE || matchesResult === LATE) {
+		const shownEvent = eventKey;
+		Promise.all([extras.epa, extras.matches]).then(() => {
+			const stillShowing = teamExtras.get(`${teamNumber}|${shownEvent}`) === extras
+				&& teamNumberInput.value.trim() === teamNumber
+				&& eventKey === shownEvent;
+			if (stillShowing) printTeamData();
+		});
+	}
+
+	const statbotics = epaResult === LATE ? null : epaResult;
+	const statboticsMatches = matchesResult === LATE ? [] : matchesResult;
 
 
 	const opr =
@@ -979,6 +1044,12 @@ async function printTeamData() {
 		);
 
 	const trendPoints = performanceTrendPoints(scoutingRows);
+	/* The by-match chart can switch stat; only offer the ones this team has data for. */
+	trendRows = scoutingRows;
+	const trendStats = TREND_STATS.filter(stat => performanceTrendPoints(scoutingRows, stat.value).length);
+	/* Keep what was ticked (this page redraws every 30 s), minus stats this team has no data for. */
+	const trendShown = trendChosen.filter(id => trendStats.some(stat => stat.id === id));
+	if (!trendShown.length) trendShown.push(trendStats[0]?.id ?? "total");
 
 	function averagePowerRating() {
 		let totalPoints = 0;
@@ -1119,7 +1190,12 @@ async function printTeamData() {
 
         </section>
 
-        ${performanceTrendChart(trendPoints, "Scouting average by match")}
+        ${trendStats.length > 1 ? `
+        <div class="trend-picker" id="trendStats" role="group" aria-label="Stats shown by match">
+          <span>Stats by match</span>
+          ${trendStats.map(stat => `<label class="trend-chip" style="--chip:${TREND_STAT_COLORS[stat.id]}"><input type="checkbox" value="${stat.id}"${trendShown.includes(stat.id) ? " checked" : ""}><i></i>${escapeHtml(stat.label)}</label>`).join("")}
+        </div>` : ""}
+        <div id="trendHolder">${trendChartHtml(scoutingRows, trendShown)}</div>
 
         <!-- Event Results -->
 
@@ -1130,7 +1206,7 @@ async function printTeamData() {
            <div class="data-item">
 
             <div class="data-item-label">
-              Matches Played
+              Qual Matches Played
             </div>
 
             <div class="data-item-value">
@@ -1584,7 +1660,7 @@ Own Score vs Prediction  </div>
 
                 ${scoutingRows.map((row, index) => `
 
-                  <article class="scouting-card">
+                  <article class="scouting-card" data-report-match="${escapeHtml(Number(String(row["Match Number"] ?? "").trim()) || "")}">
 
                     <div class="scouting-card-header">
                       <span class="scouting-card-title">
@@ -1606,10 +1682,10 @@ Own Score vs Prediction  </div>
 
                           <strong>
 							${value === "TRUE"
-								? `<span class="scout-true">TRUE</span>`
-								: value === "FALSE"
-									? `<span class="scout-false">FALSE</span>`
-									: escapeHtml(value || "—")}
+							? `<span class="scout-true">TRUE</span>`
+							: value === "FALSE"
+								? `<span class="scout-false">FALSE</span>`
+								: escapeHtml(value || "—")}
                           </strong>
 
                         </div>
@@ -1778,6 +1854,31 @@ function matchResultBadge(match, teamNumber) {
 }
 
 
+/* Stat picker above the by-match chart. */
+document.addEventListener("change", event => {
+	const picker = event.target.closest?.("#trendStats");
+	if (!picker) return;
+
+	/* Always keep at least one stat on. */
+	if (!picker.querySelector("input:checked")) event.target.checked = true;
+
+	trendChosen = [...picker.querySelectorAll("input:checked")].map(input => input.value);
+	document.getElementById("trendHolder").innerHTML = trendChartHtml(trendRows, trendChosen);
+});
+
+/* Picking a match on the chart jumps to that match's scouting report. */
+document.addEventListener("trend-select", event => {
+	const cards = [...document.querySelectorAll(`.scouting-card[data-report-match="${Number(event.detail.match)}"]`)];
+	if (!cards.length) return;
+
+	cards[0].scrollIntoView({ behavior: "smooth", block: "start" });
+	for (const card of cards) {
+		card.classList.remove("report-highlight");
+		void card.offsetWidth;   // restart the highlight if it's picked again
+		card.classList.add("report-highlight");
+	}
+});
+
 /* Who played in a scouted qualification match and the final score, shown at
    the top of the scouting report card. Empty if TBA doesn't have the match. */
 function scoutedMatchSummary(matchNumber, teamNumber) {
@@ -1921,13 +2022,24 @@ async function showTeamMedia(teamNumber, year) {
 
 
 /* Every event scouting sheet the team appears in; events without a sheet return []. */
+/* Sheet requests for the season view, keyed "path/eventKey". printSeasonData()
+   starts these for every dropdown event at the same time as the season lookup,
+   instead of waiting to learn which events the team attended. */
+const sheetRequests = new Map();
+
+function sheetRequest(path, eventKey) {
+	const key = `${path}/${eventKey}`;
+	if (!sheetRequests.has(key)) {
+		sheetRequests.set(key, fetch(`/api/${path}/${eventKey}`)
+			.then(response => response.ok ? response.json() : [])
+			.catch(() => []));
+	}
+	return sheetRequests.get(key);
+}
+
 async function loadSheetRowsForEvents(events, path) {
 
-	const perEvent = await Promise.all(events.map(event =>
-		fetch(`/api/${path}/${event.key}`)
-			.then(response => response.ok ? response.json() : [])
-			.catch(() => [])
-	));
+	const perEvent = await Promise.all(events.map(event => sheetRequest(path, event.key)));
 
 	return events.map((event, index) => ({
 		event,
@@ -1953,6 +2065,14 @@ async function printSeasonData() {
 	}
 
 	saveTeamsInUrl(teamNumber);
+
+	sheetRequests.clear();
+	for (const option of eventKeySelect.options) {
+		if (/^\d{4}/.test(option.value)) {
+			sheetRequest("scouting", option.value);
+			sheetRequest("pitscouting", option.value);
+		}
+	}
 
 	const response = await fetch(`/api/teams/${teamNumber}/season/${SEASON_YEAR}`);
 	const season = await response.json().catch(() => ({}));
@@ -2327,6 +2447,12 @@ async function reloadData() {
 			await printSeasonData();
 			return;
 		}
+
+		/* Team-only lookups (Statbotics, team name) don't need the event data,
+		   so start them now instead of after it. */
+		const teamNumber = teamNumberInput.value.trim();
+		teamExtras.clear();
+		if (teamNumber) teamExtrasFor(teamNumber, eventKey);
 
 		await Promise.all([
 			loadEventData(),

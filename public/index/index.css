@@ -4,17 +4,105 @@
 	HERO + NAVIGATION
 ========================= */
 
+.header-content {
+	position: relative;
+}
+
+.sheet-notice {
+	margin-bottom: 16px;
+	border-style: solid;
+	border-color: color-mix(in srgb, var(--brand) 45%, transparent);
+	background: color-mix(in srgb, var(--brand) 8%, var(--surface));
+	color: var(--text);
+	text-align: left;
+	line-height: 1.6;
+}
+
+.sheet-notice[hidden] {
+	display: none;
+}
+
+.header-actions {
+	position: absolute;
+	top: 0;
+	right: 0;
+	display: flex;
+	gap: 8px;
+}
+
+.logout-button {
+	display: inline-flex;
+	align-items: center;
+	min-height: 36px;
+	padding: 0 16px;
+	border: 1px solid var(--border-strong);
+	border-radius: var(--radius-sm);
+	background: transparent;
+	color: var(--text-muted);
+	font-size: 0.85rem;
+	font-weight: 700;
+	text-decoration: none;
+}
+
+.logout-button:hover:not(:disabled) {
+	color: var(--text);
+}
+
+.bets-button {
+	color: var(--ms-yellow);
+}
+
+.logout-button[hidden] {
+	display: none;
+}
+
+html.embed .header-actions {
+	display: none;
+}
+
+/* On smaller screens the buttons get their own row under the team name, so a
+   long name can't run underneath them. */
+@media (max-width: 700px) {
+	.header-actions {
+		position: static;
+		margin: -16px 0 28px;
+	}
+}
+
 .hero {
 	display: grid;
 	grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
 	gap: 40px 56px;
-	align-items: end;
+	align-items: stretch;
+}
+
+/* Label and title sit at the top; the description stays at the bottom,
+   level with the last row of tiles. */
+.hero-intro {
+	display: flex;
+	flex-direction: column;
+}
+
+.hero-intro .header-description {
+	margin-top: auto;
+	padding-top: 16px;
 }
 
 .nav-grid {
 	display: grid;
 	grid-template-columns: repeat(2, minmax(0, 1fr));
 	gap: 10px;
+}
+
+/* The tools are in two groups (Analyze, Scout). On wide screens the groups
+   disappear and the tiles flow in one grid, as before; on phones they become
+   labelled sections. */
+.nav-group {
+	display: contents;
+}
+
+.nav-group::before {
+	content: none;
 }
 
 .nav-tile {
@@ -77,6 +165,9 @@
 .nav-pit { --accent: var(--ms-red); }
 .nav-transfer { --accent: var(--ms-neutral); }
 .nav-ftc { --accent: var(--ms-orange); }
+.nav-qr { --accent: var(--ms-green); }
+.nav-overview { --accent: var(--ms-blue); }
+.nav-picklist { --accent: var(--ms-yellow); }
 
 /* An odd tile out (e.g. 7 tiles in 2 columns) spans the full row. */
 .nav-tile:last-child:nth-child(odd) {
@@ -231,8 +322,58 @@
 		grid-template-columns: 1fr;
 	}
 
+	/* Phones: scouting first (what scouts open most), then analysis, each as a
+	   compact two-column grid so the whole menu fits on about one screen. */
 	.nav-grid {
 		grid-template-columns: 1fr;
+		gap: 20px;
+	}
+
+	/* The intro blurb isn't needed on a phone and pushes the menu down. */
+	.hero-intro .header-description {
+		display: none;
+	}
+
+	.nav-group {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 8px;
+		align-content: start;
+	}
+
+	.nav-scouting {
+		order: -1;
+	}
+
+	.nav-group::before {
+		content: attr(data-label);
+		grid-column: 1 / -1;
+		color: var(--text-muted);
+		font-size: 0.72rem;
+		font-weight: 700;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+	}
+
+	.nav-tile {
+		justify-content: center;
+		min-height: 64px;
+		padding: 10px 10px 10px 16px;
+		border-radius: var(--radius-sm);
+	}
+
+	.nav-tile strong {
+		font-size: 0.95rem;
+		line-height: 1.2;
+	}
+
+	.nav-tile strong::after {
+		content: none;
+	}
+
+	.nav-tile span {
+		font-size: 0.74rem;
+		line-height: 1.3;
 	}
 
 	.data-grid,
@@ -500,4 +641,123 @@
 
 .scouting-match-summary .match-alliance {
 	padding: 8px 20px;
+}
+
+
+/* =========================
+	EMBED (?embed=1)
+	The team view only, sized for a panel inside another page.
+========================= */
+
+html.embed .top-bar,
+html.embed body > header,
+html.embed main > .controls {
+	display: none;
+}
+
+html.embed body {
+	min-height: 0;
+	font-size: 15px;
+}
+
+html.embed main {
+	width: auto;
+	padding: 16px 16px 24px;
+}
+
+html.embed #results {
+	margin-top: 0;
+}
+
+html.embed .team-hero {
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: 16px;
+	margin-bottom: 16px;
+}
+
+html.embed .team-heading h2 {
+	font-size: 1.35rem;
+}
+
+html.embed .team-heading > span {
+	font-size: 0.85rem;
+}
+
+html.embed .robot-photo {
+	width: 150px;
+}
+
+html.embed .top-stats {
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 10px;
+}
+
+html.embed .stat-card {
+	min-height: 0;
+	gap: 8px;
+	padding: 14px 16px;
+}
+
+html.embed .stat-value {
+	font-size: 1.9rem;
+}
+
+html.embed .stat-description {
+	font-size: 0.75rem;
+}
+
+html.embed .section-title {
+	margin: 24px 0 10px;
+	padding-bottom: 8px;
+}
+
+html.embed .data-grid {
+	grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+	gap: 8px;
+}
+
+html.embed .data-item {
+	padding: 12px 14px;
+	border-radius: var(--radius-sm);
+}
+
+html.embed .data-item-value {
+	font-size: 1.25rem;
+}
+
+html.embed .data-item-description {
+	font-size: 0.72rem;
+}
+
+html.embed .scouting-list {
+	grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+	gap: 10px;
+}
+
+html.embed .match-list {
+	grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+
+html.embed .performance-chart,
+html.embed .chart-card {
+	padding: 14px;
+}
+
+html.embed .performance-chart svg {
+	max-height: 220px;
+}
+
+@media (max-width: 480px) {
+	html.embed .team-hero {
+		grid-template-columns: 1fr;
+	}
+
+	html.embed .robot-photo {
+		width: 100%;
+		max-width: 260px;
+	}
+
+	html.embed .top-stats {
+		grid-template-columns: 1fr;
+	}
 }

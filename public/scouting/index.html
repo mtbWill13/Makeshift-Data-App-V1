@@ -4,10 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Match Scouting | MakeShift Scouting Data Hub</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400..700&display=swap">
+    <link rel="preload" href="/fonts/dm-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="/theme.css">
+    <link rel="stylesheet" href="/team.css">
+    <link rel="stylesheet" href="/scout-ui.css">
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
@@ -34,48 +34,46 @@
               <option value="2026oncmp2">Provincials Technology Division</option>
               <option value="2026ontor">Humber</option>
               <option value="2026onwin">Windsor</option>
-              <option value="2026test" selected>Test Event</option>
+              <option value="2026onsi" selected>Southwest International</option>
+              <option value="2026test">Test Event</option>
             </select>
-          </div>
-          <div class="control-group">
-            <label for="submissionToken">Scout passcode</label>
-            <input id="submissionToken" type="password" autocomplete="off" required>
           </div>
         </div>
 
-        <section class="match-setup" aria-labelledby="matchSetupTitle">
+        <div id="assignmentSummary" class="assignment-summary" hidden>
+          <strong id="assignmentText"></strong>
+          <button id="changeAssignment" class="secondary-button" type="button">Change</button>
+        </div>
+
+        <section id="assignmentPanel" class="match-setup" aria-labelledby="matchSetupTitle">
           <h2 id="matchSetupTitle">Match Assignment</h2>
           <p>Set your starting qualification match and driver station once. The team and match number will update automatically after each report.</p>
-          <div class="event-row">
-            <div class="control-group">
-              <label for="startingMatch">Starting match</label>
-              <input id="startingMatch" type="number" min="1" inputmode="numeric" placeholder="e.g. 12">
-            </div>
-            <div class="control-group">
-              <label for="driverStation">Driver station</label>
-              <select id="driverStation">
-                <option value="">Select station</option>
-                <option value="red1">Red 1</option>
-                <option value="red2">Red 2</option>
-                <option value="red3">Red 3</option>
-                <option value="blue1">Blue 1</option>
-                <option value="blue2">Blue 2</option>
-                <option value="blue3">Blue 3</option>
-              </select>
-            </div>
+          <div class="control-group setup-match">
+            <label for="startingMatch">Starting match</label>
+            <input id="startingMatch" type="number" min="1" max="200" step="1" inputmode="numeric" placeholder="e.g. 12">
           </div>
-          <button id="setAssignmentButton" class="secondary-button" type="button">Set Assignment</button>
+          <div id="assignmentStations"></div>
+          <button id="setAssignmentButton" type="button">Start scouting</button>
           <p id="assignmentStatus" class="status" aria-live="polite">Load this event online once to cache its match schedule.</p>
         </section>
 
         <p id="formStatus" class="status" aria-live="polite">Choose an event to load its scouting form.</p>
-        <form id="scoutingForm" hidden>
+        <p id="schemaNote" class="queue-note" hidden>The sheet's questions changed. <button id="updateQuestions" type="button">Update questions</button></p>
+        <p id="queueNote" class="queue-note" hidden></p>
+        <form id="scoutingForm" hidden novalidate>
           <div id="formFields" class="form-fields"></div>
-          <button id="submitButton" type="submit">Submit Match Scouting</button>
+          <label class="flag-row"><input type="checkbox" id="messedUp"><span>I think I messed this up, please double check.</span></label>
+          <div class="form-actions">
+            <button id="submitButton" type="submit">Submit Match Scouting</button>
+            <button id="transferButton" class="transfer-button" type="button">Save &amp; Offline Transfer</button>
+          </div>
         </form>
       </section>
     </main>
     <script src="/offline.js"></script>
+	<script src="/global.js"></script>
+    <script src="/scout-ui.js"></script>
+    <script src="/event-lists.js"></script>
     <script src="index.js"></script>
   </body>
 </html>

@@ -1,0 +1,124 @@
+/* QR page layout — colours, type and components live in /theme.css */
+
+.qr-controls {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: 16px;
+	align-items: start;
+}
+
+#printButton {
+	margin-top: 28px;
+}
+
+.status.warn {
+	color: var(--ms-orange);
+	font-weight: 600;
+}
+
+.status.bad {
+	color: var(--ms-red);
+	font-weight: 600;
+}
+
+.qr-cards {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+	gap: 20px;
+	margin-top: 28px;
+}
+
+.qr-card {
+	display: grid;
+	justify-items: center;
+	gap: 10px;
+	padding: 22px;
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	background: var(--surface);
+	text-align: center;
+}
+
+.qr-card h2 {
+	margin: 0;
+	font-size: 1.5rem;
+}
+
+.qr-card canvas {
+	width: min(100%, 300px) !important;
+	height: auto !important;
+	border-radius: 8px;
+}
+
+.qr-card p {
+	margin: 0;
+	color: var(--text-muted);
+	font-size: 1.05rem;
+	font-weight: 600;
+}
+
+.qr-card code {
+	color: var(--text-faint);
+	font-size: 0.8rem;
+	overflow-wrap: anywhere;
+}
+
+@media (max-width: 600px) {
+	.qr-controls {
+		grid-template-columns: 1fr;
+	}
+
+	#printButton {
+		margin-top: 0;
+	}
+}
+
+/* Printed signs: black on white, one big code each. */
+@media print {
+	@page {
+		margin: 12mm;
+	}
+
+	body {
+		background: #fff;
+		color: #000;
+	}
+
+	.top-bar,
+	header,
+	.qr-controls {
+		display: none !important;
+	}
+
+	main {
+		width: auto;
+		padding: 0;
+	}
+
+	.qr-cards {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 14mm;
+		margin: 0;
+	}
+
+	.qr-card {
+		break-inside: avoid;
+		border: 2px solid #000;
+		background: #fff;
+		color: #000;
+	}
+
+	.qr-card h2 {
+		color: #000;
+		font-size: 22pt;
+	}
+
+	.qr-card p {
+		color: #000;
+		font-size: 14pt;
+	}
+
+	.qr-card code {
+		color: #333;
+	}
+}

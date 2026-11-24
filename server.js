@@ -1,13 +1,124 @@
 import "dotenv/config";
 import express from "express";
 import compression from "compression";
-import { mkdir, readFile, writeFile } from "fs/promises";
+import { mkdir, readFile, rename, writeFile } from "fs/promises";
+import { readFileSync } from "fs";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "crypto";
+import {
+	DEFAULT_COLORS, checkColors, cleanName, createTeamStore, hashSecret, parseEventKey,
+	parseSheetId, parseTeamNumber, verifySecret
+} from "./teams.js";
 import { google } from "googleapis";
 import { startBehindTheBumpers, episodesForTeam } from "./behind-the-bumpers.js";
 import { createSupabaseMirror } from "./supabase-mirror.js";
 import { registerFtcRoutes } from "./ftc.js";
 import { registerFtcScouting } from "./ftc-scouting.js";
+import { createBets } from "./bets.js";
+import { DEFINITION_TAB, DEFINITION_TABS, applyRoles, checkReport, combineDefinitions, definitionsForHeaders, parseDefinitions } from "./field-definitions.js";
+import { fakeEventEnabled, fakeEventResponse, isFakeEventPath, FAKE_EVENT_KEY } from "./fake-event.js";
+import { openPointsStore } from "./points-store.js";
 const app = express();
+
+/* =================================
+   API CACHE
+   Every upstream lookup (TBA, Statbotics, Google Sheets) goes through this.
+   - Fresh results (younger than `ttl`) are returned straight away.
+   - Older results are STILL returned straight away, and a fresh copy is fetched
+     in the background ("stale-while-revalidate"), so nobody waits on a slow or
+     failing upstream once something has been loaded before.
+   - Simultaneous callers for the same key share one request.
+   - Named caches are saved to data/api-cache.json, so a restart (or an outage
+     at TBA/Statbotics, or no internet at an event) still serves the last good data.
+================================= */
+
+const API_CACHE_FILE = new URL("./data/api-cache.json", import.meta.url);
+const API_CACHE_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // keep serving data up to a week old if needed
+const persistedCaches = new Map();
+let apiCacheDirty = false;
+
+/* Load what was saved last time (synchronously, before any request arrives). */
+let savedApiCache = {};
+try {
+	savedApiCache = JSON.parse(readFileSync(API_CACHE_FILE, "utf8")).caches ?? {};
+} catch {
+	/* First run or unreadable: start empty. */
+}
+
+function cachedFetcher(ttl, load, { name = null, staleOk = true } = {}) {
+	const cache = new Map(name ? (savedApiCache[name] ?? []) : []);
+	const inFlight = new Map();
+
+	const refresh = key => {
+		if (inFlight.has(key)) return inFlight.get(key);
+
+		const request = load(key)
+			.then(data => {
+				cache.set(key, { time: Date.now(), data });
+				if (name) apiCacheDirty = true;
+				return data;
+			})
+			.finally(() => inFlight.delete(key));
+
+		inFlight.set(key, request);
+		return request;
+	};
+
+	const get = key => {
+		const cached = cache.get(key);
+		const age = cached ? Date.now() - cached.time : Infinity;
+
+		if (age < ttl) return Promise.resolve(cached.data);
+
+		if (age < API_CACHE_MAX_AGE) {
+			if (!staleOk) {
+				// Wait for the fresh copy; only if that fails fall back to the old one.
+				return refresh(key).catch(() => cached.data);
+			}
+
+			// Serve the last good copy now and refresh behind the scenes.
+			refresh(key).catch(() => { /* keep serving the old copy */ });
+			return Promise.resolve(cached.data);
+		}
+
+		return refresh(key);
+	};
+
+	get.invalidate = predicate => {
+		for (const key of cache.keys()) {
+			if (predicate(key)) cache.delete(key);
+		}
+		if (name) apiCacheDirty = true;
+	};
+
+	if (name) persistedCaches.set(name, cache);
+	return get;
+}
+
+/* Save named caches every 30 s when something changed (write to a temp file,
+   then rename, so a crash mid-write can't corrupt the saved copy). */
+async function saveApiCache() {
+	if (!apiCacheDirty) return;
+	apiCacheDirty = false;
+
+	const cutoff = Date.now() - API_CACHE_MAX_AGE;
+	const caches = Object.fromEntries([...persistedCaches].map(([name, cache]) => [
+		name,
+		[...cache].filter(([, entry]) => entry.time > cutoff)
+	]));
+
+	try {
+		await mkdir(new URL("./data/", import.meta.url), { recursive: true });
+		const temp = new URL("./data/api-cache.json.tmp", import.meta.url);
+		await writeFile(temp, JSON.stringify({ savedAt: Date.now(), caches }));
+		await rename(temp, API_CACHE_FILE);
+	} catch (error) {
+		apiCacheDirty = true;
+		console.error("Couldn't save the API cache:", error.message);
+	}
+}
+
+setInterval(saveApiCache, 30 * 1000).unref();
+
 
 // Gzip responses; the scouting sheet JSON is ~500 KB uncompressed.
 app.use(compression());
@@ -15,6 +126,216 @@ app.use(express.json({ limit: "100kb" }));
 
 app.use((req, res, next) => {
 	console.log("REQUEST:", req.method, req.url);
+	next();
+});
+
+/* =================================
+   TEAM LOGIN
+   Every team has its own account (team number + password) and its own Google
+   Sheet(s). Every page and every data request is checked here, before anything
+   is served, so one team can't reach another team's data. A correct login sets
+   a signed cookie that lasts 30 days (long enough for a whole season).
+   The original MakeShift 4039 team is configured from .env (TEAM_PASSWORD and
+   the SCOUTING_SHEET_* values); other teams sign up on /signup/.
+================================= */
+
+const TEAM_PASSWORD = process.env.TEAM_PASSWORD;
+
+if (!TEAM_PASSWORD) {
+	throw new Error("Missing TEAM_PASSWORD in .env (the MakeShift 4039 team login password)");
+}
+
+const legacyTeam = {
+	legacy: true,
+	number: "4039",
+	name: "MakeShift",
+	colors: DEFAULT_COLORS,
+	passwordHash: await hashSecret(TEAM_PASSWORD),
+	// Changing TEAM_PASSWORD logs this team out everywhere.
+	sessionVersion: createHash("sha256").update(`legacy|${TEAM_PASSWORD}`).digest("hex").slice(0, 16),
+	// Read when asked: the env sheet table is defined further down.
+	get events() {
+		return Object.entries(scoutingSheetIds).filter(([, sheetId]) => sheetId).map(([key, sheetId]) => ({ key, name: key, sheetId }));
+	}
+};
+
+const teamStore = createTeamStore({
+	file: process.env.TEAMS_FILE ?? new URL("./data/teams.json", import.meta.url),
+	legacy: legacyTeam
+});
+await teamStore.load();
+
+const SESSION_COOKIE = "makeshift_session";
+const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+const sessionKey = createHash("sha256")
+	.update(`${process.env.SESSION_SECRET || ""}|makeshift-session|${TEAM_PASSWORD}`)
+	.digest();
+
+/* Used so a login for a team that doesn't exist takes as long as a wrong password. */
+const dummyHash = await hashSecret("not-a-real-password");
+
+function signSession(payload) {
+	return createHmac("sha256", sessionKey).update(payload).digest("hex");
+}
+
+/* "teamNumber.expires.signature". The signature covers the team's session
+   version, so changing a team's password logs its other sessions out. */
+function makeSessionToken(team) {
+	const expires = Date.now() + SESSION_MAX_AGE_MS;
+	return `${team.number}.${expires}.${signSession(`${team.number}.${expires}.${team.sessionVersion}`)}`;
+}
+
+function readCookie(req, name) {
+	for (const part of String(req.headers.cookie ?? "").split(";")) {
+		const index = part.indexOf("=");
+		if (index !== -1 && part.slice(0, index).trim() === name) return part.slice(index + 1).trim();
+	}
+	return null;
+}
+
+/* The team this request is logged in as, or null. */
+function sessionTeam(req) {
+	const [number, expires, signature] = String(readCookie(req, SESSION_COOKIE) ?? "").split(".");
+	const team = number ? teamStore.get(number) : null;
+	if (!team || !signature || !(Number(expires) > Date.now())) return null;
+
+	const expected = Buffer.from(signSession(`${team.number}.${expires}.${team.sessionVersion}`));
+	const given = Buffer.from(signature);
+	return given.length === expected.length && timingSafeEqual(given, expected) ? team : null;
+}
+
+function sessionCookie(req, value, maxAgeSeconds) {
+	const secure = req.secure || req.headers["x-forwarded-proto"] === "https";
+	return `${SESSION_COOKIE}=${value}; Path=/; Max-Age=${maxAgeSeconds}; HttpOnly; SameSite=Lax${secure ? "; Secure" : ""}`;
+}
+
+function startSession(req, res, team) {
+	res.setHeader("Set-Cookie", sessionCookie(req, makeSessionToken(team), SESSION_MAX_AGE_MS / 1000));
+}
+
+/* Only same-site paths are allowed as the "go back to" address. */
+function safeNext(value) {
+	const next = String(value ?? "");
+	return next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\") && !next.startsWith("/login") && !next.startsWith("/signup") ? next : "/";
+}
+
+/* Slows down guessing and abuse: `max` tries per IP in each time window. */
+function createLimiter(max, windowMs) {
+	const entries = new Map();
+	setInterval(() => {
+		const now = Date.now();
+		for (const [key, entry] of entries) if (entry.resetAt < now) entries.delete(key);
+	}, 5 * 60 * 1000).unref();
+
+	const current = key => {
+		const entry = entries.get(key);
+		return entry && entry.resetAt > Date.now() ? entry : null;
+	};
+
+	return {
+		/* Minutes until this IP may try again, or 0 if it may now. */
+		wait(key) {
+			const entry = current(key);
+			return entry && entry.count >= max ? Math.ceil((entry.resetAt - Date.now()) / 60000) : 0;
+		},
+		hit(key) {
+			const entry = current(key) ?? { count: 0, resetAt: Date.now() + windowMs };
+			entry.count++;
+			entries.set(key, entry);
+		},
+		clear(key) {
+			entries.delete(key);
+		}
+	};
+}
+
+const loginLimiter = createLimiter(8, 15 * 60 * 1000);
+const signupLimiter = createLimiter(8, 60 * 60 * 1000);
+const lookupLimiter = createLimiter(80, 15 * 60 * 1000);
+
+const waitMessage = minutes => `Too many tries. Try again in ${minutes} minute${minutes === 1 ? "" : "s"}.`;
+
+app.post("/api/login", async (req, res) => {
+	const wait = loginLimiter.wait(req.ip);
+	if (wait) return res.status(429).json({ error: waitMessage(wait) });
+
+	const team = teamStore.get(parseTeamNumber(req.body?.team));
+	const password = typeof req.body?.password === "string" ? req.body.password.slice(0, 200) : "";
+	const matches = await verifySecret(password, team?.passwordHash ?? dummyHash);
+
+	if (!team || !matches) {
+		loginLimiter.hit(req.ip);
+		return res.status(401).json({ error: "That team number or password isn't right." });
+	}
+
+	loginLimiter.clear(req.ip);
+	startSession(req, res, team);
+	res.json({ ok: true, next: safeNext(req.body.next), team: await teamPayload(team) });
+});
+
+app.post("/api/logout", (req, res) => {
+	res.setHeader("Set-Cookie", sessionCookie(req, "", 0));
+	res.json({ ok: true });
+});
+
+/* The team's colours as CSS variables, loaded by every page. Answers even when
+   logged out (with the default colours) so the login page can use it. */
+app.get("/team.css", (req, res) => {
+	const colors = sessionTeam(req)?.colors ?? DEFAULT_COLORS;
+	res.type("text/css").set("Cache-Control", "no-cache").send(`:root{--brand:${colors.primary};--brand-2:${colors.accent};}\n`);
+});
+
+/* The only things reachable without logging in: the login and signup pages and
+   what they need (fonts, images, stylesheets, the colour helper), the health
+   check, and the offline service worker script (a browser can't register it
+   through a redirect). */
+function isPublicPath(path) {
+	return path === "/health"
+		|| path === "/theme.css"
+		|| path === "/team.css"
+		|| path === "/team-colors.js"
+		|| path === "/team-forms.css"
+		|| path === "/offline-service-worker.js"
+		|| path === "/login" || path.startsWith("/login/")
+		|| path === "/signup" || path.startsWith("/signup/")
+		|| path === "/api/signup" || path.startsWith("/api/signup/")
+		|| path.startsWith("/fonts/") || path.startsWith("/images/");
+}
+
+app.use((req, res, next) => {
+	if (isPublicPath(req.path)) return next();
+
+	req.team = sessionTeam(req);
+	if (req.team) return next();
+
+	// Data requests get an error the pages can recognise; page loads go to the login page.
+	if (req.path.startsWith("/api/") || (req.method !== "GET" && req.method !== "HEAD")) {
+		return res.status(401).json({ error: "Please log in.", login: true });
+	}
+
+	res.redirect(`/login/?next=${encodeURIComponent(req.originalUrl)}`);
+});
+
+/* Start and end dates for events, so the scouting forms can start on the event
+   that's happening today. Events TBA doesn't know (test events) come back without dates. */
+app.get("/api/event-dates", async (req, res) => {
+	const keys = [...new Set(String(req.query.keys ?? "").split(",").map(key => key.trim().toLowerCase()).filter(key => /^\d{4}[a-z0-9]{2,20}$/.test(key)))].slice(0, 30);
+
+	res.json(await Promise.all(keys.map(async key => {
+		try {
+			const event = await tba(`/event/${key}`);
+			return { key, start: event.start_date ?? null, end: event.end_date ?? null };
+		} catch {
+			return { key, start: null, end: null };
+		}
+	})));
+});
+
+/* A page asked for data without picking an event (a team with no events yet has an empty dropdown). */
+app.use("/api", (req, res, next) => {
+	if (req.path.includes("//")) {
+		return res.status(404).json({ error: "No event is selected. Add your events in Team settings first." });
+	}
 	next();
 });
 const TBA_BASE = "https://www.thebluealliance.com/api/v3";
@@ -42,34 +363,190 @@ const sheets = google.sheets({
 	auth: googleAuth
 });
 
-/* Sheet reads are cached for 30 seconds so switching teams doesn't re-download
-   the whole sheet each time. Submissions through this server clear their
-   sheet's cache straight away; edits made directly in Google Sheets can take up
-   to 30 seconds to appear. Returns the same { data: { values } } shape as the API. */
+/* Sheet reads are cached (fresh for 30 seconds, then refreshed in the background)
+   so switching teams doesn't re-download the whole sheet each time. Submissions
+   through this server clear their sheet's cache straight away; edits made
+   directly in Google Sheets show up within about 30 seconds (one page load may
+   still show the previous copy while the new one downloads).
+   Returns the same { data: { values } } shape as the API. */
 const SHEET_KEY_SEPARATOR = "\n";
 const sheetReads = cachedFetcher(30 * 1000, key => {
 	const [spreadsheetId, range] = key.split(SHEET_KEY_SEPARATOR);
 	return sheets.spreadsheets.values.get({ spreadsheetId, range })
 		.then(response => ({ data: { values: response.data.values } }));
-});
+}, { name: "sheets" });
 
 function readSheet(spreadsheetId, range) {
 	return sheetReads(`${spreadsheetId}${SHEET_KEY_SEPARATOR}${range}`);
+}
+
+/* For the scouting forms' questions (the header rows). A scout opening the form
+   right after the sheet's headers were edited must see the edit, not a saved copy,
+   so this always fetches fresh, kept only 5 seconds so a room of scouts opening
+   the form together doesn't hammer Google. Never shown stale unless Google fails. */
+const sheetHeaderReads = cachedFetcher(5 * 1000, key => {
+	const [spreadsheetId, range] = key.split(SHEET_KEY_SEPARATOR);
+	return sheets.spreadsheets.values.get({ spreadsheetId, range })
+		.then(response => ({ data: { values: response.data.values } }));
+}, { staleOk: false });
+
+function readSheetFresh(spreadsheetId, range) {
+	return sheetHeaderReads(`${spreadsheetId}${SHEET_KEY_SEPARATOR}${range}`);
 }
 
 function forgetSheet(spreadsheetId) {
 	sheetReads.invalidate(key => key.startsWith(`${spreadsheetId}${SHEET_KEY_SEPARATOR}`));
 }
 
+/* =================================
+   SHEET LAYOUTS
+   A team's sheet can use either layout, found by which tab it has:
+   - SIMPLE: "Match Scouting Columns" / "Pit Scouting Columns". Only the columns
+     the app uses; every column is a form field, and there are no formulas. The
+     numbers the pages expect (like climb points) are worked out here.
+   - LEGACY: "Scouting Raw Data" / "Pit Scouting Raw Data", the 39-column sheet
+     with a calculated block and a fixed set of form columns. Existing event
+     sheets keep working exactly as before.
+   A sheet with both tabs uses the simple one.
+================================= */
+
+const SHEET_TABS = {
+	match: { simple: "Match Scouting Columns", legacy: "Scouting Raw Data" },
+	pit: { simple: "Pit Scouting Columns", legacy: "Pit Scouting Raw Data" }
+};
+
+/* Which columns of the legacy sheets are form fields. */
+const LEGACY_FORM_LETTERS = {
+	match: "B C D E H K L M N R T".split(" "),
+	pit: "B C D F G H J K L M Z AD AE AF AH".split(" ")
+};
+
+/* Headers that hold yes/no answers (a new simple tab has no rows yet to tell). */
+const SIMPLE_MATCH_YES_NO = new Set([
+	"Shuttle Fuel", "Robot was defended", "No Show", "Robot died/had breakdown in functionality",
+	"Robot tipped/fell over", "Robot received fouls or a yellow/red card"
+]);
+
+const sheetTabTitles = cachedFetcher(5 * 1000, spreadsheetId =>
+	sheets.spreadsheets.get({ spreadsheetId, fields: "sheets.properties.title" })
+		.then(response => response.data.sheets.map(sheet => sheet.properties.title)),
+	{ staleOk: false }
+);
+
+/* The tab to use for "match" or "pit" data, or null if the sheet has neither. */
+async function sheetTab(spreadsheetId, kind) {
+	const titles = await sheetTabTitles(spreadsheetId);
+	const tabs = SHEET_TABS[kind];
+
+	if (titles.includes(tabs.simple)) return { title: tabs.simple, simple: true, kind };
+	if (titles.includes(tabs.legacy)) return { title: tabs.legacy, simple: false, kind };
+	return null;
+}
+
+/* The sheet's "Match Field Definitions" and "Pit Field Definitions" tabs (see field-definitions.js),
+   or an empty set if it has none. Read fresh so an edit to a tab shows up in the forms straight away. */
+const fieldDefinitions = cachedFetcher(5 * 1000, async spreadsheetId => {
+	const titles = await sheetTabTitles(spreadsheetId);
+	const read = async title => titles.includes(title)
+		? (await sheets.spreadsheets.values.get({ spreadsheetId, range: `'${title}'!A:I` })).data.values ?? []
+		: null;
+
+	const [match, pit, combined] = await Promise.all([read(DEFINITION_TABS.match), read(DEFINITION_TABS.pit), read(DEFINITION_TAB)]);
+	return combineDefinitions({ match, pit, combined });
+}, { staleOk: false });
+
+/* Rows for the stats pages, with the headings they expect added from the columns the sheet gave a role. */
+async function rowsWithRoles(values, spreadsheetId, kind, normalize) {
+	const rows = rowsToObjects(values, normalize);
+	const definitions = await fieldDefinitions(spreadsheetId).catch(() => null);
+	return definitions ? applyRoles(rows, (values?.[0] ?? []).map(header => String(header).trim()), definitions[kind]) : rows;
+}
+
+function letterToIndex(letter) {
+	return [...String(letter).trim().toUpperCase()].reduce((total, character) => total * 26 + character.charCodeAt(0) - 64, 0) - 1;
+}
+
+/* Column positions the form should show, in order. */
+function formFieldIndexes(headers, tab) {
+	if (tab.simple) return headers.map((header, index) => header ? index : null).filter(Number.isInteger);
+	return LEGACY_FORM_LETTERS[tab.kind].map(letterToIndex).filter(index => headers[index]);
+}
+
+/* The simple match tab has no formula columns, so numbers the pages expect are
+   worked out as rows are read: End Game Climb as points (level 1/2/3 = 10/20/30)
+   and the climb-points total. */
+function climbPoints(value) {
+	const text = String(value ?? "").trim();
+	if (text !== "" && Number.isFinite(Number(text))) return Number(text);
+	if (/^true$/i.test(text)) return 10; // an older yes/no answer: climbed, level unknown, counted as level 1
+	const level = text.match(/(?:level|lvl|l)\s*([123])\b/i);
+	return level ? Number(level[1]) * 10 : 0;
+}
+
+function normalizeSimpleMatchRow(row) {
+	const endgame = climbPoints(row["End Game Climb"]);
+	const auto = Number(row["Auto Climb"]);
+
+	return {
+		...row,
+		"End Game Climb": endgame,
+		"Climb points": endgame + (Number.isFinite(auto) ? auto : 0),
+		"Teleop Calculated Scoring Points": row["Teleop Scoring Points"] ?? ""
+	};
+}
+
+/* =================================
+   WHAT SCOUTS TYPE INTO THE SHEET
+   Reports go in with USER_ENTERED so numbers and TRUE/FALSE stay real values, which
+   also means text starting with = + - or @ would be run as a spreadsheet formula
+   (=IMPORTXML(…) and friends). Anything like that is stored as plain text, control
+   characters are dropped, and a cell is capped in length.
+================================= */
+
+const MAX_CELL_CHARS = 1000;
+
+function cleanCell(value) {
+	let text = String(value ?? "").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "").slice(0, MAX_CELL_CHARS);
+
+	if (/^[=+\-@]/.test(text) && !/^[+-]?\d+(\.\d+)?$/.test(text.trim())) {
+		text = `'${text}`;
+	}
+
+	return text;
+}
+
+/* A whole number from min to max, or null if it isn't one. */
+function wholeNumberIn(value, min, max) {
+	const text = String(value ?? "").trim();
+	if (!/^\d{1,6}$/.test(text)) return null;
+	const number = Number(text);
+	return number >= min && number <= max ? number : null;
+}
+
+/* Rows as { header: value } objects. */
+function rowsToObjects(values, normalize = row => row) {
+	const [headers, ...rows] = values ?? [];
+	if (!headers) return [];
+	return rows.map(row => normalize(Object.fromEntries(headers.map((header, index) => [header, row[index] ?? ""]))));
+}
+
+const noTabMessage = (kind, req) => req.team.legacy
+	? `The sheet has no ${SHEET_TABS[kind].legacy} tab.`
+	: `That event's sheet has no "${SHEET_TABS[kind].simple}" tab. Start from a copy of the team template sheet.`;
+
 const scoutingSheetIds = {
 	"2026oncmp2": process.env.SCOUTING_SHEET_2026ONCMP2,
 	"2026ontor": process.env.SCOUTING_SHEET_2026ONTOR,
 	"2026onwin": process.env.SCOUTING_SHEET_2026ONWIN,
-	"2026test": process.env.SCOUTING_SHEET_2026TEST
+	"2026test": process.env.SCOUTING_SHEET_2026TEST,
+	// Southwest International (offseason). SCOUTING_SHEET_2026SOUTHWEST works too.
+	"2026onsi": process.env.SCOUTING_SHEET_2026ONSI ?? process.env.SCOUTING_SHEET_2026SOUTHWEST
 };
 
-function spreadsheetIdForEvent(eventKey) {
-	return scoutingSheetIds[eventKey];
+/* A team only ever gets its own sheets: the lookup goes through that team's
+   event list, so asking for another team's event just finds nothing. */
+function spreadsheetIdForEvent(team, eventKey) {
+	return team.events.find(event => event.key === eventKey)?.sheetId;
 }
 
 /* Backup copy of every scouting sheet in Supabase (see supabase-mirror.js).
@@ -78,10 +555,10 @@ function spreadsheetIdForEvent(eventKey) {
 const supabaseMirror = createSupabaseMirror({
 	url: process.env.SUPABASE_URL,
 	key: process.env.SUPABASE_SERVICE_ROLE_KEY,
-	eventKeys: () => Object.keys(scoutingSheetIds).filter(spreadsheetIdForEvent),
+	eventKeys: () => Object.keys(scoutingSheetIds).filter(key => scoutingSheetIds[key]),
 	loadSheet: async (eventKey, kind) => {
 		const tab = kind === "pit" ? "Pit Scouting Raw Data" : "Scouting Raw Data";
-		const response = await readSheet(spreadsheetIdForEvent(eventKey), `'${tab}'!A:ZZ`);
+		const response = await readSheet(scoutingSheetIds[eventKey], `'${tab}'!A:ZZ`);
 		return response.data.values ?? [];
 	}
 });
@@ -99,39 +576,9 @@ function columnIndexToLetter(index) {
 	return result;
 }
 
-/* Remembers successful results for `ttl` ms, and lets simultaneous callers
-   for the same key share one request instead of each making their own. */
-function cachedFetcher(ttl, load) {
-	const cache = new Map();
-	const inFlight = new Map();
-
-	const get = key => {
-		const cached = cache.get(key);
-		if (cached && Date.now() - cached.time < ttl) return Promise.resolve(cached.data);
-		if (inFlight.has(key)) return inFlight.get(key);
-
-		const request = load(key)
-			.then(data => {
-				cache.set(key, { time: Date.now(), data });
-				return data;
-			})
-			.finally(() => inFlight.delete(key));
-
-		inFlight.set(key, request);
-		return request;
-	};
-
-	get.invalidate = predicate => {
-		for (const key of cache.keys()) {
-			if (predicate(key)) cache.delete(key);
-		}
-	};
-
-	return get;
-}
 
 // TBA data changes during events (new match results), so only keep it briefly.
-const tba = cachedFetcher(60 * 1000, async path => {
+const tbaFromTheBlueAlliance = cachedFetcher(60 * 1000, async path => {
 	const response = await fetch(`${TBA_BASE}${path}`, {
 		headers: {
 			"X-TBA-Auth-Key": process.env.TBA_AUTH_KEY,
@@ -144,43 +591,84 @@ const tba = cachedFetcher(60 * 1000, async path => {
 	}
 
 	return response.json();
-});
+}, { name: "tba" });
+
+/* The made-up test event (BETS_FAKE_EVENT=1) never goes to The Blue Alliance or the saved cache. */
+const tba = path => isFakeEventPath(path)
+	? Promise.resolve().then(() => fakeEventResponse(path))
+	: tbaFromTheBlueAlliance(path);
 
 const STATBOTICS_CACHE_MS = 2 * 60 * 1000;
 
-const statbotics = cachedFetcher(STATBOTICS_CACHE_MS, async path => {
-	// Statbotics often has brief 502/503/504 errors or dropped connections, so
-	// retry those a few times. Anything else fails straight away: Statbotics
-	// answers "not found" (e.g. a team that wasn't at an event) with a 500 and an
-	// empty {} body, and retrying that only adds seconds of delay.
-	const maxAttempts = 4;
+/* When Statbotics is having an outage it often fails slowly (5+ s per request).
+   After 3 outage-like failures in a row, skip it for a minute so pages render
+   straight away (cached data is still served; only cold lookups go without EPA).
+   Its normal "not found" answer is a quick 500, which doesn't count. */
+const statboticsHealth = { failures: 0, skipUntil: 0 };
+
+function statboticsFailed(slow) {
+	if (!slow) return;
+	statboticsHealth.failures += 1;
+	if (statboticsHealth.failures >= 3 && Date.now() > statboticsHealth.skipUntil) {
+		statboticsHealth.skipUntil = Date.now() + 60 * 1000;
+		statboticsHealth.failures = 0;
+		console.warn("Statbotics looks down: skipping it for 1 minute (cached EPA is still served).");
+	}
+}
+
+const statboticsFromStatbotics = cachedFetcher(STATBOTICS_CACHE_MS, async path => {
+	if (Date.now() < statboticsHealth.skipUntil) {
+		const error = new Error("Statbotics request skipped: it's currently down");
+		error.status = 503;
+		throw error;
+	}
+
+	// Retry brief 502/503/504s once. Anything else fails straight away:
+	// Statbotics answers "not found" (e.g. a team that wasn't at an event) with a
+	// 500 and an empty {} body, and retrying that only adds delay.
+	const maxAttempts = 2;
 	const retryable = status => status === 502 || status === 503 || status === 504;
 
 	for (let attempt = 1; ; attempt++) {
+		const started = Date.now();
 		let response;
 
 		try {
 			response = await fetch(`https://api.statbotics.io/v3${path}`, {
 				headers: { Accept: "application/json" },
-				signal: AbortSignal.timeout(10000)
+				signal: AbortSignal.timeout(8000)
 			});
 		} catch (error) {
-			if (attempt >= maxAttempts) throw error;
+			statboticsFailed(true);
+			if (attempt >= maxAttempts || Date.now() < statboticsHealth.skipUntil) throw error;
 		}
 
 		if (response?.ok) {
+			statboticsHealth.failures = 0;
 			return response.json();
 		}
 
-		if (response && (!retryable(response.status) || attempt >= maxAttempts)) {
-			const error = new Error(`Statbotics request failed: ${response.status}`);
-			error.status = response.status;
-			throw error;
+		if (response) {
+			statboticsFailed(retryable(response.status) || Date.now() - started > 3000);
+
+			if (!retryable(response.status) || attempt >= maxAttempts) {
+				const error = new Error(`Statbotics request failed: ${response.status}`);
+				error.status = response.status;
+				throw error;
+			}
 		}
 
 		await new Promise(resolve => setTimeout(resolve, 500 * attempt));
 	}
-});
+}, { name: "statbotics" });
+
+/* Statbotics has nothing on the made-up test event: say so straight away. */
+const statbotics = path => {
+	if (fakeEventEnabled() && path.includes(FAKE_EVENT_KEY)) {
+		return Promise.reject(Object.assign(new Error("Statbotics request failed: 404"), { status: 404 }));
+	}
+	return statboticsFromStatbotics(path);
+};
 
 /* Sends a Statbotics error to the browser with the same status codes as before:
    Statbotics' own status (e.g. 500 when a team isn't at an event), or 502. */
@@ -195,6 +683,361 @@ function sendStatboticsError(res, error) {
 function stripHtml(value) {
 	return String(value ?? "").replace(/<[^>]*>/g, "");
 }
+
+/* =================================
+   TEAM ACCOUNTS: SIGN UP + SETTINGS
+================================= */
+
+/* The tabs and columns the stats pages rely on. The match form builds itself
+   from the sheet's header row, so anything extra is fine. */
+const REQUIRED_SHEET_COLUMNS = {
+	match: {
+		simple: ["Team Number", "Match Number", "Auto Scoring Points", "Teleop Scoring Points"],
+		legacy: ["Team Number", "Match Number", "No Show", "Auto Scoring Points", "Teleop Scoring Points"]
+	},
+	pit: {
+		simple: ["Team Number of Team Being Scouted"],
+		legacy: ["Team Number of Team Being Scouted"]
+	}
+};
+
+const TEMPLATE_SHEET_URL = /^https:\/\/docs\.google\.com\//.test(process.env.TEMPLATE_SHEET_URL ?? "") ? process.env.TEMPLATE_SHEET_URL : null;
+
+async function serviceAccountEmail() {
+	return (await googleAuth.getCredentials()).client_email;
+}
+
+/* Returns null when the sheet is usable, otherwise a message for the team. */
+async function checkSheet(spreadsheetId) {
+	const email = await serviceAccountEmail();
+	const notShared = `Couldn't open that sheet. Share it with ${email} as an Editor, then try again.`;
+	const failedWith = (error, ...statuses) => statuses.includes(error.code ?? error.response?.status);
+
+	let meta;
+	try {
+		meta = await sheets.spreadsheets.get({ spreadsheetId, fields: "properties.title,sheets.properties.title" });
+	} catch (error) {
+		if (failedWith(error, 403, 404)) return notShared;
+		throw error;
+	}
+
+	const titles = new Set(meta.data.sheets.map(sheet => sheet.properties.title));
+
+	for (const kind of ["match", "pit"]) {
+		/* Either layout will do; the simple tab is used if both are there. */
+		const layout = titles.has(SHEET_TABS[kind].simple) ? "simple" : titles.has(SHEET_TABS[kind].legacy) ? "legacy" : null;
+
+		if (!layout) {
+			return `That sheet has no "${SHEET_TABS[kind].simple}" tab. Start from a copy of the team template sheet so the tabs and columns match.`;
+		}
+
+		// Read directly (not through the cache) so a fixed sheet passes straight away.
+		const tab = SHEET_TABS[kind][layout];
+		const response = await sheets.spreadsheets.values.get({ spreadsheetId, range: `'${tab}'!1:1` });
+		const headers = new Set((response.data.values?.[0] ?? []).map(header => String(header).trim()));
+		const missing = REQUIRED_SHEET_COLUMNS[kind][layout].filter(column => !headers.has(column));
+		if (missing.length) return `The "${tab}" tab is missing the column${missing.length === 1 ? "" : "s"}: ${missing.join(", ")}. Start from a copy of the team template sheet.`;
+	}
+
+	// Scouts submit into the sheet, so the share has to be Editor: re-save the same title (a no-op that needs edit access).
+	try {
+		await sheets.spreadsheets.batchUpdate({
+			spreadsheetId,
+			requestBody: { requests: [{ updateSpreadsheetProperties: { properties: { title: meta.data.properties.title }, fields: "title" } }] }
+		});
+	} catch (error) {
+		if (failedWith(error, 403)) return `${email} can only view that sheet. Change its access to Editor so scouts can submit reports.`;
+		throw error;
+	}
+
+	return null;
+}
+
+/* Validates a sheet (link or ID) for a team that may or may not have it already. */
+async function validateSheetInput(value, exceptNumber = null) {
+	const sheetId = parseSheetId(value);
+	if (!sheetId) return { error: "Paste the Google Sheet link (or its ID)." };
+	if (teamStore.sheetOwner(sheetId, exceptNumber)) {
+		return { error: "That sheet is already in use by a team account. Make your own copy of the template sheet." };
+	}
+	const problem = await checkSheet(sheetId);
+	return problem ? { error: problem } : { sheetId };
+}
+
+/* What the browser needs to know about a team. `events` are the team's own
+   events (name, key, and whether a sheet is connected); the pages' event
+   dropdowns show exactly these. */
+async function teamPayload(team) {
+	const view = teamStore.publicView(team);
+	return { ...view, eventChoices: view.events };
+}
+
+async function eventFromTba(key) {
+	try {
+		const event = await tba(`/event/${key}`);
+		return { key, name: cleanName(event.short_name || event.name || key) };
+	} catch {
+		return null;
+	}
+}
+
+const sendGoogleProblem = (res, error) => {
+	console.error("TEAM SHEET ERROR:", error.message);
+	res.status(502).json({ error: "Google Sheets isn't responding right now. Try again in a moment." });
+};
+
+/* Facts the signup page needs, and (given a team number) that team's name and events from TBA. */
+app.get("/api/signup/info", async (req, res) => {
+	const wait = lookupLimiter.wait(req.ip);
+	if (wait) return res.status(429).json({ error: waitMessage(wait) });
+	lookupLimiter.hit(req.ip);
+
+	const info = {
+		serviceAccountEmail: await serviceAccountEmail().catch(() => null),
+		templateUrl: TEMPLATE_SHEET_URL
+	};
+
+	const number = parseTeamNumber(req.query.team);
+	if (number) {
+		info.taken = Boolean(teamStore.get(number));
+		const year = new Date().getFullYear();
+
+		try {
+			const [team, events] = await Promise.all([
+				tba(`/team/frc${number}`),
+				tba(`/team/frc${number}/events/${year}`).catch(() => [])
+			]);
+			info.nickname = cleanName(team.nickname);
+			info.events = events
+				.sort((a, b) => String(a.start_date).localeCompare(String(b.start_date)))
+				.map(event => ({ key: event.key, name: cleanName(event.short_name || event.name) }));
+		} catch (error) {
+			if (/404/.test(error.message)) info.notFound = true;
+		}
+	}
+
+	res.json(info);
+});
+
+app.post("/api/signup/check-sheet", async (req, res) => {
+	const wait = lookupLimiter.wait(req.ip);
+	if (wait) return res.status(429).json({ error: waitMessage(wait) });
+	lookupLimiter.hit(req.ip);
+
+	try {
+		const result = await validateSheetInput(req.body?.sheet);
+		res.status(result.error ? 400 : 200).json(result.error ? { error: result.error } : { ok: true });
+	} catch (error) {
+		sendGoogleProblem(res, error);
+	}
+});
+
+app.post("/api/signup", async (req, res) => {
+	const wait = signupLimiter.wait(req.ip);
+	if (wait) return res.status(429).json({ error: waitMessage(wait) });
+	signupLimiter.hit(req.ip);
+
+	const fail = (status, error) => res.status(status).json({ error });
+	const body = req.body ?? {};
+
+	const number = parseTeamNumber(body.number);
+	const name = cleanName(body.name);
+	const password = typeof body.password === "string" ? body.password : "";
+	const eventKey = parseEventKey(body.event);
+	const { colors, error: colorError } = checkColors(body.colors);
+	/* A Google Sheet is optional here: it can be connected later in Team settings. */
+	const wantsSheet = typeof body.sheet === "string" && body.sheet.trim() !== "";
+
+	if (!number) return fail(400, "Enter your FRC team number.");
+	if (name.length < 2) return fail(400, "Enter your team name.");
+	if (password.length < 8 || password.length > 200) return fail(400, "The team password needs at least 8 characters.");
+	if (colorError) return fail(400, colorError);
+	if (wantsSheet && !eventKey) return fail(400, "Pick the event your sheet is for (or enter its key, like 2026onwat).");
+	if (teamStore.isFull()) return fail(503, "Sign-ups are closed right now. Ask the site owner.");
+	if (teamStore.get(number)) return fail(409, `Team ${number} already has an account. Log in instead.`);
+
+	try {
+		try {
+			await tba(`/team/frc${number}`);
+		} catch (error) {
+			if (/404/.test(error.message)) return fail(400, `FRC team ${number} wasn't found on The Blue Alliance.`);
+			throw error;
+		}
+
+		const events = [];
+		if (wantsSheet) {
+			const event = await eventFromTba(eventKey);
+			if (!event) return fail(400, `Event ${eventKey} wasn't found on The Blue Alliance.`);
+
+			const sheet = await validateSheetInput(body.sheet);
+			if (sheet.error) return fail(400, sheet.error);
+			events.push({ ...event, sheetId: sheet.sheetId });
+		}
+
+		const passwordHash = await hashSecret(password);
+
+		// Re-check right before saving: someone may have signed up while we were checking.
+		if (teamStore.get(number)) return fail(409, `Team ${number} already has an account. Log in instead.`);
+		if (events[0] && teamStore.sheetOwner(events[0].sheetId)) return fail(400, "That sheet is already in use by a team account.");
+
+		const team = {
+			number,
+			name,
+			colors,
+			passwordHash,
+			sessionVersion: randomBytes(8).toString("hex"),
+			events,
+			createdAt: new Date().toISOString()
+		};
+		await teamStore.add(team);
+
+		console.log(`Team account created: ${number} (${name})`);
+		startSession(req, res, team);
+		res.status(201).json({ ok: true, team: await teamPayload(team) });
+	} catch (error) {
+		console.error("SIGNUP ERROR:", error.message);
+		res.status(502).json({ error: "Couldn't finish creating the account (The Blue Alliance or Google didn't answer). Try again in a moment." });
+	}
+});
+
+/* ----- Settings (logged in) ----- */
+
+const MAX_TEAM_EVENTS = 25;
+
+function requireEditableTeam(req, res, next) {
+	if (req.team.legacy) {
+		return res.status(400).json({ error: "This team is set up in the server's .env file, so it can't be changed here." });
+	}
+	next();
+}
+
+/* The team's events on The Blue Alliance this year, so the settings page can
+   offer to fill in an event's name and key. Optional: empty if TBA is down. */
+async function tbaEventsFor(team) {
+	if (team.legacy) return [];
+	try {
+		const events = await tba(`/team/frc${team.number}/events/${new Date().getFullYear()}`);
+		return [...events]
+			.sort((a, b) => String(a.start_date).localeCompare(String(b.start_date)))
+			.map(event => ({ key: event.key, name: cleanName(event.short_name || event.name) }));
+	} catch {
+		return [];
+	}
+}
+
+app.get("/api/team", async (req, res) => {
+	res.json({
+		...await teamPayload(req.team),
+		tbaEvents: await tbaEventsFor(req.team),
+		serviceAccountEmail: await serviceAccountEmail().catch(() => null),
+		templateUrl: TEMPLATE_SHEET_URL
+	});
+});
+
+app.post("/api/team/profile", requireEditableTeam, async (req, res) => {
+	const name = cleanName(req.body?.name);
+	const { colors, error } = checkColors(req.body?.colors);
+
+	if (name.length < 2) return res.status(400).json({ error: "Enter your team name." });
+	if (error) return res.status(400).json({ error });
+
+	teamStore.update(req.team.number, { name, colors });
+	res.json(await teamPayload(req.team));
+});
+
+/* Adds one of the team's events (name + key + optional sheet), or updates the
+   name and/or sheet of an event that's already there. The key is the event's
+   TBA key (like 2026onwat) so public event data works; a team can also make up
+   a key for a practice or test event. */
+app.post("/api/team/events", requireEditableTeam, async (req, res) => {
+	const name = cleanName(req.body?.name);
+	const key = parseEventKey(req.body?.key);
+	const sheetGiven = typeof req.body?.sheet === "string" && req.body.sheet.trim() !== "";
+
+	if (name.length < 2) return res.status(400).json({ error: "Enter a name for the event." });
+	if (!key) return res.status(400).json({ error: "Enter the event key: the year then a short code, like 2026onwat." });
+
+	const existing = req.team.events.find(event => event.key === key);
+	if (!existing && req.team.events.length >= MAX_TEAM_EVENTS) {
+		return res.status(400).json({ error: `A team can have up to ${MAX_TEAM_EVENTS} events.` });
+	}
+
+	try {
+		let sheetId = existing?.sheetId ?? null;
+
+		if (sheetGiven) {
+			const sheet = await validateSheetInput(req.body.sheet, req.team.number);
+			if (sheet.error) return res.status(400).json({ error: sheet.error });
+			sheetId = sheet.sheetId;
+		}
+
+		const events = [...req.team.events.filter(other => other.key !== key), { key, name, sheetId }]
+			.sort((a, b) => a.key.localeCompare(b.key));
+		teamStore.update(req.team.number, { events });
+		res.status(existing ? 200 : 201).json(await teamPayload(req.team));
+	} catch (error) {
+		sendGoogleProblem(res, error);
+	}
+});
+
+app.delete("/api/team/events/:key", requireEditableTeam, async (req, res) => {
+	teamStore.update(req.team.number, { events: req.team.events.filter(event => event.key !== req.params.key) });
+	res.json(await teamPayload(req.team));
+});
+
+/* Deleting the account needs the team password and the team number typed in.
+   It removes the team's login and settings; the Google Sheets are left alone. */
+app.post("/api/team/delete", requireEditableTeam, async (req, res) => {
+	const wait = loginLimiter.wait(req.ip);
+	if (wait) return res.status(429).json({ error: waitMessage(wait) });
+
+	const body = req.body ?? {};
+	const password = typeof body.password === "string" ? body.password.slice(0, 200) : "";
+
+	if (String(body.confirm ?? "").trim() !== req.team.number) {
+		return res.status(400).json({ error: `Type your team number (${req.team.number}) to confirm.` });
+	}
+	if (!await verifySecret(password, req.team.passwordHash)) {
+		loginLimiter.hit(req.ip);
+		return res.status(401).json({ error: "The password isn't right." });
+	}
+
+	teamStore.remove(req.team.number);
+	console.log(`Team account deleted: ${req.team.number} (${req.team.name})`);
+	res.setHeader("Set-Cookie", sessionCookie(req, "", 0));
+	res.json({ ok: true });
+});
+
+/* Changing the team password needs the current one. */
+app.post("/api/team/passwords", requireEditableTeam, async (req, res) => {
+	const wait = loginLimiter.wait(req.ip);
+	if (wait) return res.status(429).json({ error: waitMessage(wait) });
+
+	const body = req.body ?? {};
+	const current = typeof body.current === "string" ? body.current.slice(0, 200) : "";
+
+	if (!await verifySecret(current, req.team.passwordHash)) {
+		loginLimiter.hit(req.ip);
+		return res.status(401).json({ error: "The current password isn't right." });
+	}
+
+	if (typeof body.password !== "string" || body.password.length < 8 || body.password.length > 200) {
+		return res.status(400).json({ error: "The new team password needs at least 8 characters." });
+	}
+
+	const team = teamStore.update(req.team.number, {
+		passwordHash: await hashSecret(body.password),
+		sessionVersion: randomBytes(8).toString("hex") // logs everyone else out
+	});
+	startSession(req, res, team); // keep this browser logged in
+	res.json({ ok: true });
+});
+
+/* The Blue Alliance doesn't know every event: practice and test events (like
+   2026test) aren't on it, and a brand-new offseason event has no data yet. For
+   those, TBA answers 404 or an empty list; the pages should just show no public
+   data rather than fail. Any other failure (TBA down) is still an error. */
+const tbaNotFound = error => /\b404\b/.test(error.message);
 
 // All results for an event, such as "2026onott"
 app.get("/api/events/:eventKey/matches", async (req, res) => {
@@ -216,6 +1059,7 @@ app.get("/api/events/:eventKey/matches", async (req, res) => {
 				.map(video => `https://www.youtube.com/watch?v=${encodeURIComponent(video.key)}`),
 		})));
 	} catch (error) {
+		if (tbaNotFound(error)) return res.json([]);
 		res.status(500).json({ error: error.message });
 	}
 });
@@ -318,6 +1162,7 @@ app.get("/api/events/:eventKey/rankings", async (req, res) => {
 		const data = await tba(`/event/${req.params.eventKey}/rankings`);
 		res.json(data?.rankings ?? []);
 	} catch (error) {
+		if (tbaNotFound(error)) return res.json([]);
 		res.status(500).json({ error: error.message });
 	}
 });
@@ -325,8 +1170,9 @@ app.get("/api/events/:eventKey/rankings", async (req, res) => {
 // Event OPR statistics
 app.get("/api/events/:eventKey/oprs", async (req, res) => {
 	try {
-		res.json(await tba(`/event/${req.params.eventKey}/oprs`));
+		res.json(await tba(`/event/${req.params.eventKey}/oprs`) ?? { oprs: {}, dprs: {}, ccwms: {} });
 	} catch (error) {
+		if (tbaNotFound(error)) return res.json({ oprs: {}, dprs: {}, ccwms: {} });
 		res.status(500).json({ error: error.message });
 	}
 });
@@ -375,7 +1221,7 @@ function trimTeamYear(row) {
 				endgame_points: breakdown.endgame_points ?? null
 			},
 			stats: epa.stats ?? null,
-			ranks: { total: epa.ranks?.total ?? null }
+			ranks: epa.ranks ?? null
 		},
 		record: row.record ?? null
 	};
@@ -488,11 +1334,24 @@ app.get("/api/prescout", async (req, res) => {
 	}
 
 	try {
-		const [seasons, events] = await Promise.all([
-			teamYears(year),
+		/* Statbotics can be down (and, for a season never downloaded, there's no saved
+		   copy to fall back on). Don't fail the page over it: carry on with what The
+		   Blue Alliance has (records, events, OPR, finishes) and say so in a header. */
+		const [seasonsOrNull, events] = await Promise.all([
+			teamYears(year).catch(error => {
+				console.warn("Prescouting without Statbotics:", error.message);
+				return null;
+			}),
 			tba(`/events/${year}`).catch(() => [])
 		]);
+		const statboticsDown = seasonsOrNull === null;
+		const seasons = seasonsOrNull ?? new Map();
 		const eventsByKey = new Map(events.map(event => [event.key, event]));
+
+		// Without Statbotics there are no team names, so ask TBA for them.
+		const tbaNames = statboticsDown
+			? await mapLimit(teams, 8, team => tba(`/team/frc${team}`).then(data => data.nickname ?? null).catch(() => null))
+			: [];
 
 		// Each team's finish and rank at every event they attended.
 		const statuses = await mapLimit(teams, 8, team =>
@@ -529,11 +1388,26 @@ app.get("/api/prescout", async (req, res) => {
 				})
 				.sort((a, b) => String(a.startDate).localeCompare(String(b.startDate)));
 
-			return season
-				? { team, name: season.name, epa: season.epa ?? null, record: season.record ?? null, events: teamEvents }
-				: { team, name: null, epa: null, record: null, events: teamEvents };
+			/* Win/loss record from the qualification records TBA gave us, for when
+			   Statbotics has none (it's down, or the team isn't in it). */
+			const played = teamEvents.filter(event => event.official && event.qualRecord);
+			const wins = played.reduce((sum, event) => sum + (event.qualRecord.wins ?? 0), 0);
+			const losses = played.reduce((sum, event) => sum + (event.qualRecord.losses ?? 0), 0);
+			const ties = played.reduce((sum, event) => sum + (event.qualRecord.ties ?? 0), 0);
+			const tbaRecord = wins + losses + ties
+				? { wins, losses, ties, winrate: (wins + ties / 2) / (wins + losses + ties) }
+				: null;
+
+			return {
+				team,
+				name: season?.name ?? tbaNames[index] ?? null,
+				epa: season?.epa ?? null,
+				record: season?.record ?? tbaRecord,
+				events: teamEvents
+			};
 		});
 
+		res.set("X-Statbotics", statboticsDown ? "down" : "ok");
 		res.json(results);
 	} catch (error) {
 		console.error("PRESCOUT ERROR:", error);
@@ -560,6 +1434,15 @@ app.get("/api/teams/:teamKey/events/:year", async (req, res) => {
 	}
 });
 
+/* A team's season EPA/record/name. Uses the saved bulk Statbotics download when
+   it has full ranks (instant), otherwise asks Statbotics for just this team. */
+async function seasonSummary(teamNumber, year) {
+	const state = teamYearsState.get(String(year));
+	const saved = state?.byTeam?.get(Number(teamNumber));
+	if (saved?.epa?.ranks?.country) return saved;
+	return statbotics(`/team_year/${teamNumber}/${year}`).catch(() => saved ?? null);
+}
+
 // A team's whole season: every event they attended with rank, OPR and EPA
 app.get("/api/teams/:teamNumber/season/:year", async (req, res) => {
 	const { teamNumber, year } = req.params;
@@ -567,6 +1450,12 @@ app.get("/api/teams/:teamNumber/season/:year", async (req, res) => {
 
 	let team;
 	let events;
+
+	// Start everything that doesn't need the event list right away, in parallel
+	// with the team + event lookups (only the per-event OPRs have to wait).
+	const statusesRequest = tba(`/team/${teamKey}/events/${year}/statuses`).catch(() => ({}));
+	const teamYearRequest = seasonSummary(teamNumber, year);
+	const teamEventsRequest = statbotics(`/team_events?team=${teamNumber}&year=${year}`).catch(() => []);
 
 	try {
 		[team, events] = await Promise.all([
@@ -579,9 +1468,9 @@ app.get("/api/teams/:teamNumber/season/:year", async (req, res) => {
 
 	try {
 		const [statuses, teamYear, teamEvents, eventOprs] = await Promise.all([
-			tba(`/team/${teamKey}/events/${year}/statuses`).catch(() => ({})),
-			statbotics(`/team_year/${teamNumber}/${year}`).catch(() => null),
-			statbotics(`/team_events?team=${teamNumber}&year=${year}`).catch(() => []),
+			statusesRequest,
+			teamYearRequest,
+			teamEventsRequest,
 			Promise.all(events.map(event =>
 				tba(`/event/${event.key}/oprs`).catch(() => null)
 			))
@@ -644,7 +1533,7 @@ app.get("/api/scouting/:eventKey", async (req, res) => {
 	try {
 		const { eventKey } = req.params;
 
-		const spreadsheetId = spreadsheetIdForEvent(eventKey);
+		const spreadsheetId = spreadsheetIdForEvent(req.team, eventKey);
 
 		console.log("Spreadsheet ID:", spreadsheetId);
 
@@ -653,26 +1542,17 @@ app.get("/api/scouting/:eventKey", async (req, res) => {
 			return res.json([]);
 		}
 
-		const response = await readSheet(spreadsheetId, "'Scouting Raw Data'!A:AF");
+		const tab = await sheetTab(spreadsheetId, "match");
 
-		console.log("Google Sheets request succeeded");
-
-		const [headers, ...rows] = response.data.values || [];
-
-		if (!headers) {
+		if (!tab) {
 			return res.json([]);
 		}
 
-		const scoutingData = rows.map(row =>
-			Object.fromEntries(
-				headers.map((header, index) => [
-					header,
-					row[index] ?? ""
-				])
-			)
-		);
+		const response = await readSheet(spreadsheetId, tab.simple ? `'${tab.title}'!A:ZZ` : `'${tab.title}'!A:AF`);
 
-		res.json(scoutingData);
+		console.log("Google Sheets request succeeded");
+
+		res.json(await rowsWithRoles(response.data.values, spreadsheetId, "match", tab.simple ? normalizeSimpleMatchRow : undefined));
 
 	} catch (error) {
 		console.error("SCOUTING ERROR:", error);
@@ -685,13 +1565,16 @@ app.get("/api/scouting/:eventKey", async (req, res) => {
 
 app.get("/api/scouting/:eventKey/schema", async (req, res) => {
 	try {
-		const spreadsheetId = spreadsheetIdForEvent(req.params.eventKey);
+		const spreadsheetId = spreadsheetIdForEvent(req.team, req.params.eventKey);
 
 		if (!spreadsheetId) {
-			return res.status(404).json({ error: "No scouting sheet is configured for this event." });
+			return res.status(404).json({ error: req.team.legacy ? "No scouting sheet is configured for this event." : "No Google Sheet is connected for this event yet. Add one in Team settings." });
 		}
 
-		const response = await readSheet(spreadsheetId, "'Scouting Raw Data'!A:ZZ");
+		const tab = await sheetTab(spreadsheetId, "match");
+		if (!tab) return res.status(404).json({ error: noTabMessage("match", req) });
+
+		const response = await readSheetFresh(spreadsheetId, `'${tab.title}'!A:ZZ`);
 
 		/* Keep blank cells: array index 0 must always remain column A.
 		   Filtering blank headers shifts later columns (for example Y becomes B). */
@@ -710,15 +1593,22 @@ app.get("/api/scouting/:eventKey/schema", async (req, res) => {
 					.map(row => String(row[index] ?? "").trim().toUpperCase())
 					.filter(Boolean);
 
-				return values.length && values.every(value =>
+				const looksYesNo = values.length && values.every(value =>
 					value === "TRUE" || value === "FALSE"
-				)
+				);
+
+				return looksYesNo || (tab.simple && SIMPLE_MATCH_YES_NO.has(header))
 					? index
 					: null;
 			})
 			.filter(Number.isInteger);
 
-		res.json({ headers, booleanColumnIndexes });
+		const definitions = await fieldDefinitions(spreadsheetId).catch(() => parseDefinitions(null));
+		res.json({
+			headers, booleanColumnIndexes, fields: formFieldIndexes(headers, tab),
+			definitions: definitionsForHeaders(headers, definitions.match),
+			definitionProblems: definitions.problems
+		});
 	} catch (error) {
 		console.error("SCOUTING SCHEMA ERROR:", error);
 		res.status(500).json({ error: error.message });
@@ -727,24 +1617,10 @@ app.get("/api/scouting/:eventKey/schema", async (req, res) => {
 
 app.post("/api/scouting/:eventKey", async (req, res) => {
 	try {
-		const submissionToken =
-			process.env.SCOUTING_SUBMISSION_TOKEN ??
-			process.env.PIT_SCOUTING_SUBMISSION_TOKEN;
-
-		if (!submissionToken) {
-			return res.status(503).json({
-				error: "Scouting submissions are not configured. Set SCOUTING_SUBMISSION_TOKEN on the server first."
-			});
-		}
-
-		if (req.body?.submissionToken !== submissionToken) {
-			return res.status(401).json({ error: "Incorrect scout passcode." });
-		}
-
-		const spreadsheetId = spreadsheetIdForEvent(req.params.eventKey);
+		const spreadsheetId = spreadsheetIdForEvent(req.team, req.params.eventKey);
 
 		if (!spreadsheetId) {
-			return res.status(404).json({ error: "No scouting sheet is configured for this event." });
+			return res.status(404).json({ error: req.team.legacy ? "No scouting sheet is configured for this event." : "No Google Sheet is connected for this event yet. Add one in Team settings." });
 		}
 
 		const answers = req.body?.answers;
@@ -753,9 +1629,12 @@ app.post("/api/scouting/:eventKey", async (req, res) => {
 			return res.status(400).json({ error: "A scouting response is required." });
 		}
 
+		const tab = await sheetTab(spreadsheetId, "match");
+		if (!tab) return res.status(404).json({ error: noTabMessage("match", req) });
+
 		const headerResponse = await sheets.spreadsheets.values.get({
 			spreadsheetId,
-			range: "'Scouting Raw Data'!1:1"
+			range: `'${tab.title}'!1:1`
 		});
 
 		const headers = (headerResponse.data.values?.[0] ?? [])
@@ -775,7 +1654,7 @@ app.post("/api/scouting/:eventKey", async (req, res) => {
 
 		const existingRowsResponse = await sheets.spreadsheets.values.get({
 			spreadsheetId,
-			range: `'Scouting Raw Data'!A:${lastColumn}`
+			range: `'${tab.title}'!A:${lastColumn}`
 		});
 
 		const existingRows = existingRowsResponse.data.values ?? [];
@@ -788,21 +1667,58 @@ app.post("/api/scouting/:eventKey", async (req, res) => {
 		);
 
 		const nextRow = lastUsedRowIndex + 2;
+		const answerFor = index => answers[`column-${index}`] ?? answers[`${index}`] ?? "";
+
+		/* Reject nonsense before it reaches the sheet. */
+		const matchIndex = headers.findIndex(header => /^match number$/i.test(header));
+		const teamIndex = headers.findIndex(header => /^team number$/i.test(header));
+		const scouterIndex = headers.findIndex(header => /^scout(er)? name$/i.test(header));
+
+		const team = teamIndex === -1 ? null : wholeNumberIn(answerFor(teamIndex), 1, 99999);
+		const match = matchIndex === -1 ? null : wholeNumberIn(answerFor(matchIndex), 1, 999);
+		if (teamIndex !== -1 && team === null) return res.status(400).json({ error: "Team number must be a whole number from 1 to 99999." });
+		if (matchIndex !== -1 && match === null) return res.status(400).json({ error: "Match number must be a whole number from 1 to 999." });
+
+		for (const [index, header] of headers.entries()) {
+			if (/scoring points$/i.test(header) && String(answerFor(index)).trim() !== "" && wholeNumberIn(answerFor(index), 0, 999) === null) {
+				return res.status(400).json({ error: `${header} must be a whole number from 0 to 999.` });
+			}
+		}
+
+		/* The sheet's own rules for each question (types, limits, options, required). */
+		const definitions = await fieldDefinitions(spreadsheetId).catch(() => parseDefinitions(null));
+		const checked = checkReport(headers, answerFor, definitions.match);
+		if (checked.errors.length) return res.status(400).json({ error: checked.errors.slice(0, 3).join(" ") });
+
+		/* Two scouts on the same robot in the same match: ask before adding another
+		   report, unless the scout has already said to go ahead. */
+		if (team !== null && match !== null && req.body?.confirmDuplicate !== true) {
+			const earlier = existingRows.slice(1).find(row =>
+				Number(row[teamIndex]) === team && Number(row[matchIndex]) === match
+			);
+
+			if (earlier) {
+				const scouter = scouterIndex === -1 ? "" : String(earlier[scouterIndex] ?? "").trim();
+				return res.status(409).json({
+					error: `Team ${team} in match ${match} was already scouted${scouter ? ` by ${scouter}` : ""}.`,
+					duplicate: { team, match, scouter }
+				});
+			}
+		}
 
 		await sheets.spreadsheets.values.update({
 			spreadsheetId,
-			range: `'Scouting Raw Data'!A${nextRow}:${lastColumn}${nextRow}`,
+			range: `'${tab.title}'!A${nextRow}:${lastColumn}${nextRow}`,
 			valueInputOption: "USER_ENTERED",
 			requestBody: {
-				values: [headers.map((header, index) =>
-					String(answers[`column-${index}`] ?? answers[`${index}`] ?? "")
-				)]
+				values: [headers.map((header, index) => cleanCell(checked.values.get(index) ?? answerFor(index)))]
 			}
 		});
 
 		forgetSheet(spreadsheetId);
-		supabaseMirror.scheduleSync(req.params.eventKey);
-		res.status(201).json({ ok: true });
+		if (req.team.legacy) supabaseMirror.scheduleSync(req.params.eventKey);
+		const points = await bets?.awardScouting(req, res, { kind: "match", eventKey: req.params.eventKey, team, match, scouterName: scouterIndex === -1 ? "" : answerFor(scouterIndex) });
+		res.status(201).json({ ok: true, ...(points ? { points } : {}) });
 	} catch (error) {
 		console.error("SCOUTING WRITE ERROR:", error);
 		res.status(500).json({ error: error.message });
@@ -816,7 +1732,7 @@ app.get("/api/pitscouting/:eventKey", async (req, res) => {
 	try {
 		const { eventKey } = req.params;
 
-		const spreadsheetId = spreadsheetIdForEvent(eventKey);
+		const spreadsheetId = spreadsheetIdForEvent(req.team, eventKey);
 
 		console.log("Spreadsheet ID:", spreadsheetId);
 
@@ -825,26 +1741,17 @@ app.get("/api/pitscouting/:eventKey", async (req, res) => {
 			return res.json([]);
 		}
 
-		const response = await readSheet(spreadsheetId, "'Pit Scouting Raw Data'!A:AL");
+		const tab = await sheetTab(spreadsheetId, "pit");
 
-		console.log("Google Sheets request succeeded");
-
-		const [headers, ...rows] = response.data.values || [];
-
-		if (!headers) {
+		if (!tab) {
 			return res.json([]);
 		}
 
-		const scoutingData = rows.map(row =>
-			Object.fromEntries(
-				headers.map((header, index) => [
-					header,
-					row[index] ?? ""
-				])
-			)
-		);
+		const response = await readSheet(spreadsheetId, tab.simple ? `'${tab.title}'!A:ZZ` : `'${tab.title}'!A:AL`);
 
-		res.json(scoutingData);
+		console.log("Google Sheets request succeeded");
+
+		res.json(await rowsWithRoles(response.data.values, spreadsheetId, "pit"));
 
 	} catch (error) {
 		console.error("SCOUTING ERROR:", error);
@@ -857,16 +1764,19 @@ app.get("/api/pitscouting/:eventKey", async (req, res) => {
 
 app.get("/api/pitscouting/:eventKey/schema", async (req, res) => {
 	try {
-		const spreadsheetId = spreadsheetIdForEvent(req.params.eventKey);
+		const spreadsheetId = spreadsheetIdForEvent(req.team, req.params.eventKey);
 
 		if (!spreadsheetId) {
-			return res.status(404).json({ error: "No pit-scouting sheet is configured for this event." });
+			return res.status(404).json({ error: req.team.legacy ? "No pit-scouting sheet is configured for this event." : "No Google Sheet is connected for this event yet. Add one in Team settings." });
 		}
 
-		const response = await readSheet(spreadsheetId, "'Pit Scouting Raw Data'!1:1");
+		const tab = await sheetTab(spreadsheetId, "pit");
+		if (!tab) return res.status(404).json({ error: noTabMessage("pit", req) });
+
+		const response = await readSheetFresh(spreadsheetId, `'${tab.title}'!1:1`);
 
 		/* Keep blank cells so array index 0 always remains column A,
-		   otherwise PIT_SCOUTING_COLUMNS letters point at the wrong questions. */
+		   otherwise the legacy form column letters point at the wrong questions. */
 		const headers = (response.data.values?.[0] ?? [])
 			.map(header => String(header).trim());
 
@@ -874,7 +1784,18 @@ app.get("/api/pitscouting/:eventKey/schema", async (req, res) => {
 			return res.status(500).json({ error: "The pit-scouting sheet has no header row." });
 		}
 
-		res.json({ headers });
+		/* Yes/no questions (asked as "Can/Does/Is…" or a plain Shooter/Climber/Defence)
+		   are answered with Yes/No buttons; they're stored as TRUE/FALSE. */
+		const booleanColumnIndexes = headers
+			.map((header, index) => /^(can|does|do|is|are|would|has|have|did|will)\b/i.test(header) || /^(shooter|shuttle|climber|defen[cs]e|same drive team.*)$/i.test(header) ? index : null)
+			.filter(Number.isInteger);
+
+		const definitions = await fieldDefinitions(spreadsheetId).catch(() => parseDefinitions(null));
+		res.json({
+			headers, fields: formFieldIndexes(headers, tab), booleanColumnIndexes,
+			definitions: definitionsForHeaders(headers, definitions.pit),
+			definitionProblems: definitions.problems
+		});
 	} catch (error) {
 		console.error("PIT SCOUTING SCHEMA ERROR:", error);
 		res.status(500).json({ error: error.message });
@@ -883,22 +1804,10 @@ app.get("/api/pitscouting/:eventKey/schema", async (req, res) => {
 
 app.post("/api/pitscouting/:eventKey", async (req, res) => {
 	try {
-		const submissionToken = process.env.PIT_SCOUTING_SUBMISSION_TOKEN;
-
-		if (!submissionToken) {
-			return res.status(503).json({
-				error: "Pit scouting submissions are not configured. Set PIT_SCOUTING_SUBMISSION_TOKEN on the server first."
-			});
-		}
-
-		if (req.body?.submissionToken !== submissionToken) {
-			return res.status(401).json({ error: "Incorrect scout passcode." });
-		}
-
-		const spreadsheetId = spreadsheetIdForEvent(req.params.eventKey);
+		const spreadsheetId = spreadsheetIdForEvent(req.team, req.params.eventKey);
 
 		if (!spreadsheetId) {
-			return res.status(404).json({ error: "No pit-scouting sheet is configured for this event." });
+			return res.status(404).json({ error: req.team.legacy ? "No pit-scouting sheet is configured for this event." : "No Google Sheet is connected for this event yet. Add one in Team settings." });
 		}
 
 		const answers = req.body?.answers;
@@ -907,9 +1816,12 @@ app.post("/api/pitscouting/:eventKey", async (req, res) => {
 			return res.status(400).json({ error: "A pit-scouting response is required." });
 		}
 
+		const tab = await sheetTab(spreadsheetId, "pit");
+		if (!tab) return res.status(404).json({ error: noTabMessage("pit", req) });
+
 		const headerResponse = await sheets.spreadsheets.values.get({
 			spreadsheetId,
-			range: "'Pit Scouting Raw Data'!1:1"
+			range: `'${tab.title}'!1:1`
 		});
 
 		const headers = (headerResponse.data.values?.[0] ?? [])
@@ -919,26 +1831,55 @@ app.post("/api/pitscouting/:eventKey", async (req, res) => {
 			return res.status(500).json({ error: "The pit-scouting sheet has no header row." });
 		}
 
+		const pitTeamIndex = headers.findIndex(header => /team number/i.test(header));
+		if (pitTeamIndex !== -1 && wholeNumberIn(answers[`column-${pitTeamIndex}`] ?? answers[headers[pitTeamIndex]], 1, 99999) === null) {
+			return res.status(400).json({ error: "Team number must be a whole number from 1 to 99999." });
+		}
+
+		/* Pit forms key answers by header; QR transfers key them by column. */
+		const pitAnswerFor = index => answers[`column-${index}`] ?? answers[headers[index]] ?? "";
+		const pitDefinitions = await fieldDefinitions(spreadsheetId).catch(() => parseDefinitions(null));
+		const pitChecked = checkReport(headers, pitAnswerFor, pitDefinitions.pit);
+		if (pitChecked.errors.length) return res.status(400).json({ error: pitChecked.errors.slice(0, 3).join(" ") });
+
 		await sheets.spreadsheets.values.append({
 			spreadsheetId,
-			range: "'Pit Scouting Raw Data'!A:AL",
+			range: tab.simple ? `'${tab.title}'!A:ZZ` : `'${tab.title}'!A:AL`,
 			valueInputOption: "USER_ENTERED",
 			insertDataOption: "INSERT_ROWS",
 			requestBody: {
 				/* Pit forms key answers by header; QR transfers key them by column. */
 				values: [headers.map((header, index) =>
-					String(answers[`column-${index}`] ?? answers[header] ?? "")
+					cleanCell(pitChecked.values.get(index) ?? pitAnswerFor(index))
 				)]
 			}
 		});
 
 		forgetSheet(spreadsheetId);
-		supabaseMirror.scheduleSync(req.params.eventKey);
-		res.status(201).json({ ok: true });
+		if (req.team.legacy) supabaseMirror.scheduleSync(req.params.eventKey);
+		const pitTeam = pitTeamIndex === -1 ? null : wholeNumberIn(answers[`column-${pitTeamIndex}`] ?? answers[headers[pitTeamIndex]], 1, 99999);
+		const points = await bets?.awardScouting(req, res, { kind: "pit", eventKey: req.params.eventKey, team: pitTeam });
+		res.status(201).json({ ok: true, ...(points ? { points } : {}) });
 	} catch (error) {
 		console.error("PIT SCOUTING WRITE ERROR:", error);
 		res.status(500).json({ error: error.message });
 	}
+});
+
+/* Points game: earn points by scouting, bet them on upcoming matches (see bets.js).
+   If the points database can't be opened, the rest of the site works as normal. */
+let bets = null;
+try {
+	bets = createBets({ store: openPointsStore(process.env.POINTS_DB_FILE ?? new URL("./data/points.db", import.meta.url)), tba, statbotics });
+	bets.register(app);
+	bets.startSettling();
+} catch (error) {
+	console.error("Points game unavailable (continuing without it):", error.message);
+}
+
+/* The made-up test event, if turned on (BETS_FAKE_EVENT=1): pages add it to their event dropdown. */
+app.get("/api/fake-event", (req, res) => {
+	res.json(fakeEventEnabled() ? { key: FAKE_EVENT_KEY, name: "Fake test event" } : null);
 });
 
 app.get("/api/statbotics/team-event/:team/:event", async (req, res) => {
@@ -973,8 +1914,19 @@ app.get("/api/statbotics/team-matches/:team/:event", async (req, res) => {
 	}
 });
 
-app.use("/", express.static("public/index"));
-app.use(express.static("public"));
+// Fonts and images never change, so browsers can keep them for 30 days.
+// Pages, scripts and styles still re-check every load so updates show straight away.
+const staticOptions = {
+	setHeaders: (res, filePath) => {
+		if (/[\\/](fonts|images)[\\/]/.test(filePath)) {
+			res.setHeader("Cache-Control", "public, max-age=2592000");
+		} else {
+			res.setHeader("Cache-Control", "no-cache");
+		}
+	}
+};
+app.use("/", express.static("public/index", staticOptions));
+app.use(express.static("public", staticOptions));
 const PORT = process.env.PORT || 3000;
 
 // FTC section (/ftc/): data from FTCScout. See ftc.js.
