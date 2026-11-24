@@ -516,3 +516,72 @@ fieldset.field > legend,
 		flex: 1 1 100%;
 	}
 }
+
+/* The latest practice runs under the practice form. */
+.latest-runs {
+	display: grid;
+	gap: 8px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.latest-runs li {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 4px 10px;
+	padding: 10px 14px;
+	border: 1px solid var(--border);
+	border-radius: var(--radius-sm);
+	background: var(--surface-2);
+}
+
+.latest-runs b {
+	font-size: 1.3rem;
+	font-variant-numeric: tabular-nums;
+}
+
+.latest-runs span {
+	color: var(--text-muted);
+	font-size: 0.88rem;
+}
+
+/* + / − clicker around a number box. */
+.clicker {
+	display: grid;
+	grid-template-columns: 52px minmax(0, 1fr) 52px 52px;
+	gap: 6px;
+	margin-top: 6px;
+}
+
+.clicker input {
+	margin: 0;
+	min-width: 0;
+	text-align: center;
+	font-size: 1.15rem;
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+}
+
+.clicker-button {
+	min-height: 48px;
+	border: 1px solid var(--border);
+	border-radius: var(--radius-sm);
+	background: var(--surface-2);
+	color: var(--text);
+	font-size: 1.3rem;
+	font-weight: 800;
+	cursor: pointer;
+	touch-action: manipulation;
+}
+
+.clicker-button:active {
+	background: var(--brand);
+	color: #fff;
+}
+
+.clicker.locked .clicker-button {
+	opacity: 0.35;
+	pointer-events: none;
+}

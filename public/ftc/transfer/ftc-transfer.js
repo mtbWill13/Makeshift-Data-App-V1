@@ -86,7 +86,7 @@ function stopAutoPlay() {
 
 async function prepare() {
 	stopAutoPlay();
-	queued = readJson(QUEUE_KEY, []);
+	queued = readJson(QUEUE_KEY, []).filter(item => item.kind === "match" || item.kind === "pit");   // practice runs upload on their own
 
 	if (!queued.length) {
 		sendStatus.textContent = "There are no reports saved on this device to send.";

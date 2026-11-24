@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FTC Drive Practice | MakeShift Scouting</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400..700&display=swap">
+    <link rel="stylesheet" href="/theme.css">
+    <link rel="stylesheet" href="/team.css">
+    <link rel="stylesheet" href="/ftc/ftc.css">
+    <link rel="stylesheet" href="/ftc/ftc-scout.css">
+  </head>
+  <body>
+    <div class="top-bar" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+    <header>
+      <div class="header-content">
+        <a class="brand" href="/"><img src="/images/makeshift-logo-wide.png" alt="MakeShift 4039" width="707" height="78"></a>
+        <div class="eyebrow">FTC Scouting</div>
+        <h1>Drive<br>Practice</h1>
+        <p class="header-description">Log each practice run: who drove, the points scored and any notes. Every run shows up in the practice tracker and on the sheet's Practice tab.</p>
+        <div class="header-links">
+          <a class="back-link" href="/ftc/">← FTC Data Hub</a>
+          <a class="back-link" href="/ftc/overview/practice/">Practice tracker →</a>
+          <a class="back-link" href="/ftc/scouting/">Match scouting →</a>
+        </div>
+      </div>
+    </header>
+
+    <main class="scout-shell">
+      <p id="queueNote" class="queue-note" hidden></p>
+
+      <form id="practiceForm" class="scout-shell" novalidate>
+        <section class="scout-section">
+          <h2>This run</h2>
+          <div class="field-grid">
+            <div class="field"><label for="runDate">Date<input id="runDate" type="date" required></label></div>
+            <div class="field"><label for="driver">Driver<input id="driver" type="text" maxlength="40" list="driverNames" autocomplete="off" placeholder="e.g. Luke" required></label>
+              <datalist id="driverNames"></datalist></div>
+            <div class="field"><label for="operator">Operator<input id="operator" type="text" maxlength="40" list="operatorNames" autocomplete="off" placeholder="e.g. Matthew"></label>
+              <datalist id="operatorNames"></datalist></div>
+            <div class="field"><label for="autoPoints">Auto points<input id="autoPoints" type="number" inputmode="numeric" min="0" max="999" step="1" data-clicker></label></div>
+            <div class="field"><label for="telePoints">Tele points<input id="telePoints" type="number" inputmode="numeric" min="0" max="999" step="1" data-clicker></label></div>
+            <div class="field wide"><label for="totalPoints">Total points<input id="totalPoints" type="number" inputmode="numeric" min="0" max="999" step="1" data-clicker placeholder="Auto + tele"></label>
+              <p id="totalNote" class="setup-note"></p></div>
+            <div class="field wide"><label for="notes">Notes<textarea id="notes" rows="3" maxlength="300" placeholder="What went well, what broke, what to fix"></textarea></label></div>
+          </div>
+        </section>
+
+        <section class="scout-section">
+          <h2>Who's logging this</h2>
+          <div class="field-grid">
+            <div class="field"><label for="scoutName">Your name<input id="scoutName" type="text" maxlength="40" autocomplete="name" placeholder="So we know who entered it" required></label></div>
+            <div class="field"><label for="seasonSelect">Season<select id="seasonSelect"></select></label></div>
+          </div>
+        </section>
+
+        <div class="form-actions"><button id="submitButton" type="submit">Log this run</button></div>
+      </form>
+
+      <section class="scout-section">
+        <h2>Latest runs</h2>
+        <div id="latest"><div class="loading">Loading…</div></div>
+      </section>
+    </main>
+
+    <script src="/global.js"></script>
+    <script src="/ftc/ftc-common.js"></script>
+    <script src="/ftc/ftc-scout.js"></script>
+    <script src="/ftc/practice/ftc-practice.js"></script>
+  </body>
+</html>

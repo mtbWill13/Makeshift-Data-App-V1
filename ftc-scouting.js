@@ -10,7 +10,7 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { FTC_GAME, cleanAnswers, cleanMatchNumber, cleanTeam, reportCells, reportHeadings, summarizeTeam } from "./ftc-game.js";
 import { openFtcStore } from "./ftc-store.js";
 import { createFtcSources, firstConfigured, ftcLinks, toaConfigured } from "./ftc-sources.js";
-import { createFtcSheets, sheetIdFor } from "./ftc-sheets.js";
+import { createFtcSheets, PRACTICE_HEADINGS, practiceSheetIdFor, sheetIdFor } from "./ftc-sheets.js";
 
 const MAX_SCOUT_NAME = 40;
 
@@ -216,6 +216,81 @@ export function registerFtcScouting(app, ftc) {
 		}
 	});
 
+	/* ----- drive practice: our own team's practice runs (not tied to an event) ----- */
+
+	const PRACTICE_MAX_POINTS = 999;
+
+	/* Checks a practice run and works out the total. Auto and teleop are each optional; the total is
+	   their sum, or whatever was typed when only the total is known. */
+	function readPractice(body) {
+		const season = String(body?.season ?? "");
+		if (!validSeason(season)) throw new Error("Pick a season first.");
+
+		const date = String(body?.date ?? "");
+		if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(`${date}T12:00:00Z`))) throw new Error("Enter the date of the practice.");
+
+		const name = value => String(value ?? "").replace(/[\u0000-\u001f<>]/g, "").trim().slice(0, 40);
+		let driver = name(body?.driver);
+		let operator = name(body?.operator);
+		if (!driver && !operator && body?.drivers) [driver, operator = ""] = String(body.drivers).split("/").map(name); // an older saved run
+		if (!driver) throw new Error("Enter who drove.");
+
+		const points = (value, label) => {
+			if (value === undefined || value === null || String(value).trim() === "") return null;
+			const number = Number(value);
+			if (!Number.isInteger(number) || number < 0 || number > PRACTICE_MAX_POINTS) throw new Error(`${label} must be a whole number from 0 to ${PRACTICE_MAX_POINTS}.`);
+			return number;
+		};
+
+		const autoPoints = points(body?.autoPoints, "Auto points");
+		const telePoints = points(body?.telePoints, "Tele points");
+		let totalPoints = points(body?.totalPoints, "Total points");
+
+		if (autoPoints !== null && telePoints !== null) totalPoints = autoPoints + telePoints;
+		else if (totalPoints === null) totalPoints = autoPoints ?? telePoints;
+		if (totalPoints === null) throw new Error("Enter the points: auto and tele, or just the total.");
+		if (totalPoints > PRACTICE_MAX_POINTS) throw new Error(`Total points can't be more than ${PRACTICE_MAX_POINTS}.`);
+
+		let notes = String(body?.notes ?? "").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "").trim().slice(0, 300);
+		if (/^[=+\-@]/.test(notes)) notes = `'${notes}`;
+
+		return { season, date, driver, operator, autoPoints, telePoints, totalPoints, notes, scout: cleanScout(body?.scout), submissionId: cleanSubmissionId(body?.submissionId) };
+	}
+
+	app.post("/api/ftc/scouting/practice", needStore, (req, res) => {
+		try {
+			const run = readPractice(req.body);
+			const saved = store.addPractice(ownerOf(req), run);
+
+			/* Also a new row on the Practice tab of the linked sheet, if there is one (best effort). */
+			const sheetId = !saved.repeat && ftcSheets && req.team?.legacy ? practiceSheetIdFor(run.season) : null;
+			if (sheetId) {
+				const number = store.practiceRuns(ownerOf(req), run.season).length;
+				ftcSheets.appendPractice(sheetId, run, number).catch(error => console.warn(`FTC sheet: couldn't add the practice run: ${error.message}`));
+			}
+
+			res.status(saved.repeat ? 200 : 201).json({ ok: true, id: saved.id, repeat: saved.repeat });
+		} catch (error) {
+			res.status(400).json({ error: error.message });
+		}
+	});
+
+	app.get("/api/ftc/practice/:season", needStore, (req, res) => {
+		if (!validSeason(req.params.season)) return res.status(400).json({ error: "Invalid season." });
+		const sheetId = req.team?.legacy ? practiceSheetIdFor(req.params.season) : null;
+		res.json({ runs: store.practiceRuns(ownerOf(req), req.params.season), sheetUrl: sheetId ? `https://docs.google.com/spreadsheets/d/${sheetId}/edit` : null });
+	});
+
+	app.get("/api/ftc/practice/:season/export.csv", needStore, (req, res) => {
+		if (!validSeason(req.params.season)) return res.status(400).json({ error: "Invalid season." });
+		const runs = store.practiceRuns(ownerOf(req), req.params.season);
+		const rows = runs.map((run, index) => [index + 1, run.date, run.driver, run.operator, run.autoPoints ?? "", run.telePoints ?? "", run.totalPoints, run.notes]);
+
+		res.set("Content-Type", "text/csv; charset=utf-8");
+		res.set("Content-Disposition", `attachment; filename="ftc-practice-${req.params.season}.csv"`);
+		res.send([PRACTICE_HEADINGS, ...rows].map(row => row.map(csvCell).join(",")).join("\n"));
+	});
+
 	app.post("/api/ftc/scouting/pit", needStore, (req, res) => {
 		try {
 			const report = readReport("pit", req.body);
@@ -298,6 +373,14 @@ export function registerFtcScouting(app, ftc) {
 		res.set("Content-Type", "text/csv; charset=utf-8");
 		res.set("Content-Disposition", `attachment; filename="ftc-${kind}-${season}-${event}.csv"`);
 		res.send([head, ...rows].map(row => row.map(csvCell).join(",")).join("\n"));
+	});
+
+	/* A mistaken practice run: removed with FTC_ADMIN_KEY, like any report. */
+	app.delete("/api/ftc/practice/run/:id", needStore, (req, res) => {
+		const key = process.env.FTC_ADMIN_KEY;
+		if (!key) return res.status(403).json({ error: "Deleting is off: set FTC_ADMIN_KEY in .env." });
+		if (!sameKey(req.get("x-admin-key"), key)) return res.status(403).json({ error: "Admin key needed." });
+		res.json({ ok: store.deletePractice(ownerOf(req), Number(req.params.id)) });
 	});
 
 	/* Removing a mistaken report needs FTC_ADMIN_KEY (and is off until that is set in .env). */

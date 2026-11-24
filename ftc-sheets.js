@@ -11,6 +11,8 @@
 //
 // Tabs (made for you by "set up" if they're missing):
 //   FTC Match Scouting, FTC Pit Scouting   one row per report
+//   Practice                               one row per drive-practice run (added as they're logged; a sync never
+//                                          clears this tab, so rows typed in by hand are safe)
 //   Teams                                  every team at the event with FTCScout stats
 //   Schedule                               the match schedule and scores
 //   About                                  what the sheet is
@@ -20,7 +22,16 @@
 
 import { reportCells, reportHeadings } from "./ftc-game.js";
 
-export const TAB = { match: "FTC Match Scouting", pit: "FTC Pit Scouting", teams: "Teams", schedule: "Schedule", about: "About" };
+export const TAB = { match: "FTC Match Scouting", pit: "FTC Pit Scouting", practice: "Practice", teams: "Teams", schedule: "Schedule", about: "About" };
+
+export const PRACTICE_HEADINGS = ["Run", "Date", "Driver", "Operator", "Auto points", "Tele points", "Total points", "Notes"];
+
+/* The sheet for practice runs: FTC_PRACTICE_SHEET in .env, else the first FTC event sheet linked for that season. */
+export function practiceSheetIdFor(season) {
+	const id = process.env.FTC_PRACTICE_SHEET
+		|| Object.entries(process.env).find(([key, value]) => key.startsWith(`FTC_SHEET_${season}_`) && value)?.[1];
+	return id ? (String(id).match(/\/d\/([\w-]+)/)?.[1] ?? String(id).trim()) : null;
+}
 
 /* The sheet's ID for an event, from .env (or null if it isn't linked). */
 export function sheetIdFor(season, code) {
@@ -53,6 +64,8 @@ export function createFtcSheets({ sheets }) {
 			await sheets.spreadsheets.values.update({ spreadsheetId, range: `'${TAB[kind]}'!A1`, valueInputOption: "RAW", requestBody: { values: [reportHeadings(kind)] } });
 		}
 
+		await sheets.spreadsheets.values.update({ spreadsheetId, range: `'${TAB.practice}'!A1`, valueInputOption: "RAW", requestBody: { values: [PRACTICE_HEADINGS] } });
+
 		await sheets.spreadsheets.values.update({
 			spreadsheetId, range: `'${TAB.about}'!A1`, valueInputOption: "RAW",
 			requestBody: { values: [
@@ -60,7 +73,7 @@ export function createFtcSheets({ sheets }) {
 				[`Event: ${event.name ?? event.code} (${event.season} ${event.code})`],
 				["Every match and pit report saved on the MakeShift site is added here as a row."],
 				["The site's database is the original copy: this sheet is for reading, sorting and charting, and editing it doesn't change the site."],
-				["The Teams and Schedule tabs are refreshed from FTCScout each time the site syncs this sheet."],
+				["The Teams and Schedule tabs are refreshed from FTCScout each time the site syncs this sheet. The Practice tab only ever gets new rows added."],
 				["Columns follow the questions in ftc-game.js; if the questions change, press Sync on the strategy page to rewrite this sheet."]
 			] }
 		});
@@ -71,6 +84,16 @@ export function createFtcSheets({ sheets }) {
 		await sheets.spreadsheets.values.append({
 			spreadsheetId, range: `'${TAB[kind]}'!A:A`, valueInputOption: "RAW", insertDataOption: "INSERT_ROWS",
 			requestBody: { values: [reportCells(kind, report)] }
+		});
+	}
+
+	const practiceRow = (run, number) => [number, run.date, run.driver, run.operator, run.autoPoints ?? "", run.telePoints ?? "", run.totalPoints, run.notes ?? ""];
+
+	/* A practice run as a new row, numbered by its place in the log. */
+	async function appendPractice(spreadsheetId, run, number) {
+		await sheets.spreadsheets.values.append({
+			spreadsheetId, range: `'${TAB.practice}'!A:A`, valueInputOption: "RAW", insertDataOption: "INSERT_ROWS",
+			requestBody: { values: [practiceRow(run, number)] }
 		});
 	}
 
@@ -113,5 +136,5 @@ export function createFtcSheets({ sheets }) {
 		return { matches: matchReports.length, pits: pitReports.length, teams: teams.length, scheduled: schedule.length };
 	}
 
-	return { setup, appendReport, syncAll };
+	return { setup, appendReport, appendPractice, syncAll };
 }

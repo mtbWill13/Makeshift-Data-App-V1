@@ -45,7 +45,32 @@ export function openFtcStore(file) {
 			created_at    INTEGER NOT NULL
 		);
 		CREATE INDEX IF NOT EXISTS pit_event ON pit_reports (season, event, team);
+		CREATE TABLE IF NOT EXISTS practice_runs (
+			id            INTEGER PRIMARY KEY AUTOINCREMENT,
+			submission_id TEXT UNIQUE,
+			owner         TEXT NOT NULL,
+			season        TEXT NOT NULL,
+			run_date      TEXT NOT NULL,        -- YYYY-MM-DD
+			drivers       TEXT NOT NULL,        -- "Luke/Matthew": driver / operator
+			auto_points   INTEGER,
+			tele_points   INTEGER,
+			total_points  INTEGER NOT NULL,
+			notes         TEXT NOT NULL DEFAULT '',
+			scout         TEXT NOT NULL,
+			created_at    INTEGER NOT NULL
+		);
+		CREATE INDEX IF NOT EXISTS practice_owner ON practice_runs (owner, season, run_date);
 	`);
+
+	/* Driver and operator are separate columns. Older rows had one "Luke/Matthew" text: split it. */
+	if (!db.prepare("PRAGMA table_info(practice_runs)").all().some(column => column.name === "driver")) {
+		db.exec("ALTER TABLE practice_runs ADD COLUMN driver TEXT NOT NULL DEFAULT ''; ALTER TABLE practice_runs ADD COLUMN operator TEXT NOT NULL DEFAULT '';");
+		const split = db.prepare("UPDATE practice_runs SET driver = ?, operator = ? WHERE id = ?");
+		for (const row of db.prepare("SELECT id, drivers FROM practice_runs").all()) {
+			const [driver, ...rest] = row.drivers.split("/").map(part => part.trim());
+			split.run(driver, rest.join(" / "), row.id);
+		}
+	}
 
 	/* A database made before team accounts has no owner column: add it, and give those reports to
 	   the original team (MakeShift 4039), which is who was using the site then. */
@@ -88,6 +113,10 @@ export function openFtcStore(file) {
 		teamPits: db.prepare("SELECT * FROM pit_reports WHERE owner = ? AND season = ? AND event = ? AND team = ? ORDER BY id DESC"),
 		deleteMatch: db.prepare("DELETE FROM match_reports WHERE owner = ? AND id = ?"),
 		deletePit: db.prepare("DELETE FROM pit_reports WHERE owner = ? AND id = ?"),
+		addPractice: db.prepare("INSERT INTO practice_runs (submission_id, owner, season, run_date, drivers, driver, operator, auto_points, tele_points, total_points, notes, scout, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"),
+		practiceBySubmission: db.prepare("SELECT id FROM practice_runs WHERE owner = ? AND submission_id = ?"),
+		practice: db.prepare("SELECT * FROM practice_runs WHERE owner = ? AND season = ? ORDER BY run_date, id"),
+		deletePractice: db.prepare("DELETE FROM practice_runs WHERE owner = ? AND id = ?"),
 		counts: db.prepare("SELECT (SELECT COUNT(*) FROM match_reports WHERE owner = ? AND season = ? AND event = ?) AS matches, (SELECT COUNT(*) FROM pit_reports WHERE owner = ? AND season = ? AND event = ?) AS pits")
 	};
 
@@ -121,6 +150,19 @@ export function openFtcStore(file) {
 		pitReports: (owner, season, event) => statements.pits.all(owner, season, event).map(openPit),
 		teamMatchReports: (owner, season, event, team) => statements.teamMatches.all(owner, season, event, team).map(openMatch),
 		teamPitReports: (owner, season, event, team) => statements.teamPits.all(owner, season, event, team).map(openPit),
+
+		addPractice(owner, run) {
+			const earlier = run.submissionId && statements.practiceBySubmission.get(owner, run.submissionId);
+			if (earlier) return { id: earlier.id, repeat: true };
+			const saved = statements.addPractice.run(run.submissionId ?? null, owner, run.season, run.date, [run.driver, run.operator].filter(Boolean).join(" / "), run.driver, run.operator, run.autoPoints ?? null, run.telePoints ?? null, run.totalPoints, run.notes ?? "", run.scout, Date.now());
+			return { id: Number(saved.lastInsertRowid), repeat: false };
+		},
+
+		practiceRuns: (owner, season) => statements.practice.all(owner, season).map(row => ({
+			id: row.id, date: row.run_date, driver: row.driver, operator: row.operator, drivers: [row.driver, row.operator].filter(Boolean).join(" / "), autoPoints: row.auto_points, telePoints: row.tele_points,
+			totalPoints: row.total_points, notes: row.notes, scout: row.scout, createdAt: row.created_at
+		})),
+		deletePractice: (owner, id) => statements.deletePractice.run(owner, id).changes > 0,
 
 		deleteReport: (owner, kind, id) => (kind === "pit" ? statements.deletePit : statements.deleteMatch).run(owner, id).changes > 0,
 		counts: (owner, season, event) => statements.counts.get(owner, season, event, owner, season, event)
