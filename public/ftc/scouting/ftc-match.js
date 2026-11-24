@@ -6,6 +6,7 @@ const els = {
 	custom: document.getElementById("customEvent"),
 	scout: document.getElementById("scoutName"),
 	scheduleNote: document.getElementById("scheduleNote"),
+	sheetNote: document.getElementById("sheetNote"),
 	panel: document.getElementById("assignmentPanel"),
 	startingMatch: document.getElementById("startingMatch"),
 	stations: document.getElementById("stationPicker"),
@@ -67,8 +68,11 @@ function drawStations() {
 els.stations.addEventListener("change", event => { els.stations.dataset.picked = event.target.value; });
 els.startingMatch.addEventListener("input", drawStations);
 
+let refreshSheetNote = () => {};
+
 async function loadSchedule() {
 	const event = picker.current();
+	refreshSheetNote(event);
 	const thisLoad = ++loadCount;
 	els.scheduleNote.textContent = "Loading the match schedule…";
 
@@ -246,6 +250,7 @@ function advance() {
 
 	els.scout.value = FtcScout.store.get(FtcScout.NAME_KEY);
 	picker = await FtcScout.eventPicker({ seasonSelect: els.season, eventSelect: els.event, customInput: els.custom, onChange: loadSchedule });
+	refreshSheetNote = FtcScout.trackSheetNote(els.sheetNote, picker);
 
 	render();
 	els.form.hidden = false;

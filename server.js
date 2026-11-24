@@ -979,7 +979,7 @@ const PORT = process.env.PORT || 3000;
 
 // FTC section (/ftc/): data from FTCScout. See ftc.js.
 const ftc = registerFtcRoutes(app, { cachedFetcher, mapLimit });
-registerFtcScouting(app, { ...ftc, cachedFetcher });
+registerFtcScouting(app, { ...ftc, cachedFetcher, mapLimit, sheets });
 
 // Whether the Supabase backup is on and when it last synced (no secrets).
 app.get("/api/supabase/status", (req, res) => {

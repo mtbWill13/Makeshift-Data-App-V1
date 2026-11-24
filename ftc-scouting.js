@@ -7,9 +7,10 @@
 //   Official + TOA ..... ftc-sources.js, optional keys in .env
 
 import { createHmac, timingSafeEqual } from "crypto";
-import { FTC_GAME, cleanAnswers, cleanMatchNumber, cleanTeam, fieldsOf, summarizeTeam } from "./ftc-game.js";
+import { FTC_GAME, cleanAnswers, cleanMatchNumber, cleanTeam, reportCells, reportHeadings, summarizeTeam } from "./ftc-game.js";
 import { openFtcStore } from "./ftc-store.js";
 import { createFtcSources, firstConfigured, ftcLinks, toaConfigured } from "./ftc-sources.js";
+import { createFtcSheets, sheetIdFor } from "./ftc-sheets.js";
 
 const MAX_SCOUT_NAME = 40;
 
@@ -27,24 +28,15 @@ function cleanSubmissionId(value) {
 
 const csvCell = value => `"${String(value ?? "").replaceAll('"', '""')}"`;
 
-/* An answer as people read it: option labels instead of stored values. */
-function readable(field, value) {
-	if (value === undefined || value === null) return "";
-	if (field.type === "yesno") return value === "yes" ? "Yes" : value === "no" ? "No" : "";
-	const label = item => field.options?.find(option => option.value === item)?.label ?? item;
-	if (field.type === "choice") return label(value);
-	if (field.type === "multi") return (Array.isArray(value) ? value : [value]).map(label).join("; ");
-	return value;
-}
-
 const sameKey = (given, expected) => {
 	const digest = value => createHmac("sha256", "ftc").update(String(value)).digest();
 	return Boolean(given) && timingSafeEqual(digest(given), digest(expected));
 };
 
 export function registerFtcScouting(app, ftc) {
-	const { ftcscout, teamInfo, matchSummary, validSeason, validCode, cachedFetcher } = ftc;
+	const { ftcscout, teamInfo, eventInfo, eventStats, matchSummary, validSeason, validCode, cachedFetcher, mapLimit, sheets } = ftc;
 	const sources = createFtcSources({ cachedFetcher });
+	const ftcSheets = sheets ? createFtcSheets({ sheets }) : null;
 
 	let store = null;
 	try {
@@ -122,6 +114,55 @@ export function registerFtcScouting(app, ftc) {
 
 	if (!store) return;
 
+	/* ----- the event's Google Sheet ----- */
+
+	/* A saved report also goes into the event's sheet, if one is linked. Never holds up the report:
+	   it is already safe in the database, and "sync" can rewrite the sheet from it. */
+	function mirrorToSheet(kind, report) {
+		const id = ftcSheets && sheetIdFor(report.season, report.event);
+		if (!id) return;
+		ftcSheets.appendReport(id, kind, { ...report, createdAt: Date.now() }).catch(error => console.warn(`FTC sheet (${report.event}): couldn't add the report: ${error.message}`));
+	}
+
+	app.get("/api/ftc/sheet/:season/:event", checkEvent, (req, res) => {
+		const id = sheetIdFor(req.params.season, req.params.event);
+		res.json({ linked: Boolean(id), url: id ? `https://docs.google.com/spreadsheets/d/${id}/edit` : null });
+	});
+
+	/* Rewrites the sheet from the database and FTCScout (also makes any missing tabs). */
+	const lastSync = new Map();
+	app.post("/api/ftc/sheet/:season/:event/sync", checkEvent, needStore, async (req, res) => {
+		const { season } = req.params;
+		const code = eventCode(req.params.event);
+		const id = sheetIdFor(season, code);
+
+		if (!ftcSheets || !id) return res.status(404).json({ error: `No Google Sheet is linked to ${code} yet. Add FTC_SHEET_${season}_${code} to .env.` });
+		if (Date.now() - (lastSync.get(id) ?? 0) < 10 * 1000) return res.status(429).json({ error: "Synced a moment ago. Give it 10 seconds." });
+		lastSync.set(id, Date.now());
+
+		try {
+			const [event, teamEntries, schedule] = await Promise.all([
+				eventInfo(season, code),
+				ftcscout(`/events/${season}/${code}/teams`).catch(() => []),
+				ftcscout(`/events/${season}/${code}/matches`).catch(() => [])
+			]);
+
+			const teams = await mapLimit(teamEntries ?? [], 8, async entry => ({ ...await teamInfo(entry.teamNumber), stats: eventStats(entry.stats) }));
+			const summary = await ftcSheets.syncAll(id, {
+				event: { ...event, season, code },
+				matchReports: store.matchReports(season, code),
+				pitReports: store.pitReports(season, code),
+				teams,
+				schedule: (schedule ?? []).map(matchSummary).sort((a, b) => a.order[0] - b.order[0] || a.order[1] - b.order[1] || a.order[2] - b.order[2])
+			});
+
+			res.json({ ok: true, ...summary, url: `https://docs.google.com/spreadsheets/d/${id}/edit` });
+		} catch (error) {
+			lastSync.delete(id);
+			res.status(502).json({ error: `Couldn't write to the sheet: ${error.message}. Is it shared with the service account as an Editor?` });
+		}
+	});
+
 	/* ----- saving reports ----- */
 
 	/* The same checks for a match and a pit report; `kind` picks what differs. */
@@ -165,6 +206,7 @@ export function registerFtcScouting(app, ftc) {
 			}
 
 			const saved = store.addMatch(report);
+			if (!saved.repeat) mirrorToSheet("match", report);
 			res.status(saved.repeat ? 200 : 201).json({ ok: true, id: saved.id, repeat: saved.repeat });
 		} catch (error) {
 			res.status(400).json({ error: error.message });
@@ -185,6 +227,7 @@ export function registerFtcScouting(app, ftc) {
 			}
 
 			const saved = store.addPit(report);
+			if (!saved.repeat) mirrorToSheet("pit", report);
 			res.status(saved.repeat ? 200 : 201).json({ ok: true, id: saved.id, repeat: saved.repeat });
 		} catch (error) {
 			res.status(400).json({ error: error.message });
@@ -234,17 +277,9 @@ export function registerFtcScouting(app, ftc) {
 		const { season } = req.params;
 		const event = eventCode(req.params.event);
 		const kind = req.query.kind === "pit" ? "pit" : "match";
-		const fields = fieldsOf(kind);
-		/* "Autonomous: Pollen scored in the hive": auto and teleop share question wording. */
-		const headings = new Map(FTC_GAME[kind].sections.flatMap(section => section.fields.map(field => [field.id, `${section.title}: ${field.label}`])));
 		const reports = kind === "pit" ? store.pitReports(season, event) : store.matchReports(season, event);
-
-		const head = [...(kind === "match" ? ["Match", "Alliance", "No show"] : []), "Team", "Scout", "Flagged", "Saved", ...fields.map(field => headings.get(field.id))];
-		const rows = reports.map(report => [
-			...(kind === "match" ? [report.matchNumber, report.alliance ?? "", report.noShow === "yes" ? "Yes" : "No"] : []),
-			report.team, report.scout, report.flagged ? "Yes" : "", new Date(report.createdAt).toISOString(),
-			...fields.map(field => readable(field, report.data[field.id]))
-		]);
+		const head = reportHeadings(kind);
+		const rows = reports.map(report => reportCells(kind, report));
 
 		res.set("Content-Type", "text/csv; charset=utf-8");
 		res.set("Content-Disposition", `attachment; filename="ftc-${kind}-${season}-${event}.csv"`);

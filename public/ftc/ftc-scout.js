@@ -242,6 +242,31 @@ const FtcScout = (() => {
 		return { current };
 	}
 
+	/* Says whether reports for this event are also copied to a Google Sheet. */
+	async function showSheetNote(element, { season, code }) {
+		element.textContent = "";
+		if (!code) return;
+
+		const sheet = await ftcFetch(`/api/ftc/sheet/${season}/${code}`).catch(() => null);
+		const current = eventSelectedNow(element);
+		if (!sheet || (current && (current.season !== season || current.code !== code))) return;
+
+		element.textContent = sheet.linked
+			? "Reports for this event are also added to its Google Sheet."
+			: "No Google Sheet is linked to this event (this season), so reports are saved on the site only.";
+	}
+
+	/* Which event the page is showing now (kept on the note while a lookup is in flight). */
+	const noted = new WeakMap();
+	function eventSelectedNow(element) {
+		return noted.get(element) ?? null;
+	}
+
+	function trackSheetNote(element, picker) {
+		const refresh = event => { noted.set(element, event); showSheetNote(element, event); };
+		return refresh;
+	}
+
 	/* ----- saving, with a queue for when there's no signal ----- */
 
 	const readQueue = () => { try { return JSON.parse(store.get(QUEUE_KEY, "[]")); } catch { return []; } };
@@ -318,5 +343,5 @@ const FtcScout = (() => {
 
 	const queuedCount = kind => readQueue().filter(item => item.kind === kind).length;
 
-	return { loadGame, render, collect, eventPicker, submit, syncQueue, queuedCount, toast, store, NAME_KEY };
+	return { loadGame, render, collect, eventPicker, submit, syncQueue, queuedCount, toast, store, NAME_KEY, trackSheetNote };
 })();

@@ -1,0 +1,117 @@
+// FTC Google Sheet
+//
+// An FTC event can be linked to a Google Sheet. The reports themselves are saved in the
+// database (ftc-store.js, the source of truth), and every saved report is also added to the
+// sheet as a row, so the team can read, sort and chart them in Sheets. The sheet never
+// feeds back into the site: edit it freely.
+//
+// Link an event by putting the sheet's ID in .env as FTC_SHEET_<season>_<event code>, e.g.
+//   FTC_SHEET_2026_CAONSCQ=1AbC...   (the long piece of the sheet's address)
+// and share the sheet with the service account (Editor), the same one the FRC sheets use.
+//
+// Tabs (made for you by "set up" if they're missing):
+//   FTC Match Scouting, FTC Pit Scouting   one row per report
+//   Teams                                  every team at the event with FTCScout stats
+//   Schedule                               the match schedule and scores
+//   About                                  what the sheet is
+//
+// Writing to the sheet is best effort: if Google is slow or the sheet is missing, the report
+// is still safely in the database, and "sync" rewrites the whole sheet from it.
+
+import { reportCells, reportHeadings } from "./ftc-game.js";
+
+export const TAB = { match: "FTC Match Scouting", pit: "FTC Pit Scouting", teams: "Teams", schedule: "Schedule", about: "About" };
+
+/* The sheet's ID for an event, from .env (or null if it isn't linked). */
+export function sheetIdFor(season, code) {
+	const value = process.env[`FTC_SHEET_${season}_${String(code).toUpperCase()}`];
+	if (!value) return null;
+	return String(value).match(/\/d\/([\w-]+)/)?.[1] ?? String(value).trim();
+}
+
+const columnLetter = index => {
+	let result = "";
+	for (let current = index + 1; current > 0; current = Math.floor((current - 1) / 26)) result = String.fromCharCode(65 + (current - 1) % 26) + result;
+	return result;
+};
+
+export function createFtcSheets({ sheets }) {
+	/* Makes any missing tab, then writes the heading rows. Safe to run again. */
+	async function setup(spreadsheetId, event) {
+		const meta = await sheets.spreadsheets.get({ spreadsheetId, fields: "sheets.properties(title,sheetId)" });
+		const have = new Set(meta.data.sheets.map(sheet => sheet.properties.title));
+		const wanted = Object.values(TAB).filter(title => !have.has(title));
+
+		if (wanted.length) {
+			await sheets.spreadsheets.batchUpdate({
+				spreadsheetId,
+				requestBody: { requests: wanted.map(title => ({ addSheet: { properties: { title, gridProperties: { rowCount: 1000, columnCount: Math.max(12, reportHeadings("match").length), frozenRowCount: 1 } } } })) }
+			});
+		}
+
+		for (const kind of ["match", "pit"]) {
+			await sheets.spreadsheets.values.update({ spreadsheetId, range: `'${TAB[kind]}'!A1`, valueInputOption: "RAW", requestBody: { values: [reportHeadings(kind)] } });
+		}
+
+		await sheets.spreadsheets.values.update({
+			spreadsheetId, range: `'${TAB.about}'!A1`, valueInputOption: "RAW",
+			requestBody: { values: [
+				["FTC scouting sheet"],
+				[`Event: ${event.name ?? event.code} (${event.season} ${event.code})`],
+				["Every match and pit report saved on the MakeShift site is added here as a row."],
+				["The site's database is the original copy: this sheet is for reading, sorting and charting, and editing it doesn't change the site."],
+				["The Teams and Schedule tabs are refreshed from FTCScout each time the site syncs this sheet."],
+				["Columns follow the questions in ftc-game.js; if the questions change, press Sync on the strategy page to rewrite this sheet."]
+			] }
+		});
+	}
+
+	/* One report as a new row at the bottom of its tab. */
+	async function appendReport(spreadsheetId, kind, report) {
+		await sheets.spreadsheets.values.append({
+			spreadsheetId, range: `'${TAB[kind]}'!A:A`, valueInputOption: "RAW", insertDataOption: "INSERT_ROWS",
+			requestBody: { values: [reportCells(kind, report)] }
+		});
+	}
+
+	/* Replaces everything below the headings with `rows`. */
+	async function replaceRows(spreadsheetId, tab, headings, rows) {
+		await sheets.spreadsheets.values.clear({ spreadsheetId, range: `'${tab}'!A:ZZ` });
+		await sheets.spreadsheets.values.update({
+			spreadsheetId, range: `'${tab}'!A1:${columnLetter(headings.length - 1)}${rows.length + 1}`, valueInputOption: "RAW",
+			requestBody: { values: [headings, ...rows] }
+		});
+	}
+
+	/* Rewrites the reports tabs from the database, and the Teams and Schedule tabs from FTCScout. */
+	async function syncAll(spreadsheetId, { event, matchReports, pitReports, teams, schedule }) {
+		await setup(spreadsheetId, event);
+
+		await replaceRows(spreadsheetId, TAB.match, reportHeadings("match"), matchReports.map(report => reportCells("match", report)));
+		await replaceRows(spreadsheetId, TAB.pit, reportHeadings("pit"), pitReports.map(report => reportCells("pit", report)));
+
+		const num = value => Number.isFinite(value) ? Math.round(value * 100) / 100 : "";
+		await replaceRows(spreadsheetId, TAB.teams,
+			["Team", "Name", "City", "State", "Rank", "W-L-T", "OPR", "Auto OPR", "Teleop OPR", "Average score", "Match reports", "Pit report"],
+			teams.map(team => [
+				team.number, team.name ?? "", team.city ?? "", team.state ?? "", team.stats?.rank ?? "",
+				team.stats ? `${team.stats.wins}-${team.stats.losses}-${team.stats.ties}` : "",
+				num(team.stats?.opr?.total), num(team.stats?.opr?.auto), num(team.stats?.opr?.teleop), num(team.stats?.avg?.total),
+				matchReports.filter(report => report.team === team.number).length,
+				pitReports.some(report => report.team === team.number) ? "Yes" : ""
+			])
+		);
+
+		await replaceRows(spreadsheetId, TAB.schedule,
+			["Match", "Red 1", "Red 2", "Blue 1", "Blue 2", "Red score", "Blue score", "Played"],
+			schedule.map(match => [
+				match.label, match.red.teams[0] ?? "", match.red.teams[1] ?? "", match.blue.teams[0] ?? "", match.blue.teams[1] ?? "",
+				match.played ? match.red.score : "", match.played ? match.blue.score : "", match.played ? "Yes" : ""
+			])
+		);
+
+		return { matches: matchReports.length, pits: pitReports.length, teams: teams.length, scheduled: schedule.length };
+	}
+
+	return { setup, appendReport, syncAll };
+}

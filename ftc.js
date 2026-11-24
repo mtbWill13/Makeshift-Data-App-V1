@@ -305,5 +305,5 @@ export function registerFtcRoutes(app, { cachedFetcher, mapLimit }) {
 		}
 	});
 
-	return { ftcscout, teamInfo, eventInfo, matchSummary, eventSummary, validSeason, validCode };
+	return { ftcscout, teamInfo, eventInfo, eventStats, matchSummary, eventSummary, validSeason, validCode };
 }

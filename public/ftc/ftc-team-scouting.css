@@ -1,0 +1,52 @@
+/* "Our scouting" on a team: tags, stat cards, pit answers and report cards.
+   Used by the FTC Data Hub and the Strategy Board. */
+
+.tag-row { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.tag {
+	padding: 3px 10px;
+	border: 1px solid var(--border-strong);
+	border-radius: 999px;
+	color: var(--text-muted);
+	font-size: 0.78rem;
+	font-weight: 600;
+}
+
+.tag.good { border-color: color-mix(in srgb, var(--ms-green) 60%, transparent); color: var(--ms-green); }
+.tag.warn { border-color: color-mix(in srgb, var(--ms-orange) 60%, transparent); color: var(--ms-orange); }
+.tag.bad { border-color: color-mix(in srgb, var(--ms-red) 60%, transparent); color: var(--ms-red); }
+
+.pv-subtitle { margin: 22px 0 8px; color: var(--text-muted); font-size: 0.8rem; letter-spacing: 0.08em; text-transform: uppercase; }
+
+.detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 0 0 16px; }
+.detail-grid div { padding: 10px 12px; border-radius: var(--radius-sm); background: var(--surface-2); }
+.detail-grid dt { color: var(--text-muted); font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; }
+.detail-grid dd { margin: 2px 0 0; font-size: 1.15rem; font-weight: 700; }
+.detail-grid small { display: block; color: var(--text-faint); font-size: 0.74rem; font-weight: 400; }
+
+.report-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; margin-top: 8px; }
+.report-card { padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); font-size: 0.88rem; }
+.report-card.flagged { border-color: var(--ms-orange); background: color-mix(in srgb, var(--ms-orange) 8%, var(--surface-2)); }
+.report-card h4 { display: flex; justify-content: space-between; margin: 0 0 6px; font-size: 0.95rem; }
+.report-card h4 small { color: var(--text-muted); font-weight: 400; }
+.report-card p { margin: 6px 0 0; color: var(--text-muted); }
+.report-card .answers { display: grid; gap: 2px; margin: 6px 0 0; }
+.report-card .answers span { color: var(--text-muted); }
+.report-card .answers b { color: var(--text); }
+
+/* A report the scout flagged ("I think I messed this up, please double check"). */
+.check-this {
+	margin: 8px 0 !important;
+	padding: 8px 12px;
+	border: 1px solid var(--ms-orange);
+	border-radius: var(--radius-sm);
+	background: color-mix(in srgb, var(--ms-orange) 12%, transparent);
+	color: var(--ms-orange) !important;
+	font-size: 0.85rem;
+	font-weight: 600;
+}
+
+.pit-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 6px 20px; margin: 8px 0 0; }
+.pit-grid div { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.pit-grid dt { color: var(--text-muted); }
+.pit-grid dd { margin: 0; font-weight: 600; text-align: right; }

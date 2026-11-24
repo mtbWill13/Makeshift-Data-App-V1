@@ -137,7 +137,7 @@ function renderSeason(data, season) {
    EVENT VIEW
 ================================= */
 
-function renderEvent(data, eventData, season) {
+function renderEvent(data, eventData, season, mine) {
 	const { team } = data;
 	const { event, teams, matches } = eventData;
 	const entry = teams.find(other => other.number === team.number);
@@ -147,8 +147,10 @@ function renderEvent(data, eventData, season) {
 	const rankings = `<a class="back-link" href="${ftcEventUrl(season, event.code, team.number, event.name)}">View in event rankings →</a>`;
 	const stream = event.liveStreamURL ? `<a class="back-link" href="${ftcEscape(event.liveStreamURL)}" target="_blank" rel="noopener noreferrer">▶ Event livestream</a>` : "";
 
+	const scouting = FtcTeamScouting.sectionHtml(mine, { s: mine?.summary ?? null });
+
 	if (!entry) {
-		results.innerHTML = `${heading(team, event.name, rankings)}<div class="empty-state">Team ${ftcEscape(team.number)} isn't registered for ${ftcEscape(event.name)}.</div>`;
+		results.innerHTML = `${heading(team, event.name, rankings)}<div class="empty-state">Team ${ftcEscape(team.number)} isn't registered for ${ftcEscape(event.name)}.</div>${scouting}`;
 		return;
 	}
 
@@ -183,12 +185,14 @@ function renderEvent(data, eventData, season) {
         ${dataItem("Tiebreaker 1", ftcFormat(stats?.tb1))}
       </section>
 
+      ${scouting}
+
       <h3 class="section-title">Matches</h3>
       ${teamMatches.length
 		? `<section class="match-list">${teamMatches.map(match => ftcMatchCard(match, event, team.number, season)).join("")}</section>`
 		: `<div class="empty-state">No matches published for this team yet.</div>`}
 
-      <p class="ftc-source-note">Data from FTCScout. FTC doesn't publish per-match videos; livestream links open the event's stream for that day.</p>`;
+      <p class="ftc-source-note">Data from FTCScout, plus our own scouting reports. FTC doesn't publish per-match videos; livestream links open the event's stream for that day.</p>`;
 }
 
 /* =================================
@@ -218,18 +222,58 @@ async function load() {
 
 	try {
 		const isSeason = !event || event === FTC_SEASON_KEY;
-		const [data, eventData] = await Promise.all([
+		const game = await gameDefinition();
+		const [data, eventData, mine] = await Promise.all([
 			ftcFetch(`/api/ftc/team/${encodeURIComponent(number)}/${season}`),
-			isSeason ? null : ftcFetch(`/api/ftc/event/${season}/${encodeURIComponent(event)}`)
+			isSeason ? null : ftcFetch(`/api/ftc/event/${season}/${encodeURIComponent(event)}`).catch(() => null),
+			/* Our own reports for this team at this event (none, or no database: just leaves the section out). */
+			isSeason || !game ? null : ftcFetch(`/api/ftc/scouting/${season}/${encodeURIComponent(event)}/team/${encodeURIComponent(number)}`).catch(() => null)
 		]);
 
 		if (thisLoad !== loadId) return;
-		if (isSeason) renderSeason(data, season);
-		else renderEvent(data, eventData, season);
+		if (isSeason) {
+			renderSeason(data, season);
+			if (game) showScoutedEvents(data, season, number, thisLoad);
+		} else if (eventData) {
+			renderEvent(data, eventData, season, mine);
+		} else {
+			/* FTCScout doesn't know this event (a code we made up for testing): still show what we scouted. */
+			results.innerHTML = `${heading(data.team, event)}<div class="empty-state">${ftcEscape(event)} isn't on FTCScout.</div>${FtcTeamScouting.sectionHtml(mine, { s: mine?.summary ?? null })}`;
+		}
 	} catch (error) {
 		if (thisLoad !== loadId) return;
 		results.innerHTML = `<div class="empty-state">${ftcEscape(error.message)}</div>`;
 	}
+}
+
+let gamePromise = null;
+
+/* The scouting questions (shared with the forms), loaded once. */
+function gameDefinition() {
+	gamePromise ??= ftcFetch("/api/ftc/game").then(game => { FtcTeamScouting.setGame(game); return game; }).catch(() => null);
+	return gamePromise;
+}
+
+/* Season view: which events we have scouting for this team at, with a button to open each one. */
+async function showScoutedEvents(data, season, number, thisLoad) {
+	const found = await Promise.all(data.events.map(async event => {
+		const mine = await ftcFetch(`/api/ftc/scouting/${season}/${encodeURIComponent(event.code)}/team/${encodeURIComponent(number)}`).catch(() => null);
+		return { event, matches: mine?.matchReports?.length ?? 0, pits: mine?.pitReports?.length ?? 0 };
+	}));
+
+	const scouted = found.filter(item => item.matches || item.pits);
+	if (!scouted.length || thisLoad !== loadId) return;
+
+	results.insertAdjacentHTML("beforeend", `
+      <h3 class="section-title">Our scouting</h3>
+      <section class="data-grid">
+        ${scouted.map(({ event, matches, pits }) => `
+          <article class="data-item">
+            <div class="data-item-label">${ftcEscape(event.name)}</div>
+            <div class="data-item-value">${matches} match report${matches === 1 ? "" : "s"}${pits ? ` · ${pits} pit` : ""}</div>
+            <button type="button" data-event-code="${ftcEscape(event.code)}" data-event-name="${ftcEscape(event.name)}">See our scouting</button>
+          </article>`).join("")}
+      </section>`);
 }
 
 /* "Event details" on a season card switches to that event. */

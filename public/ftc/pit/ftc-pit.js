@@ -7,6 +7,7 @@ const els = {
 	scout: document.getElementById("scoutName"),
 	team: document.getElementById("teamNumber"),
 	teamNote: document.getElementById("teamNote"),
+	sheetNote: document.getElementById("sheetNote"),
 	queueNote: document.getElementById("queueNote"),
 	formStatus: document.getElementById("formStatus"),
 	form: document.getElementById("pitForm"),
@@ -21,8 +22,11 @@ let eventTeams = new Set();     // teams registered for this event (empty = unkn
 let lookupCount = 0;
 
 /* Teams registered for the event, to catch a mistyped number. */
+let refreshSheetNote = () => {};
+
 async function loadEventTeams() {
 	const event = picker.current();
+	refreshSheetNote(event);
 	try {
 		eventTeams = new Set((await ftcFetch(`/api/ftc/event-teams/${event.season}/${event.code}`)).map(String));
 	} catch {
@@ -136,6 +140,7 @@ els.form.addEventListener("submit", async event => {
 
 	els.scout.value = FtcScout.store.get(FtcScout.NAME_KEY);
 	picker = await FtcScout.eventPicker({ seasonSelect: els.season, eventSelect: els.event, customInput: els.custom, onChange: loadEventTeams });
+	refreshSheetNote = FtcScout.trackSheetNote(els.sheetNote, picker);
 
 	FtcScout.render(els.sections, game.pit.sections);
 	els.form.hidden = false;

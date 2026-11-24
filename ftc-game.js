@@ -393,3 +393,36 @@ export function summarizeTeam(matchReports, pitReport) {
 		flagged: matchReports.filter(report => report.flagged).length
 	};
 }
+
+/* ----- one report as a row (CSV downloads and the Google Sheet use the same one) ----- */
+
+/* An answer as people read it: option labels instead of stored values. */
+export function readableAnswer(field, value) {
+	if (value === undefined || value === null) return "";
+	if (field.type === "yesno") return value === "yes" ? "Yes" : value === "no" ? "No" : "";
+	const label = item => field.options?.find(option => option.value === item)?.label ?? item;
+	if (field.type === "choice") return label(value);
+	if (field.type === "multi") return (Array.isArray(value) ? value : [value]).map(label).join("; ");
+	return value;
+}
+
+/* The heading row: who/when first, then every question as "Section: Question" (auto and teleop
+   share some wording, so the section keeps the columns apart). */
+export function reportHeadings(kind) {
+	const questions = FTC_GAME[kind].sections.flatMap(section => section.fields.map(field => `${section.title}: ${field.label}`));
+	return [...(kind === "match" ? ["Match", "Alliance", "No show"] : []), "Team", "Scout", "Flagged", "Saved", ...questions];
+}
+
+/* A saved report in the same order as the headings. */
+export function reportCells(kind, report) {
+	return [
+		...(kind === "match" ? [report.matchNumber, report.alliance ?? "", report.noShow === "yes" ? "Yes" : "No"] : []),
+		report.team, report.scout, report.flagged ? "Yes" : "", new Date(report.createdAt).toISOString(),
+		...fieldsOf(kind).map(field => {
+			const answer = readableAnswer(field, report.data[field.id]);
+			/* A flagged report ("I think I messed this up") also says so at the start of its notes,
+			   where it can't be missed in a spreadsheet. */
+			return report.flagged && field.id === "notes" ? `[CHECK THIS REPORT] ${answer}`.trimEnd() : answer;
+		})
+	];
+}
