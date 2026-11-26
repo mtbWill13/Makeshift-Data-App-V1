@@ -32,11 +32,15 @@
 
   <header>
     <div class="header-content">
-      <a class="brand" href="/"><img src="/images/makeshift-logo-wide.png" alt="MakeShift 4039" width="707" height="78"></a>
-      <nav class="program-switch" aria-label="Switch between FRC and FTC"><a href="/">FRC</a><a href="/ftc/" aria-current="page">FTC</a></nav>
+      <div class="brand-row">
+        <a class="brand" href="/"><img src="/images/makeshift-logo-wide.png" alt="MakeShift 4039" width="707" height="78"></a>
+        <nav class="program-switch" aria-label="Switch between FRC and FTC"><a href="/">FRC</a><a href="/ftc/" aria-current="page">FTC</a></nav>
+      </div>
       <div class="header-actions">
+        
         <a class="logout-button" id="settingsLink" data-team-settings hidden href="/settings/">Team settings</a>
         <button id="logoutButton" class="logout-button" type="button">Log out</button>
+        <button id="menuButton" class="logout-button menu-button" type="button" aria-expanded="false" aria-controls="siteMenu">Menu <span aria-hidden="true">☰</span></button>
       </div>
 
       <div class="hero">
@@ -54,23 +58,10 @@
           </p>
         </div>
 
-        <nav class="nav-grid" aria-label="FTC tools">
-          <div class="nav-group nav-analysis" data-label="Analyze">
-          <a class="nav-tile nav-event" href="/ftc/event/"><strong>Event Rankings</strong><span>Every team at an FTC event, ranked</span></a>
-          <a class="nav-tile nav-overview" href="/ftc/overview/"><strong>Event Overview</strong><span>Event graphs, match lookup &amp; chart builder</span></a>
-          <a class="nav-tile nav-compare" href="/ftc/compare/"><strong>Compare Teams</strong><span>Two FTC teams side by side</span></a>
-          <a class="nav-tile nav-alliance" href="/ftc/alliance/"><strong>Compare Alliances</strong><span>Project a 2 v 2 match-up</span></a>
-          <a class="nav-tile nav-prescout" href="/ftc/prescout/"><strong>Prescouting</strong><span>Rank the field at an upcoming event</span></a>
-          <a class="nav-tile nav-practice" href="/ftc/overview/practice/"><strong>Practice Tracker</strong><span>Drive practice scores, drivers &amp; trends</span></a>
-          <a class="nav-tile nav-picklist" href="/ftc/picklist/"><strong>Picklist</strong><span>Draft our alliance selection order</span></a>
-          </div>
-          <div class="nav-group nav-scouting" data-label="Scout">
+        <nav class="nav-grid nav-main" aria-label="Main tools">
           <a class="nav-tile nav-match" href="/ftc/scouting/"><strong>Match Scouting</strong><span>Record what a robot does in a match</span></a>
           <a class="nav-tile nav-pit" href="/ftc/pit/"><strong>Pit Scouting</strong><span>Robot capabilities &amp; auto starts</span></a>
-          <a class="nav-tile nav-practice" href="/ftc/practice/"><strong>Practice Log</strong><span>Record a drive practice run</span></a>
-          <a class="nav-tile nav-transfer" href="/ftc/transfer/"><strong>Offline Transfer</strong><span>Move reports by QR code</span></a>
-          <a class="nav-tile nav-qr" href="/ftc/qr/"><strong>QR Codes</strong><span>Print signs scouts can scan</span></a>
-          </div>
+          <a class="nav-tile nav-picklist" href="/ftc/picklist/"><strong>Picklist</strong><span>Draft our alliance selection order</span></a>
         </nav>
       </div>
     </div>
@@ -109,5 +100,24 @@
   <script src="/ftc/ftc-team-scouting.js"></script>
   <script src="/ftc/ftc-hub.js"></script>
   <script>document.getElementById("logoutButton").addEventListener("click", logoutTeam);</script>
+<div id="menuScrim" class="menu-scrim" hidden></div>
+  <aside id="siteMenu" class="site-menu" aria-label="All pages" aria-hidden="true" inert>
+    <div class="site-menu-head"><strong>Menu</strong><button id="menuClose" class="menu-close" type="button" aria-label="Close menu">✕</button></div>
+            <div class="site-menu-group"><h2>Analyze</h2>
+              <a href="/ftc/event/"><strong>Event Rankings</strong><span>Every team at an FTC event, ranked</span></a>
+              <a href="/ftc/overview/"><strong>Event Overview</strong><span>Event graphs, match lookup &amp; chart builder</span></a>
+              <a href="/ftc/compare/"><strong>Compare Teams</strong><span>Two FTC teams side by side</span></a>
+              <a href="/ftc/alliance/"><strong>Compare Alliances</strong><span>Project a 2 v 2 match-up</span></a>
+              <a href="/ftc/prescout/"><strong>Prescouting</strong><span>Rank the field at an upcoming event</span></a>
+              <a href="/ftc/overview/practice/"><strong>Practice Tracker</strong><span>Drive practice scores, drivers &amp; trends</span></a>
+            </div>
+            <div class="site-menu-group"><h2>Scouting tools</h2>
+              <a href="/ftc/practice/"><strong>Practice Log</strong><span>Record a drive practice run</span></a>
+              <a href="/ftc/transfer/"><strong>Offline Transfer</strong><span>Move reports by QR code</span></a>
+              <a href="/ftc/qr/"><strong>QR Codes</strong><span>Print signs scouts can scan</span></a>
+            </div>
+  </aside>
+
+  <script src="/site-menu.js"></script>
 </body>
 </html>

@@ -30,12 +30,16 @@
 
   <header>
     <div class="header-content">
-      <a class="brand" href="/"><img src="/images/makeshift-logo-wide.png" alt="MakeShift 4039" width="707" height="78"></a>
-      <nav class="program-switch" aria-label="Switch between FRC and FTC"><a href="/" aria-current="page">FRC</a><a href="/ftc/">FTC</a></nav>
+      <div class="brand-row">
+        <a class="brand" href="/"><img src="/images/makeshift-logo-wide.png" alt="MakeShift 4039" width="707" height="78"></a>
+        <nav class="program-switch" aria-label="Switch between FRC and FTC"><a href="/" aria-current="page">FRC</a><a href="/ftc/">FTC</a></nav>
+      </div>
       <div class="header-actions">
+        
         <a class="logout-button bets-button" href="/bets/">I'm feeling lucky (beta)</a>
         <a class="logout-button" id="settingsLink" data-team-settings hidden href="/settings/">Team settings</a>
         <button id="logoutButton" class="logout-button" type="button">Log out</button>
+        <button id="menuButton" class="logout-button menu-button" type="button" aria-expanded="false" aria-controls="siteMenu">Menu <span aria-hidden="true">☰</span></button>
       </div>
 
       <div class="hero">
@@ -54,21 +58,10 @@
           </p>
         </div>
 
-        <nav class="nav-grid" aria-label="Tools">
-          <div class="nav-group nav-analysis" data-label="Analyze">
-          <a class="nav-tile nav-event" href="/event/"><strong>Event Rankings</strong><span>Every team at an event, ranked</span></a>
-          <a class="nav-tile nav-overview" href="/overview/"><strong>Event Overview</strong><span>Event-wide graphs &amp; chart builder</span></a>
-          <a class="nav-tile nav-compare" href="/compare/"><strong>Compare Teams</strong><span>Two teams side by side</span></a>
-          <a class="nav-tile nav-alliance" href="/alliance/"><strong>Compare Alliances</strong><span>Project a 3 v 3 match-up</span></a>
-          <a class="nav-tile nav-prescout" href="/prescout/"><strong>Prescouting</strong><span>Rank the field at an upcoming event</span></a>
-          <a class="nav-tile nav-picklist" href="/picklist/"><strong>Picklist</strong><span>Draft our alliance selection order</span></a>
-          </div>
-          <div class="nav-group nav-scouting" data-label="Scout">
+        <nav class="nav-grid nav-main" aria-label="Main tools">
           <a class="nav-tile nav-match" href="/scouting/"><strong>Match Scouting</strong><span>Record match performance</span></a>
           <a class="nav-tile nav-pit" href="/pitScouting/"><strong>Pit Scouting</strong><span>Robot capabilities &amp; strategy</span></a>
-          <a class="nav-tile nav-transfer" href="/transfer/"><strong>Offline Transfer</strong><span>Move reports by QR code</span></a>
-          <a class="nav-tile nav-qr" href="/qr/"><strong>QR Codes</strong><span>Print signs scouts can scan</span></a>
-          </div>
+          <a class="nav-tile nav-picklist" href="/picklist/"><strong>Picklist</strong><span>Draft our alliance selection order</span></a>
         </nav>
       </div>
     </div>
@@ -136,5 +129,22 @@
     }
   </script>
 
+<div id="menuScrim" class="menu-scrim" hidden></div>
+  <aside id="siteMenu" class="site-menu" aria-label="All pages" aria-hidden="true" inert>
+    <div class="site-menu-head"><strong>Menu</strong><button id="menuClose" class="menu-close" type="button" aria-label="Close menu">✕</button></div>
+            <div class="site-menu-group"><h2>Analyze</h2>
+              <a href="/event/"><strong>Event Rankings</strong><span>Every team at an event, ranked</span></a>
+              <a href="/overview/"><strong>Event Overview</strong><span>Event-wide graphs &amp; chart builder</span></a>
+              <a href="/compare/"><strong>Compare Teams</strong><span>Two teams side by side</span></a>
+              <a href="/alliance/"><strong>Compare Alliances</strong><span>Project a 3 v 3 match-up</span></a>
+              <a href="/prescout/"><strong>Prescouting</strong><span>Rank the field at an upcoming event</span></a>
+            </div>
+            <div class="site-menu-group"><h2>Scouting tools</h2>
+              <a href="/transfer/"><strong>Offline Transfer</strong><span>Move reports by QR code</span></a>
+              <a href="/qr/"><strong>QR Codes</strong><span>Print signs scouts can scan</span></a>
+            </div>
+  </aside>
+
+  <script src="/site-menu.js"></script>
 </body>
 </html>

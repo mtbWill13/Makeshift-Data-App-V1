@@ -48,6 +48,120 @@
 	color: var(--text);
 }
 
+/* The Menu: a slide-out sidebar on the right with every page that isn't one of the three main tiles. */
+.menu-button {
+	cursor: pointer;
+	color: var(--text);
+	gap: 8px;
+}
+
+.menu-scrim {
+	position: fixed;
+	inset: 0;
+	z-index: 40;
+	background: rgba(0, 0, 0, 0.55);
+}
+
+.menu-scrim[hidden] {
+	display: none;
+}
+
+.site-menu {
+	position: fixed;
+	z-index: 50;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	width: min(340px, 88vw);
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding: 18px 16px 28px;
+	overflow-y: auto;
+	border-left: 1px solid var(--border-strong);
+	background: var(--surface);
+	box-shadow: -18px 0 40px rgba(0, 0, 0, 0.45);
+	transform: translateX(105%);
+	visibility: hidden;
+	transition: transform 220ms ease, visibility 0s linear 220ms;
+}
+
+.site-menu.open {
+	transform: none;
+	visibility: visible;
+	transition: transform 220ms ease;
+}
+
+body.menu-open {
+	overflow: hidden;
+}
+
+.site-menu-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 10px;
+	font-size: 1.1rem;
+}
+
+.menu-close {
+	width: 36px;
+	height: 36px;
+	border: 1px solid var(--border-strong);
+	border-radius: var(--radius-sm);
+	background: transparent;
+	color: var(--text-muted);
+	font-size: 1rem;
+	cursor: pointer;
+}
+
+.menu-close:hover {
+	color: var(--text);
+}
+
+.site-menu-group + .site-menu-group {
+	margin-top: 14px;
+	padding-top: 12px;
+	border-top: 1px solid var(--border);
+}
+
+.site-menu-group h2 {
+	margin: 0 0 6px;
+	color: var(--text-muted);
+	font-size: 0.72rem;
+	font-weight: 700;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+}
+
+.site-menu-group a {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	padding: 9px 10px;
+	border-radius: var(--radius-sm);
+	color: var(--text);
+	text-decoration: none;
+}
+
+.site-menu-group a:hover,
+.site-menu-group a:focus-visible {
+	background: var(--surface-2);
+}
+
+.site-menu-group a strong {
+	font-size: 0.95rem;
+}
+
+.site-menu-group a span {
+	color: var(--text-muted);
+	font-size: 0.78rem;
+}
+
+.header-actions {
+	align-items: flex-start;
+}
+
 .bets-button {
 	color: var(--ms-yellow);
 }
@@ -169,7 +283,17 @@ html.embed .header-actions {
 .nav-overview { --accent: var(--ms-blue); }
 .nav-picklist { --accent: var(--ms-yellow); }
 
-/* An odd tile out (e.g. 7 tiles in 2 columns) spans the full row. */
+/* The three main tools sit on their own, large. */
+.nav-main .nav-tile {
+	min-height: 84px;
+	justify-content: center;
+}
+
+.nav-main .nav-tile strong {
+	font-size: 1.15rem;
+}
+
+/* An odd tile out (e.g. 3 tiles in 2 columns) spans the full row. */
 .nav-tile:last-child:nth-child(odd) {
 	grid-column: 1 / -1;
 }
@@ -327,6 +451,10 @@ html.embed .header-actions {
 	.nav-grid {
 		grid-template-columns: 1fr;
 		gap: 20px;
+	}
+
+	.nav-main {
+		gap: 10px;
 	}
 
 	/* The intro blurb isn't needed on a phone and pushes the menu down. */
