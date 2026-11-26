@@ -6,13 +6,16 @@
 
 const $ = id => document.getElementById(id);
 const els = {
-	season: $("seasonSelect"), driver: $("driverFilter"), operator: $("operatorFilter"), last: $("lastFilter"),
+	season: $("seasonSelect"), event: $("eventSelect"), custom: $("customEvent"), sheetNote: $("sheetNote"), driver: $("driverFilter"), operator: $("operatorFilter"), last: $("lastFilter"),
 	summary: $("summary"), graphs: $("graphs"), table: $("table"), exportCsv: $("exportCsv"), openSheet: $("openSheet"), syncSheet: $("syncSheet")
 };
 
 const PALETTE = [BRAND.blue, BRAND.orange, BRAND.green, BRAND.red, "#c08de8", "#ef8fb7", "#9be3d6", BRAND.yellow];
 let runs = [];            // every run this season, oldest first
 let loadId = 0;
+let picker = null;
+
+const current = () => picker?.current() ?? { season: els.season.value, code: "" };
 
 const mean = values => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
 const number = (value, digits = 0) => Number.isFinite(value) ? value.toFixed(digits) : "—";
@@ -140,7 +143,8 @@ async function load() {
 	els.graphs.innerHTML = `<div class="loading">Loading practice runs…</div>`;
 
 	try {
-		const data = await ftcFetch(`/api/ftc/practice/${els.season.value}`);
+		const { season, code } = current();
+		const data = await ftcFetch(`/api/ftc/practice/${season}${code ? `?event=${encodeURIComponent(code)}` : ""}`);
 		if (thisLoad !== loadId) return;
 
 		runs = data.runs;
@@ -150,7 +154,8 @@ async function load() {
 			if ([...select.options].some(option => option.value === chosen)) select.value = chosen;
 		}
 
-		els.exportCsv.href = `/api/ftc/practice/${els.season.value}/export.csv`;
+		els.exportCsv.href = `/api/ftc/practice/${season}/export.csv${code ? `?event=${encodeURIComponent(code)}` : ""}`;
+		els.sheetNote.textContent = data.sheetUrl ? "Runs logged for this event are also added to its Google Sheet (Practice tab)." : "No Google Sheet is linked to this event (this season), so runs are saved on the site only.";
 		els.openSheet.hidden = !data.sheetUrl;
 		els.syncSheet.hidden = !data.sheetUrl;
 		if (data.sheetUrl) els.openSheet.href = data.sheetUrl;
@@ -165,7 +170,8 @@ els.syncSheet.addEventListener("click", async () => {
 	const label = els.syncSheet.textContent;
 	els.syncSheet.textContent = "Sending…";
 	try {
-		const response = await fetch(`/api/ftc/practice/${els.season.value}/sync-sheet`, { method: "POST" });
+		const { season, code } = current();
+		const response = await fetch(`/api/ftc/practice/${season}/sync-sheet${code ? `?event=${encodeURIComponent(code)}` : ""}`, { method: "POST" });
 		const data = await response.json().catch(() => ({}));
 		els.syncSheet.textContent = response.ok ? (data.added ? `Added ${data.added} run${data.added === 1 ? "" : "s"} to the sheet` : "Sheet is up to date") : (data.error || "Couldn't reach the sheet");
 	} catch {
@@ -174,7 +180,6 @@ els.syncSheet.addEventListener("click", async () => {
 	setTimeout(() => { els.syncSheet.textContent = label; els.syncSheet.disabled = false; }, 4000);
 });
 
-els.season.addEventListener("change", load);
 els.driver.addEventListener("change", render);
 els.operator.addEventListener("change", render);
 els.last.addEventListener("change", render);
@@ -187,5 +192,7 @@ document.addEventListener("click", event => {
 	downloadChartPng(svgElement, `practice-${name}.png`, `${button.dataset.title}: practice`);
 });
 
-ftcFillSeasons(els.season, "2026");
-load();
+(async () => {
+	picker = await FtcScout.eventPicker({ seasonSelect: els.season, eventSelect: els.event, customInput: els.custom, onChange: load });
+	load();
+})();

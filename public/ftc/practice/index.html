@@ -33,6 +33,16 @@
 
       <form id="practiceForm" class="scout-shell" novalidate>
         <section class="scout-section">
+          <h2>Event</h2>
+          <div class="field-grid">
+            <div class="field"><label for="seasonSelect">Season<select id="seasonSelect"></select></label></div>
+            <div class="field"><label for="eventSelect">Event<select id="eventSelect"><option>Loading events…</option></select></label></div>
+            <div class="field wide"><label for="customEvent">Event code not listed?<input id="customEvent" type="text" maxlength="20" placeholder="e.g. CAONSCQ" autocomplete="off"></label></div>
+          </div>
+          <p id="sheetNote" class="setup-note"></p>
+        </section>
+
+        <section class="scout-section">
           <h2>This run</h2>
           <div class="field-grid">
             <div class="field"><label for="runDate">Date<input id="runDate" type="date" required></label></div>
@@ -52,7 +62,6 @@
           <h2>Who's logging this</h2>
           <div class="field-grid">
             <div class="field"><label for="scoutName">Your name<input id="scoutName" type="text" maxlength="40" autocomplete="name" placeholder="So we know who entered it" required></label></div>
-            <div class="field"><label for="seasonSelect">Season<select id="seasonSelect"></select></label></div>
           </div>
         </section>
 

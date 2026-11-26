@@ -4,7 +4,7 @@ const $ = id => document.getElementById(id);
 const els = {
 	form: $("practiceForm"), date: $("runDate"), driver: $("driver"), operator: $("operator"), auto: $("autoPoints"), tele: $("telePoints"),
 	total: $("totalPoints"), totalNote: $("totalNote"), notes: $("notes"), scout: $("scoutName"), season: $("seasonSelect"),
-	submit: $("submitButton"), queueNote: $("queueNote"), latest: $("latest"), driverNames: $("driverNames"), operatorNames: $("operatorNames")
+	event: $("eventSelect"), custom: $("customEvent"), sheetNote: $("sheetNote"), submit: $("submitButton"), queueNote: $("queueNote"), latest: $("latest"), driverNames: $("driverNames"), operatorNames: $("operatorNames")
 };
 
 const NAMES_KEY = { driver: "ftc-practice-driver-names", operator: "ftc-practice-operator-names" };
@@ -80,9 +80,15 @@ function updateQueueNote() {
 	els.queueNote.textContent = queued ? `${queued} practice run${queued === 1 ? " is" : "s are"} saved on this phone, waiting to upload. They send themselves when you're back online.` : "";
 }
 
+let picker = null;
+let refreshSheetNote = null;
+
+const currentEvent = () => picker?.current() ?? { season: els.season.value, code: "" };
+
 async function showLatest() {
 	try {
-		const { runs } = await ftcFetch(`/api/ftc/practice/${els.season.value}`);
+		const { season, code } = currentEvent();
+		const { runs } = await ftcFetch(`/api/ftc/practice/${season}${code ? `?event=${encodeURIComponent(code)}` : ""}`);
 		const recent = runs.slice(-6).reverse();
 		els.latest.innerHTML = recent.length
 			? `<ul class="latest-runs">${recent.map(run => `<li><b>${run.totalPoints}</b> pts <span>${ftcEscape(run.date)} · ${ftcEscape([run.driver, run.operator].filter(Boolean).join(" / "))}${run.autoPoints !== null && run.telePoints !== null ? ` · auto ${run.autoPoints} + tele ${run.telePoints}` : ""}</span></li>`).join("")}</ul>`
@@ -99,6 +105,7 @@ els.form.addEventListener("submit", async event => {
 		element?.focus();
 	};
 
+	if (!currentEvent().code) return problem("Pick an event first.", els.event);
 	if (!els.scout.value.trim()) return problem("Enter your name first.", els.scout);
 	if (!els.date.value) return problem("Pick the date.", els.date);
 	if (!els.driver.value.trim()) return problem("Enter who drove.", els.driver);
@@ -107,7 +114,7 @@ els.form.addEventListener("submit", async event => {
 
 	FtcScout.store.set(FtcScout.NAME_KEY, els.scout.value.trim());
 	const payload = {
-		season: els.season.value, date: els.date.value, driver: els.driver.value.trim(), operator: els.operator.value.trim(), scout: els.scout.value.trim(),
+		season: currentEvent().season, event: currentEvent().code, date: els.date.value, driver: els.driver.value.trim(), operator: els.operator.value.trim(), scout: els.scout.value.trim(),
 		autoPoints: whole(els.auto), telePoints: whole(els.tele), totalPoints: whole(els.total), notes: els.notes.value.trim()
 	};
 
@@ -131,7 +138,6 @@ els.form.addEventListener("submit", async event => {
 	}
 });
 
-els.season.addEventListener("change", showLatest);
 
 window.addEventListener("online", async () => {
 	const sent = await FtcScout.syncQueue();
@@ -140,8 +146,7 @@ window.addEventListener("online", async () => {
 	showLatest();
 });
 
-(() => {
-	ftcFillSeasons(els.season, "2026");
+(async () => {
 	els.date.value = today();
 	els.scout.value = FtcScout.store.get(FtcScout.NAME_KEY);
 	showNames();
@@ -149,5 +154,8 @@ window.addEventListener("online", async () => {
 	syncTotal();
 	updateQueueNote();
 	FtcScout.syncQueue().then(updateQueueNote);
+	picker = await FtcScout.eventPicker({ seasonSelect: els.season, eventSelect: els.event, customInput: els.custom, onChange: event => { refreshSheetNote(event); showLatest(); } });
+	refreshSheetNote = FtcScout.trackSheetNote(els.sheetNote, picker);
+	refreshSheetNote(currentEvent());
 	showLatest();
 })();

@@ -159,7 +159,8 @@ export function registerFtcScouting(app, ftc) {
 				schedule: (schedule ?? []).map(matchSummary).sort((a, b) => a.order[0] - b.order[0] || a.order[1] - b.order[1] || a.order[2] - b.order[2])
 			});
 
-			res.json({ ok: true, ...summary, url: `https://docs.google.com/spreadsheets/d/${id}/edit` });
+			const practice = await ftcSheets.syncPractice(id, store.practiceRuns(ownerOf(req), season, code)).catch(() => 0);
+			res.json({ ok: true, ...summary, practice, url: `https://docs.google.com/spreadsheets/d/${id}/edit` });
 		} catch (error) {
 			lastSync.delete(id);
 			res.status(502).json({ error: `Couldn't write to the sheet: ${error.message}. Is it shared with the service account as an Editor?` });
@@ -226,6 +227,9 @@ export function registerFtcScouting(app, ftc) {
 		const season = String(body?.season ?? "");
 		if (!validSeason(season)) throw new Error("Pick a season first.");
 
+		const event = body?.event ? eventCode(body.event) : "";        // blank only for runs saved before events were asked
+		if (event && !validCode(event)) throw new Error("Pick an event first.");
+
 		const date = String(body?.date ?? "");
 		if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(`${date}T12:00:00Z`))) throw new Error("Enter the date of the practice.");
 
@@ -254,21 +258,26 @@ export function registerFtcScouting(app, ftc) {
 		let notes = String(body?.notes ?? "").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "").trim().slice(0, 300);
 		if (/^[=+\-@]/.test(notes)) notes = `'${notes}`;
 
-		return { season, date, driver, operator, autoPoints, telePoints, totalPoints, notes, scout: cleanScout(body?.scout), submissionId: cleanSubmissionId(body?.submissionId) };
+		return { season, event, date, driver, operator, autoPoints, telePoints, totalPoints, notes, scout: cleanScout(body?.scout), submissionId: cleanSubmissionId(body?.submissionId) };
 	}
 
-	/* Adds any logged runs the Practice tab is missing. Returns how it went: added (a number), "none"
-	   (nothing linked / not the main team) or "failed". Never throws: the run is already saved. */
-	async function sendPracticeToSheet(req, season) {
-		const sheetId = ftcSheets && req.team?.legacy ? practiceSheetIdFor(season) : null;
+	/* The sheet practice runs go to: the event's own sheet, like scouting reports. */
+	const practiceSheetFor = (req, season, event) => ftcSheets && req.team?.legacy ? (event ? sheetIdFor(season, event) : practiceSheetIdFor(season)) : null;
+
+	/* Adds any logged runs of the event the Practice tab is missing. Returns how it went: "ok" (with how many were
+	   added), "none" (no sheet linked) or "failed". Never throws: the run is already saved. */
+	async function sendPracticeToSheet(req, season, event) {
+		const sheetId = practiceSheetFor(req, season, event);
 		if (!sheetId) return { sheet: "none" };
 		try {
-			return { sheet: "ok", added: await ftcSheets.syncPractice(sheetId, store.allPracticeRuns(ownerOf(req))) };
+			return { sheet: "ok", added: await ftcSheets.syncPractice(sheetId, store.practiceRuns(ownerOf(req), season, event || null)) };
 		} catch (error) {
-			console.warn(`FTC sheet: couldn't update the Practice tab: ${error.message}`);
+			console.warn(`FTC sheet (${event || season}): couldn't update the Practice tab: ${error.message}`);
 			return { sheet: "failed", sheetError: error.message };
 		}
 	}
+
+	const practiceEventOf = req => (req.query.event && validCode(eventCode(req.query.event)) ? eventCode(req.query.event) : null);
 
 	app.post("/api/ftc/scouting/practice", needStore, async (req, res) => {
 		let run;
@@ -281,7 +290,7 @@ export function registerFtcScouting(app, ftc) {
 		try {
 			const saved = store.addPractice(ownerOf(req), run);
 			/* Even a retried upload re-checks the sheet, so a run that missed it the first time gets added. */
-			res.status(saved.repeat ? 200 : 201).json({ ok: true, id: saved.id, repeat: saved.repeat, ...await sendPracticeToSheet(req, run.season) });
+			res.status(saved.repeat ? 200 : 201).json({ ok: true, id: saved.id, repeat: saved.repeat, ...await sendPracticeToSheet(req, run.season, run.event) });
 		} catch (error) {
 			res.status(500).json({ error: error.message });
 		}
@@ -289,21 +298,22 @@ export function registerFtcScouting(app, ftc) {
 
 	app.post("/api/ftc/practice/:season/sync-sheet", needStore, async (req, res) => {
 		if (!validSeason(req.params.season)) return res.status(400).json({ error: "Invalid season." });
-		const result = await sendPracticeToSheet(req, req.params.season);
-		if (result.sheet === "none") return res.status(404).json({ error: "No Google Sheet is linked for practice (add FTC_PRACTICE_SHEET or an FTC_SHEET_… to .env), or this isn't the main team account." });
+		const result = await sendPracticeToSheet(req, req.params.season, practiceEventOf(req));
+		if (result.sheet === "none") return res.status(404).json({ error: "No Google Sheet is linked to this event yet. Add FTC_SHEET_<season>_<event code> to .env." });
 		if (result.sheet === "failed") return res.status(502).json({ error: `Google Sheets said: ${result.sheetError}` });
 		res.json(result);
 	});
 
 	app.get("/api/ftc/practice/:season", needStore, (req, res) => {
 		if (!validSeason(req.params.season)) return res.status(400).json({ error: "Invalid season." });
-		const sheetId = req.team?.legacy ? practiceSheetIdFor(req.params.season) : null;
-		res.json({ runs: store.practiceRuns(ownerOf(req), req.params.season), sheetUrl: sheetId ? `https://docs.google.com/spreadsheets/d/${sheetId}/edit` : null });
+		const event = practiceEventOf(req);
+		const sheetId = practiceSheetFor(req, req.params.season, event);
+		res.json({ runs: store.practiceRuns(ownerOf(req), req.params.season, event), sheetUrl: sheetId ? `https://docs.google.com/spreadsheets/d/${sheetId}/edit` : null });
 	});
 
 	app.get("/api/ftc/practice/:season/export.csv", needStore, (req, res) => {
 		if (!validSeason(req.params.season)) return res.status(400).json({ error: "Invalid season." });
-		const runs = store.practiceRuns(ownerOf(req), req.params.season);
+		const runs = store.practiceRuns(ownerOf(req), req.params.season, practiceEventOf(req));
 		const rows = runs.map((run, index) => [index + 1, run.date, run.driver, run.operator, run.autoPoints ?? "", run.telePoints ?? "", run.totalPoints, run.notes]);
 
 		res.set("Content-Type", "text/csv; charset=utf-8");

@@ -93,6 +93,13 @@ export function createFtcSheets({ sheets }) {
 	/* Adds every logged run the sheet doesn't have yet. The Run column is the run's id, so a run is
 	   added once; nothing already on the tab is changed or removed (manual rows are safe). */
 	async function syncPractice(spreadsheetId, runs) {
+		/* An event's sheet that hasn't been set up yet may not have the tab: add just that, with its headings. */
+		const meta = await sheets.spreadsheets.get({ spreadsheetId, fields: "sheets.properties.title" });
+		if (!meta.data.sheets.some(sheet => sheet.properties.title === TAB.practice)) {
+			await sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests: [{ addSheet: { properties: { title: TAB.practice, gridProperties: { rowCount: 1000, columnCount: 12, frozenRowCount: 1 } } } }] } });
+			await sheets.spreadsheets.values.update({ spreadsheetId, range: `'${TAB.practice}'!A1`, valueInputOption: "RAW", requestBody: { values: [PRACTICE_HEADINGS] } });
+		}
+
 		const existing = (await sheets.spreadsheets.values.get({ spreadsheetId, range: `'${TAB.practice}'!A2:A` })).data.values ?? [];
 		const have = new Set(existing.map(row => String(row[0]).trim()));
 		const missing = runs.filter(run => !have.has(String(run.id)));

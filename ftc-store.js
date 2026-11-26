@@ -62,6 +62,11 @@ export function openFtcStore(file) {
 		CREATE INDEX IF NOT EXISTS practice_owner ON practice_runs (owner, season, run_date);
 	`);
 
+	/* Practice runs belong to an event, like scouting reports ('' = logged before that was asked). */
+	if (!db.prepare("PRAGMA table_info(practice_runs)").all().some(column => column.name === "event")) {
+		db.exec("ALTER TABLE practice_runs ADD COLUMN event TEXT NOT NULL DEFAULT ''");
+	}
+
 	/* Driver and operator are separate columns. Older rows had one "Luke/Matthew" text: split it. */
 	if (!db.prepare("PRAGMA table_info(practice_runs)").all().some(column => column.name === "driver")) {
 		db.exec("ALTER TABLE practice_runs ADD COLUMN driver TEXT NOT NULL DEFAULT ''; ALTER TABLE practice_runs ADD COLUMN operator TEXT NOT NULL DEFAULT '';");
@@ -113,16 +118,16 @@ export function openFtcStore(file) {
 		teamPits: db.prepare("SELECT * FROM pit_reports WHERE owner = ? AND season = ? AND event = ? AND team = ? ORDER BY id DESC"),
 		deleteMatch: db.prepare("DELETE FROM match_reports WHERE owner = ? AND id = ?"),
 		deletePit: db.prepare("DELETE FROM pit_reports WHERE owner = ? AND id = ?"),
-		addPractice: db.prepare("INSERT INTO practice_runs (submission_id, owner, season, run_date, drivers, driver, operator, auto_points, tele_points, total_points, notes, scout, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"),
+		addPractice: db.prepare("INSERT INTO practice_runs (submission_id, owner, season, event, run_date, drivers, driver, operator, auto_points, tele_points, total_points, notes, scout, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"),
 		practiceBySubmission: db.prepare("SELECT id FROM practice_runs WHERE owner = ? AND submission_id = ?"),
 		practice: db.prepare("SELECT * FROM practice_runs WHERE owner = ? AND season = ? ORDER BY run_date, id"),
-		practiceAll: db.prepare("SELECT * FROM practice_runs WHERE owner = ? ORDER BY id"),
+		practiceEvent: db.prepare("SELECT * FROM practice_runs WHERE owner = ? AND season = ? AND event IN (?, '') ORDER BY run_date, id"),
 		deletePractice: db.prepare("DELETE FROM practice_runs WHERE owner = ? AND id = ?"),
 		counts: db.prepare("SELECT (SELECT COUNT(*) FROM match_reports WHERE owner = ? AND season = ? AND event = ?) AS matches, (SELECT COUNT(*) FROM pit_reports WHERE owner = ? AND season = ? AND event = ?) AS pits")
 	};
 
 	const openPractice = row => ({
-	id: row.id, date: row.run_date, driver: row.driver, operator: row.operator, drivers: [row.driver, row.operator].filter(Boolean).join(" / "),
+	id: row.id, event: row.event, date: row.run_date, driver: row.driver, operator: row.operator, drivers: [row.driver, row.operator].filter(Boolean).join(" / "),
 	autoPoints: row.auto_points, telePoints: row.tele_points, totalPoints: row.total_points, notes: row.notes, scout: row.scout, createdAt: row.created_at
 });
 
@@ -160,12 +165,12 @@ const openMatch = row => row && { ...row, flagged: Boolean(row.flagged), noShow:
 		addPractice(owner, run) {
 			const earlier = run.submissionId && statements.practiceBySubmission.get(owner, run.submissionId);
 			if (earlier) return { id: earlier.id, repeat: true };
-			const saved = statements.addPractice.run(run.submissionId ?? null, owner, run.season, run.date, [run.driver, run.operator].filter(Boolean).join(" / "), run.driver, run.operator, run.autoPoints ?? null, run.telePoints ?? null, run.totalPoints, run.notes ?? "", run.scout, Date.now());
+			const saved = statements.addPractice.run(run.submissionId ?? null, owner, run.season, run.event ?? "", run.date, [run.driver, run.operator].filter(Boolean).join(" / "), run.driver, run.operator, run.autoPoints ?? null, run.telePoints ?? null, run.totalPoints, run.notes ?? "", run.scout, Date.now());
 			return { id: Number(saved.lastInsertRowid), repeat: false };
 		},
 
-		practiceRuns: (owner, season) => statements.practice.all(owner, season).map(openPractice),
-		allPracticeRuns: owner => statements.practiceAll.all(owner).map(openPractice),
+		/* A season's runs, or (with an event) that event's plus any logged before events were asked. */
+		practiceRuns: (owner, season, event = null) => (event ? statements.practiceEvent.all(owner, season, event) : statements.practice.all(owner, season)).map(openPractice),
 		deletePractice: (owner, id) => statements.deletePractice.run(owner, id).changes > 0,
 
 		deleteReport: (owner, kind, id) => (kind === "pit" ? statements.deletePit : statements.deleteMatch).run(owner, id).changes > 0,

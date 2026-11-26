@@ -32,6 +32,8 @@
     <main>
       <section class="controls practice-controls">
         <label for="seasonSelect">Season<select id="seasonSelect"></select></label>
+        <label for="eventSelect">Event<select id="eventSelect"><option>Loading events…</option></select></label>
+        <label for="customEvent">Event code not listed?<input id="customEvent" type="text" maxlength="20" placeholder="e.g. CAONSCQ" autocomplete="off"></label>
         <label for="driverFilter">Driver<select id="driverFilter"><option value="">Everyone</option></select></label>
         <label for="operatorFilter">Operator<select id="operatorFilter"><option value="">Everyone</option></select></label>
         <label for="lastFilter">Show<select id="lastFilter">
@@ -51,13 +53,15 @@
 
       <section class="source-actions">
         <a id="exportCsv" class="back-link" href="#">Download practice log (CSV)</a>
+        <a id="openSheet" class="back-link" href="#" target="_blank" rel="noopener noreferrer" hidden>Open this event's Google Sheet ↗</a>
         <button id="syncSheet" class="secondary-button" type="button" hidden>Send logs to the sheet</button>
-        <a id="openSheet" class="back-link" href="#" target="_blank" rel="noopener noreferrer" hidden>Open the Google Sheet (Practice tab) ↗</a>
       </section>
+      <p id="sheetNote" class="setup-note"></p>
     </main>
 
     <script src="/global.js"></script>
     <script src="/ftc/ftc-common.js"></script>
+    <script src="/ftc/ftc-scout.js"></script>
     <script src="/overview/charts.js"></script>
     <script src="/ftc/overview/practice/ftc-practice-overview.js"></script>
   </body>
