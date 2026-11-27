@@ -173,6 +173,7 @@ const LOWER_IS_BETTER = new Set(["breakdown", "minorFouls", "majorFouls"]);
 /* The fixed stats, plus one for every counter, yes/no and rating the match form asks. */
 function buildStats() {
 	stats = new Map();
+	addStat("votes", { label: "Votes", title: "Team votes: thumbs up minus thumbs down", group: "Team votes", digits: 0 });
 	addStat("rank", { label: "Rank", title: "Qualification rank (FTCScout)", digits: 0, lower: true });
 	addStat("winRate", { label: "Win rate", title: "Qualification win rate", percent: true });
 	addStat("opr", { label: "OPR", title: "Offensive power rating, penalties left out (FTCScout)" });
@@ -261,6 +262,18 @@ function pitAnswers(report) {
 	}));
 }
 
+/* Team votes (see /picklist-voting.js) count as a stat so they can be sorted and shown as a column. */
+function applyVoteStats() {
+	for (const team of teams) team.stats.votes = window.PicklistVoting?.score(team.number) ?? null;
+}
+
+window.picklistBoard = () => `ftc-${seasonSelect.value}-${eventKey.value}`;
+window.picklistVotesChanged = () => {
+	if (!teams.length) return;
+	applyVoteStats();
+	if (prefs.sort.key === "votes" || prefs.columns.includes("votes")) renderPool();
+};
+
 function buildTeams({ event, reports }) {
 	buildStats();
 	const byTeam = new Map();
@@ -290,9 +303,11 @@ function buildTeams({ event, reports }) {
 		};
 	});
 
+	applyVoteStats();
+
 	/* Values in the top quarter of the event are highlighted. */
 	for (const [key, stat] of stats) {
-		if (stat.pit) continue;
+		if (stat.pit || key === "votes") continue;
 		const values = teams.map(team => team.stats[key]).filter(value => value !== null && value !== undefined)
 			.sort((a, b) => (stat.lower ? a - b : b - a));
 		const cutoff = values.length >= 4 ? values[Math.ceil(values.length / 4) - 1] : null;

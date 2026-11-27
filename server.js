@@ -13,6 +13,7 @@ import { startBehindTheBumpers, episodesForTeam } from "./behind-the-bumpers.js"
 import { createSupabaseMirror } from "./supabase-mirror.js";
 import { registerFtcRoutes } from "./ftc.js";
 import { registerFtcScouting } from "./ftc-scouting.js";
+import { registerPicklistVotes } from "./picklist-votes.js";
 import { createBets } from "./bets.js";
 import { DEFINITION_TAB, DEFINITION_TABS, applyRoles, checkReport, combineDefinitions, definitionsForHeaders, parseDefinitions } from "./field-definitions.js";
 import { fakeEventEnabled, fakeEventResponse, isFakeEventPath, FAKE_EVENT_KEY } from "./fake-event.js";
@@ -1932,6 +1933,7 @@ const PORT = process.env.PORT || 3000;
 // FTC section (/ftc/): data from FTCScout. See ftc.js.
 const ftc = registerFtcRoutes(app, { cachedFetcher, mapLimit });
 registerFtcScouting(app, { ...ftc, cachedFetcher, mapLimit, sheets });
+registerPicklistVotes(app);
 
 // Whether the Supabase backup is on and when it last synced (no secrets).
 app.get("/api/supabase/status", (req, res) => {

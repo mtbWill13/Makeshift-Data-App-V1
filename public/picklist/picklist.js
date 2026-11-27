@@ -183,6 +183,7 @@ function addStat(key, stat) {
 /* The fixed stats, plus one for every numeric or yes/no scouting column. */
 function buildStats(scouting, pit) {
 	stats = new Map();
+	addStat("votes", { label: "Votes", title: "Team votes: thumbs up minus thumbs down", group: "Team votes", digits: 0 });
 	addStat("rank", customMode
 		? { label: "World rank", title: "Statbotics worldwide rank by season EPA (lower is better)", digits: 0, lower: true }
 		: { label: "Rank", title: "Qualification rank (TBA)", digits: 0, lower: true });
@@ -295,6 +296,18 @@ function seasonStatsFrom(row) {
 	};
 }
 
+/* Team votes (see /picklist-voting.js) count as a stat so they can be sorted and shown as a column. */
+function applyVoteStats() {
+	for (const team of teams) team.stats.votes = window.PicklistVoting?.score(team.number) ?? null;
+}
+
+window.picklistBoard = () => `frc-${eventKey.value}`;
+window.picklistVotesChanged = () => {
+	if (!teams.length) return;
+	applyVoteStats();
+	if (prefs.sort.key === "votes" || prefs.columns.includes("votes")) renderPool();
+};
+
 function buildTeams({ oprs, rankings, scouting, pit, eventTeams, epas, season }) {
 	buildStats(scouting, pit);
 
@@ -342,9 +355,11 @@ function buildTeams({ oprs, rankings, scouting, pit, eventTeams, epas, season })
 		};
 	});
 
+	applyVoteStats();
+
 	/* Values in the top quarter of the event are highlighted. */
 	for (const [key, stat] of stats) {
-		if (stat.pit) continue;
+		if (stat.pit || key === "votes") continue;
 		const values = teams.map(team => team.stats[key]).filter(value => value !== null)
 			.sort((a, b) => (stat.lower ? a - b : b - a));
 		const cutoff = values.length >= 4 ? values[Math.ceil(values.length / 4) - 1] : null;
